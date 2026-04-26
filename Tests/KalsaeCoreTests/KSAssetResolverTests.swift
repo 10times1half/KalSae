@@ -4,6 +4,23 @@ import Foundation
 
 @Suite("KSAssetResolver")
 struct KSAssetResolverTests {
+    /// Windows에서 Defender/검색 인덱서가 새로 만든 파일에 잠시 핸들을 걸어
+    /// `atomically: true`(temp + rename) 경로가 ERROR_SHARING_VIOLATION(32)으로
+    /// 실패하는 경우가 있다. 비원자적 쓰기 + 짧은 백오프 재시도로 우회한다.
+    private static func writeWithRetry(_ string: String, to url: URL) throws {
+        var lastError: (any Error)?
+        for attempt in 0..<5 {
+            do {
+                try string.write(to: url, atomically: false, encoding: .utf8)
+                return
+            } catch {
+                lastError = error
+                Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+            }
+        }
+        throw lastError!
+    }
+
     /// Builds a throwaway asset directory containing a handful of files
     /// with known contents. Returned URL is the resolver root.
     private func makeFixture() throws -> URL {
@@ -12,18 +29,15 @@ struct KSAssetResolverTests {
             .appendingPathComponent("KSAssetResolverTests-\(UUID().uuidString)")
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
 
-        try "<!doctype html><title>Hi</title>".write(
-            to: root.appendingPathComponent("index.html"),
-            atomically: true, encoding: .utf8)
-        try "body{}".write(
-            to: root.appendingPathComponent("app.css"),
-            atomically: true, encoding: .utf8)
+        try Self.writeWithRetry("<!doctype html><title>Hi</title>",
+            to: root.appendingPathComponent("index.html"))
+        try Self.writeWithRetry("body{}",
+            to: root.appendingPathComponent("app.css"))
 
         let subdir = root.appendingPathComponent("sub")
         try fm.createDirectory(at: subdir, withIntermediateDirectories: true)
-        try "export const n = 1;".write(
-            to: subdir.appendingPathComponent("m.js"),
-            atomically: true, encoding: .utf8)
+        try Self.writeWithRetry("export const n = 1;",
+            to: subdir.appendingPathComponent("m.js"))
         return root
     }
 

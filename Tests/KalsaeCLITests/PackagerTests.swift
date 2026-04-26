@@ -22,7 +22,7 @@ struct PackagerZipTests {
     /// `atomically: true`(temp + rename) 경로가 ERROR_SHARING_VIOLATION(32)으로
     /// 실패하는 경우가 있다. 비원자적 쓰기 + 짧은 백오프 재시도로 우회한다.
     private static func writeWithRetry(_ string: String, to url: URL) throws {
-        var lastError: Error?
+        var lastError: (any Error)?
         for attempt in 0..<5 {
             do {
                 try string.write(to: url, atomically: false, encoding: .utf8)
