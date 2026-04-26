@@ -1,5 +1,25 @@
 ﻿import Foundation
 
+/// Initial display state requested for a new window.
+public enum KSWindowStartState: String, Codable, Sendable, CaseIterable {
+    case normal
+    case maximized
+    case minimized
+    case fullscreen
+}
+
+/// Plain RGBA colour (0–255 per channel). Mirrors the JS surface used by
+/// `__ks.window.setBackgroundColor`.
+public struct KSColorRGBA: Codable, Sendable, Equatable {
+    public var r: Int
+    public var g: Int
+    public var b: Int
+    public var a: Int
+    public init(r: Int, g: Int, b: Int, a: Int = 255) {
+        self.r = r; self.g = g; self.b = b; self.a = a
+    }
+}
+
 /// Describes a single window, either declared up front in `Kalsae.json`
 /// or created dynamically at runtime via the Window API.
 public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
@@ -45,6 +65,31 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
     /// `build.devServerURL` in dev) is used.
     public var url: String?
 
+    // MARK: - Phase C lifecycle / decoration options
+
+    /// Initial display state. When `nil`, behaviour falls back to the
+    /// legacy `fullscreen` flag for compatibility. Wails-style.
+    public var startState: KSWindowStartState?
+
+    /// Hide the window on close instead of destroying it (tray-app
+    /// pattern). Implemented on top of the close interceptor.
+    public var hideOnClose: Bool
+
+    /// Optional initial background colour. When set, applied immediately
+    /// after window creation via the same path as
+    /// `__ks.window.setBackgroundColor`.
+    public var backgroundColor: KSColorRGBA?
+
+    /// Suppress the small icon shown at the top-left of the title bar
+    /// (`WM_SETICON(ICON_SMALL, NULL)` on Windows). The window still
+    /// appears in the taskbar with the app icon.
+    public var disableWindowIcon: Bool
+
+    /// Exclude this window from screen capture / screenshots
+    /// (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` on Windows
+    /// ≥ 2004; falls through silently on older builds).
+    public var contentProtection: Bool
+
     /// `Identifiable` conformance — same as `label`.
     public var id: String { label }
 
@@ -64,7 +109,12 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         visible: Bool = true,
         center: Bool = true,
         alwaysOnTop: Bool = false,
-        url: String? = nil
+        url: String? = nil,
+        startState: KSWindowStartState? = nil,
+        hideOnClose: Bool = false,
+        backgroundColor: KSColorRGBA? = nil,
+        disableWindowIcon: Bool = false,
+        contentProtection: Bool = false
     ) {
         self.label = label
         self.title = title
@@ -82,6 +132,11 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.center = center
         self.alwaysOnTop = alwaysOnTop
         self.url = url
+        self.startState = startState
+        self.hideOnClose = hideOnClose
+        self.backgroundColor = backgroundColor
+        self.disableWindowIcon = disableWindowIcon
+        self.contentProtection = contentProtection
     }
 
     // 멤버와이즈 이니셔라이저의 기본값이 있는 필드를 `Kalsae.json`에서
@@ -91,6 +146,8 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         case minWidth, minHeight, maxWidth, maxHeight
         case resizable, decorations, transparent, fullscreen
         case visible, center, alwaysOnTop, url
+        case startState, hideOnClose, backgroundColor
+        case disableWindowIcon, contentProtection
     }
 
     public init(from decoder: any Decoder) throws {
@@ -111,5 +168,10 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.center = try c.decodeIfPresent(Bool.self, forKey: .center) ?? true
         self.alwaysOnTop = try c.decodeIfPresent(Bool.self, forKey: .alwaysOnTop) ?? false
         self.url = try c.decodeIfPresent(String.self, forKey: .url)
+        self.startState = try c.decodeIfPresent(KSWindowStartState.self, forKey: .startState)
+        self.hideOnClose = try c.decodeIfPresent(Bool.self, forKey: .hideOnClose) ?? false
+        self.backgroundColor = try c.decodeIfPresent(KSColorRGBA.self, forKey: .backgroundColor)
+        self.disableWindowIcon = try c.decodeIfPresent(Bool.self, forKey: .disableWindowIcon) ?? false
+        self.contentProtection = try c.decodeIfPresent(Bool.self, forKey: .contentProtection) ?? false
     }
 }

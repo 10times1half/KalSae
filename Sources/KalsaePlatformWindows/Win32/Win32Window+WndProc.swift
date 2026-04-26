@@ -115,6 +115,13 @@ extension Win32Window {
             return DefWindowProcW(hwnd, msg, wparam, lparam)
 
         case WM_CLOSE:
+            // hideOnClose가 켜졌다면 destroy 대신 hide로 전환하고
+            // 트레이 앱 패턴을 그대로 따른다(이벤트도 `beforeClose`로 발사).
+            if hideOnClose {
+                emit("__ks.window.beforeClose", EmptyPayload())
+                if let hwnd { _ = ShowWindow(hwnd, SW_HIDE) }
+                return 0
+            }
             // 인터셉트가 켜진 경우 close를 취소하고 JS에 알린다.
             // JS는 `__ks.window.close`를 호출해 강제 종료하거나,
             // 인터셉터를 끄고 close를 다시 보낼 수 있다.

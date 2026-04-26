@@ -26,8 +26,25 @@ internal final class Win32Window {
         try Win32App.shared.ensureWindowClassRegistered()
 
         let className = "KalsaeWindow"
-        let style = DWORD(WS_OVERLAPPEDWINDOW)
-        let exStyle: DWORD = 0
+        // 베이스 스타일에 config의 frame/resize 옵션을 반영한다.
+        // - decorations=false → frameless(WS_POPUP), `setFullscreen` 등이
+        //   복원할 수 있도록 WS_BORDER만 유지한다.
+        // - resizable=false → WS_THICKFRAME/WS_MAXIMIZEBOX 제거.
+        var rawStyle: UInt32 = UInt32(WS_OVERLAPPEDWINDOW)
+        if !config.decorations {
+            // WS_POPUP | WS_SYSMENU 정도만 남기고 caption/borders 제거.
+            rawStyle = UInt32(WS_POPUP) | UInt32(WS_SYSMENU)
+        }
+        if !config.resizable {
+            rawStyle &= ~UInt32(WS_THICKFRAME)
+            rawStyle &= ~UInt32(WS_MAXIMIZEBOX)
+        }
+        let style = DWORD(rawStyle)
+        // alwaysOnTop은 ex-style WS_EX_TOPMOST로 처음부터 적용한다.
+        var exStyle: DWORD = 0
+        if config.alwaysOnTop {
+            exStyle |= DWORD(WS_EX_TOPMOST)
+        }
 
         let hwnd = className.withUTF16Pointer { cls -> HWND? in
             config.title.withUTF16Pointer { title -> HWND? in
@@ -55,7 +72,50 @@ internal final class Win32Window {
         KSWin32MainWindowTracker.shared.track(hwnd: hwnd)
         log.info("Created window '\(config.label)' hwnd=\(hwnd)")
 
-        if config.visible {
+        // Phase C 옵션 적용 — 모두 보일러플레이트 Win32 호출.
+        if let bg = config.backgroundColor {
+            let rgba = (UInt32(bg.r & 0xFF) << 24)
+                     | (UInt32(bg.g & 0xFF) << 16)
+                     | (UInt32(bg.b & 0xFF) << 8)
+                     |  UInt32(bg.a & 0xFF)
+            setBackgroundColor(rgba: rgba)
+        }
+        if config.disableWindowIcon {
+            // big/small 아이콘 모두 비운다. 작업 표시줄은 EXE 아이콘으로 폴백.
+            _ = SendMessageW(hwnd, UINT(WM_SETICON), WPARAM(ICON_SMALL), 0)
+            _ = SendMessageW(hwnd, UINT(WM_SETICON), WPARAM(ICON_BIG), 0)
+        }
+        if config.contentProtection {
+            // WDA_EXCLUDEFROMCAPTURE = 0x11(=17). 구버전에선 false 반환하고 끝.
+            _ = SetWindowDisplayAffinity(hwnd, DWORD(0x11))
+        }
+        if config.hideOnClose {
+            // close 인터셉터 켜고 sink가 hideOnClose 분기를 처리한다.
+            // sink가 비어있는 단계라면 WM_CLOSE → 기본 destroy로 떨어진다.
+            self.closeInterceptEnabled = true
+            self.hideOnClose = true
+        }
+        if config.center {
+            centerOnScreen()
+        }
+
+        // 표시는 마지막에. startState가 있으면 그에 맞춰 표시,
+        // 없으면 fullscreen 플래그(레거시) 또는 visible 플래그를 따른다.
+        let state: KSWindowStartState? = config.startState
+            ?? (config.fullscreen ? .fullscreen : nil)
+        if let state {
+            switch state {
+            case .normal:
+                if config.visible { show() }
+            case .maximized:
+                _ = ShowWindow(hwnd, SW_SHOWMAXIMIZED)
+            case .minimized:
+                _ = ShowWindow(hwnd, SW_SHOWMINIMIZED)
+            case .fullscreen:
+                if config.visible { show() }
+                setFullscreen(true)
+            }
+        } else if config.visible {
             show()
         }
     }
@@ -143,6 +203,11 @@ internal final class Win32Window {
     /// `__ks.window.close` (or set the interceptor back to `false`) to
     /// actually close the window.
     internal var closeInterceptEnabled: Bool = false
+
+    /// Tray-style behaviour: on `WM_CLOSE`, hide the window instead of
+    /// destroying it. Wins over `closeInterceptEnabled` only when the
+    /// interceptor is the implicit one set up by this flag.
+    internal var hideOnClose: Bool = false
 
     /// Last observed minimize/maximize/restore state — used to debounce
     /// `WM_SIZE` so that we don't emit the same transition twice.
