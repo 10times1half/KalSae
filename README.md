@@ -408,14 +408,14 @@ See [Sources/KalsaeCore/Config/KSSecurityConfig.swift](Sources/KalsaeCore/Config
 
 This project is in early development and breaking changes are expected. Issues and pull requests are welcome — please open a discussion first for non-trivial changes.
 
-License: TBD.
+License: MIT.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
 
 이 프로젝트는 초기 개발 단계이며 호환성을 깨는 변경이 발생할 수 있습니다. 이슈와 풀 리퀘스트를 환영합니다. 다만 큰 변경은 먼저 디스커션을 열어 논의해 주세요.
 
-라이선스: 미정.
+라이선스: MIT.
 
 </details>
 =======
