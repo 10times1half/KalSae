@@ -80,6 +80,13 @@ public protocol KSWindowState: Sendable {
     /// pressing the close button emits a `__ks.window.beforeClose` JS
     /// event and the window stays open until the app explicitly closes it.
     func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError)
+
+    /// Sets the WebView controller zoom factor (`1.0` is identity).
+    /// Out-of-range values are clamped by the platform engine.
+    func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError)
+
+    /// Reads the current WebView controller zoom factor.
+    func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double
 }
 
 /// Creates, tracks, and manipulates native windows.
@@ -134,4 +141,6 @@ extension KSWindowState {
     public func setTheme(_ handle: KSWindowHandle, theme: KSWindowTheme) async throws(KSError) { try _unsupportedThrow("setTheme") }
     public func setBackgroundColor(_ handle: KSWindowHandle, rgba: UInt32) async throws(KSError) { try _unsupportedThrow("setBackgroundColor") }
     public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setCloseInterceptor") }
+    public func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError) { try _unsupportedThrow("setZoomFactor") }
+    public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double { try _unsupportedThrow("getZoomFactor") }
 }

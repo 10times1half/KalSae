@@ -130,6 +130,12 @@ int32_t KSWV2_Controller_SetDefaultBackgroundColor(
 int32_t KSWV2_Controller_SetZoomFactor(
     KSWV2Controller controller, double factor);
 
+/// Reads the current controller zoom factor. On success returns 0 and
+/// writes the factor into `*out_factor`. Returns `E_POINTER` if either
+/// argument is NULL.
+int32_t KSWV2_Controller_GetZoomFactor(
+    KSWV2Controller controller, double *out_factor);
+
 /// Toggles `IsPinchZoomEnabled` on the WebView2 settings. Requires
 /// `ICoreWebView2Settings5`. Returns 0 on success or `E_NOINTERFACE`
 /// on older runtimes.

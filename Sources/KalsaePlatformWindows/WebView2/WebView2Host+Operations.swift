@@ -156,6 +156,15 @@ extension WebView2Host {
         }
     }
 
+    /// Reads the controller-level zoom factor. Returns `1.0` when the
+    /// controller is unavailable or the call fails.
+    func getZoomFactor() -> Double {
+        guard let controller = currentController else { return 1.0 }
+        var v: Double = 1.0
+        let hr = KSWV2_Controller_GetZoomFactor(controller, &v)
+        return hr < 0 ? 1.0 : v
+    }
+
     /// Toggles `IsPinchZoomEnabled` on the WebView2 settings (Runtime
     /// with `ICoreWebView2Settings5`). Best-effort.
     func setPinchZoomEnabled(_ enabled: Bool) {

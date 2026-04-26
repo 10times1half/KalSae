@@ -38,6 +38,16 @@ extern "C" int32_t KSWV2_Controller_SetZoomFactor(
         KSWV2_AsController(controller)->put_ZoomFactor(factor));
 }
 
+extern "C" int32_t KSWV2_Controller_GetZoomFactor(
+    KSWV2Controller controller, double *out_factor)
+{
+    if (!controller || !out_factor) return E_POINTER;
+    double v = 1.0;
+    HRESULT hr = KSWV2_AsController(controller)->get_ZoomFactor(&v);
+    if (SUCCEEDED(hr)) *out_factor = v;
+    return static_cast<int32_t>(hr);
+}
+
 extern "C" int32_t KSWV2_SetPinchZoomEnabled(
     KSWV2WebView webview, int32_t enabled)
 {

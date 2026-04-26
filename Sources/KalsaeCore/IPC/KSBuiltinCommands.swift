@@ -97,6 +97,10 @@ public enum KSBuiltinCommands {
         let a: UInt8
         let window: String?
     }
+    struct ZoomFactorArg: Codable, Sendable {
+        let factor: Double
+        let window: String?
+    }
     struct URLArg: Codable, Sendable { let url: String }
     struct TextArg: Codable, Sendable { let text: String }
     struct FormatArg: Codable, Sendable { let format: String }

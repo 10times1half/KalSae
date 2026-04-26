@@ -143,5 +143,15 @@ extension KSBuiltinCommands {
             try await windows.setCloseInterceptor(h, enabled: args.enabled)
             return Empty()
         }
+        // WebView2 controller 줌 팩터 setter / getter (Phase D2).
+        await register(registry, "__ks.window.setZoom") { (args: ZoomFactorArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            try await windows.setZoomFactor(h, factor: args.factor)
+            return Empty()
+        }
+        await registerQuery(registry, "__ks.window.getZoom") { _ throws(KSError) -> Double in
+            let h = try await resolver.resolve(window: nil)
+            return try await windows.getZoomFactor(h)
+        }
     }
 }

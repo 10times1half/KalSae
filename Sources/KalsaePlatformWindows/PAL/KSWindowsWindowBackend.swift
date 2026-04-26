@@ -191,6 +191,14 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
         try await runMain(handle) { $0.setCloseInterceptor(enabled) }
     }
 
+    public func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError) {
+        try await runMain(handle) { $0.webviewHost?.setZoomFactor(factor) }
+    }
+
+    public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double {
+        try await queryMain(handle) { $0.webviewHost?.getZoomFactor() ?? 1.0 }
+    }
+
     // MARK: - Internals
 
     private func runMain(
