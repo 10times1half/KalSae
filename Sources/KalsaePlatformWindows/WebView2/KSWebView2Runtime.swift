@@ -78,7 +78,7 @@ internal enum KSWebView2Runtime {
 
     /// Expands `%VAR%` Windows-style env tokens and resolves relative paths
     /// against `base`.
-    private static func expand(_ s: String, base: URL) -> String {
+    static func expand(_ s: String, base: URL) -> String {
         var s = s
         let env = ProcessInfo.processInfo.environment
         // %VAR% 토큰 치환.

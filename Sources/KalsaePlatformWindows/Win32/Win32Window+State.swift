@@ -1,5 +1,6 @@
 #if os(Windows)
 internal import WinSDK
+public import KalsaeCore
 
 // MARK: - Win32Window window state operations
 //
@@ -122,6 +123,34 @@ extension Win32Window {
         guard let hwnd else { return }
         _ = ReleaseCapture()
         _ = PostMessageW(hwnd, UINT(WM_NCLBUTTONDOWN), WPARAM(HTCAPTION), 0)
+    }
+
+    /// Requests a Windows 11 system backdrop on this window via
+    /// `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)` (attribute
+    /// `38`, available on build ≥ 22621). On older builds the call
+    /// returns a non-zero HRESULT and is silently ignored — the window
+    /// keeps its solid background.
+    ///
+    /// Mapping (from `DWM_SYSTEMBACKDROP_TYPE`):
+    ///   - `.auto`    → 0 (DWMSBT_AUTO)
+    ///   - `.none`    → 1 (DWMSBT_NONE)
+    ///   - `.mica`    → 2 (DWMSBT_MAINWINDOW)
+    ///   - `.acrylic` → 3 (DWMSBT_TRANSIENTWINDOW)
+    ///   - `.tabbed`  → 4 (DWMSBT_TABBEDWINDOW)
+    func setSystemBackdrop(_ kind: KSWindowBackdrop) {
+        guard let hwnd else { return }
+        var value: Int32
+        switch kind {
+        case .auto:    value = 0
+        case .none:    value = 1
+        case .mica:    value = 2
+        case .acrylic: value = 3
+        case .tabbed:  value = 4
+        }
+        // DWMWA_SYSTEMBACKDROP_TYPE = 38
+        _ = withUnsafePointer(to: &value) { ptr in
+            DwmSetWindowAttribute(hwnd, DWORD(38), ptr, DWORD(MemoryLayout<Int32>.size))
+        }
     }
 }
 #endif

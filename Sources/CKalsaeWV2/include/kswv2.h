@@ -110,6 +110,31 @@ int32_t KSWV2_SetDefaultContextMenusEnabled(KSWV2WebView webview, int32_t enable
 /// process, allowing the host's `IDropTarget` to receive them instead.
 int32_t KSWV2_Controller_SetAllowExternalDrop(KSWV2Controller controller, int32_t allow);
 
+// MARK: - Visual / runtime tuning (Phase C2)
+//
+// 모두 controller / settings가 이미 생성된 다음에 호출해야 한다.
+// 일치하는 인터페이스(`ICoreWebView2Controller2`,
+// `ICoreWebView2Settings5`)를 지원하지 않는 런타임 버전에서는
+// `E_NOINTERFACE`를 그대로 돌려준다 — 호출자는 무시할 수 있다.
+
+/// Sets the controller's default background colour. ARGB byte order:
+/// `a` is the alpha channel, `r/g/b` the colour channels (each 0..255).
+/// Pass `a = 0` plus an `KSWindowConfig.transparent` window to make the
+/// WebView itself transparent. Requires `ICoreWebView2Controller2`.
+int32_t KSWV2_Controller_SetDefaultBackgroundColor(
+    KSWV2Controller controller,
+    uint8_t a, uint8_t r, uint8_t g, uint8_t b);
+
+/// Sets the controller-level zoom factor. `1.0` is identity; the legal
+/// range mirrors the WebView2 SDK (≈ 0.25..5.0).
+int32_t KSWV2_Controller_SetZoomFactor(
+    KSWV2Controller controller, double factor);
+
+/// Toggles `IsPinchZoomEnabled` on the WebView2 settings. Requires
+/// `ICoreWebView2Settings5`. Returns 0 on success or `E_NOINTERFACE`
+/// on older runtimes.
+int32_t KSWV2_SetPinchZoomEnabled(KSWV2WebView webview, int32_t enabled);
+
 // MARK: - 네이티브 파일 드래그 앤 드롭 (IDropTarget)
 //
 // `KSWV2_Controller_SetAllowExternalDrop(controller, 0)`과 호스트 HWND에

@@ -59,7 +59,18 @@ internal final class WebView2Host {
     private var pendingCtrlDone: Bool = false
 
     func initialize(hwnd: HWND, devtools: Bool) throws(KSError) {
-        let env = try createEnvironmentSync()
+        try initialize(hwnd: hwnd, devtools: devtools, userDataFolderOverride: nil)
+    }
+
+    /// Same as `initialize(hwnd:devtools:)` but lets the caller force a
+    /// specific WebView2 user-data folder, taking precedence over
+    /// `kalsae.runtime.json`. Used by the per-window
+    /// `KSWebViewOptions.userDataPath` setting.
+    func initialize(
+        hwnd: HWND, devtools: Bool,
+        userDataFolderOverride: String?
+    ) throws(KSError) {
+        let env = try createEnvironmentSync(userDataFolderOverride: userDataFolderOverride)
         self.env = env
 
         let controller = try createControllerSync(env: env, hwnd: hwnd)
@@ -88,7 +99,9 @@ internal final class WebView2Host {
     // `setDefaultContextMenusEnabled` / `setAllowExternalDrop` —
     // `WebView2Host+Operations.swift` 참고.
 
-    private func createEnvironmentSync() throws(KSError) -> KSWV2Env {
+    private func createEnvironmentSync(
+        userDataFolderOverride: String? = nil
+    ) throws(KSError) -> KSWV2Env {
         pendingEnv = nil
         pendingEnvError = nil
         pendingEnvDone = false
@@ -98,10 +111,14 @@ internal final class WebView2Host {
         let exeDir = WebView2Callbacks.executableDirectory()
         let resolved = KSWebView2Runtime.resolve(
             executableDir: exeDir, identifier: WebView2Callbacks.appIdentifier())
+        // 윈도우별 userDataPath 오버라이드는 runtime.json 결과보다 우선한다.
+        let userDataFolder = userDataFolderOverride
+            .flatMap { KSWebView2Runtime.expand($0, base: exeDir) }
+            ?? resolved.userDataFolder
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         let hr: Int32 = withOptionalUTF16(resolved.browserExecutableFolder) { browserPtr in
-            withOptionalUTF16(resolved.userDataFolder) { userPtr in
+            withOptionalUTF16(userDataFolder) { userPtr in
                 KSWV2_CreateEnvironment(browserPtr, userPtr, selfPtr) { user, hr, env in
                     WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
                 }

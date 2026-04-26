@@ -126,5 +126,45 @@ extension WebView2Host {
                 "put_AllowExternalDrop failed (HRESULT=0x\(String(UInt32(bitPattern: hr), radix: 16)))")
         }
     }
+
+    // MARK: - Phase C2 visual / runtime tuning
+
+    /// Sets the controller's default background colour. Pass `a == 0`
+    /// (with a transparent host window) to make the WebView see-through.
+    /// Best-effort; logs and swallows failures so a missing
+    /// `ICoreWebView2Controller2` never blocks startup.
+    func setDefaultBackgroundColor(_ color: KSColorRGBA) {
+        guard let controller = currentController else { return }
+        let a = UInt8(clamping: color.a)
+        let r = UInt8(clamping: color.r)
+        let g = UInt8(clamping: color.g)
+        let b = UInt8(clamping: color.b)
+        let hr = KSWV2_Controller_SetDefaultBackgroundColor(controller, a, r, g, b)
+        if hr < 0 {
+            KSLog.logger("platform.windows.webview").warning(
+                "put_DefaultBackgroundColor failed (HRESULT=0x\(String(UInt32(bitPattern: hr), radix: 16)))")
+        }
+    }
+
+    /// Sets the controller-level zoom factor. Best-effort.
+    func setZoomFactor(_ factor: Double) {
+        guard let controller = currentController else { return }
+        let hr = KSWV2_Controller_SetZoomFactor(controller, factor)
+        if hr < 0 {
+            KSLog.logger("platform.windows.webview").warning(
+                "put_ZoomFactor failed (HRESULT=0x\(String(UInt32(bitPattern: hr), radix: 16)))")
+        }
+    }
+
+    /// Toggles `IsPinchZoomEnabled` on the WebView2 settings (Runtime
+    /// with `ICoreWebView2Settings5`). Best-effort.
+    func setPinchZoomEnabled(_ enabled: Bool) {
+        guard let webview = webviewPtr else { return }
+        let hr = KSWV2_SetPinchZoomEnabled(webview, enabled ? 1 : 0)
+        if hr < 0 {
+            KSLog.logger("platform.windows.webview").warning(
+                "put_IsPinchZoomEnabled failed (HRESULT=0x\(String(UInt32(bitPattern: hr), radix: 16)))")
+        }
+    }
 }
 #endif

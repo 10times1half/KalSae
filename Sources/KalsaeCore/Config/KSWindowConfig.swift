@@ -20,6 +20,70 @@ public struct KSColorRGBA: Codable, Sendable, Equatable {
     }
 }
 
+/// System backdrop kind requested for the window background. Maps to
+/// `DWMWA_SYSTEMBACKDROP_TYPE` on Windows 11 (build ≥ 22621). Unknown
+/// values silently fall through to `auto`.
+public enum KSWindowBackdrop: String, Codable, Sendable, CaseIterable {
+    case auto      // DWMSBT_AUTO            (0)
+    case none      // DWMSBT_NONE            (1)
+    case mica      // DWMSBT_MAINWINDOW      (2)
+    case acrylic   // DWMSBT_TRANSIENTWINDOW (3)
+    case tabbed    // DWMSBT_TABBEDWINDOW    (4)
+}
+
+/// WebView-level visual / runtime overrides. All fields optional so a
+/// `Kalsae.json` file written for an earlier release continues to load.
+public struct KSWebViewOptions: Codable, Sendable, Equatable {
+    /// When `true`, the WebView2 controller renders with a transparent
+    /// default background (`ICoreWebView2Controller2.DefaultBackgroundColor`).
+    /// The hosting window must also opt into transparency
+    /// (`KSWindowConfig.transparent`) for the effect to be visible.
+    public var transparent: Bool
+    /// Optional Windows 11 system backdrop request. Applied via
+    /// `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`. Ignored on
+    /// older builds.
+    public var backdropType: KSWindowBackdrop?
+    /// Disables touch / trackpad pinch-to-zoom in the page. Wraps
+    /// `ICoreWebView2Settings5.IsPinchZoomEnabled`.
+    public var disablePinchZoom: Bool
+    /// Initial zoom factor applied to the controller (`put_ZoomFactor`).
+    /// `1.0` is identity; `nil` leaves the WebView default.
+    public var zoomFactor: Double?
+    /// Per-window override for the WebView2 user-data folder. Takes
+    /// precedence over `kalsae.runtime.json` when set. Used so that
+    /// multiple windows / app variants can keep separate browser
+    /// profiles (cookies, IndexedDB, etc.). Path may contain Windows
+    /// `%VAR%` env tokens which are expanded at boot time.
+    public var userDataPath: String?
+
+    public init(
+        transparent: Bool = false,
+        backdropType: KSWindowBackdrop? = nil,
+        disablePinchZoom: Bool = false,
+        zoomFactor: Double? = nil,
+        userDataPath: String? = nil
+    ) {
+        self.transparent = transparent
+        self.backdropType = backdropType
+        self.disablePinchZoom = disablePinchZoom
+        self.zoomFactor = zoomFactor
+        self.userDataPath = userDataPath
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case transparent, backdropType, disablePinchZoom, zoomFactor, userDataPath
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.transparent = try c.decodeIfPresent(Bool.self, forKey: .transparent) ?? false
+        self.backdropType = try c.decodeIfPresent(KSWindowBackdrop.self, forKey: .backdropType)
+        self.disablePinchZoom = try c.decodeIfPresent(Bool.self, forKey: .disablePinchZoom) ?? false
+        self.zoomFactor = try c.decodeIfPresent(Double.self, forKey: .zoomFactor)
+        self.userDataPath = try c.decodeIfPresent(String.self, forKey: .userDataPath)
+    }
+}
+
 /// Describes a single window, either declared up front in `Kalsae.json`
 /// or created dynamically at runtime via the Window API.
 public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
@@ -90,6 +154,11 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
     /// ≥ 2004; falls through silently on older builds).
     public var contentProtection: Bool
 
+    /// Optional WebView-level visual / runtime overrides. Applied at
+    /// startup, after the WebView2 controller is created. See
+    /// `KSWebViewOptions` for the field-level docs.
+    public var webview: KSWebViewOptions?
+
     /// `Identifiable` conformance — same as `label`.
     public var id: String { label }
 
@@ -114,7 +183,8 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         hideOnClose: Bool = false,
         backgroundColor: KSColorRGBA? = nil,
         disableWindowIcon: Bool = false,
-        contentProtection: Bool = false
+        contentProtection: Bool = false,
+        webview: KSWebViewOptions? = nil
     ) {
         self.label = label
         self.title = title
@@ -137,6 +207,7 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.backgroundColor = backgroundColor
         self.disableWindowIcon = disableWindowIcon
         self.contentProtection = contentProtection
+        self.webview = webview
     }
 
     // 멤버와이즈 이니셔라이저의 기본값이 있는 필드를 `Kalsae.json`에서
@@ -148,6 +219,7 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         case visible, center, alwaysOnTop, url
         case startState, hideOnClose, backgroundColor
         case disableWindowIcon, contentProtection
+        case webview
     }
 
     public init(from decoder: any Decoder) throws {
@@ -173,5 +245,6 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.backgroundColor = try c.decodeIfPresent(KSColorRGBA.self, forKey: .backgroundColor)
         self.disableWindowIcon = try c.decodeIfPresent(Bool.self, forKey: .disableWindowIcon) ?? false
         self.contentProtection = try c.decodeIfPresent(Bool.self, forKey: .contentProtection) ?? false
+        self.webview = try c.decodeIfPresent(KSWebViewOptions.self, forKey: .webview)
     }
 }

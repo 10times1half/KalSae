@@ -15,6 +15,8 @@ public final class KSWindowsDemoHost {
     nonisolated private let window: Win32Window
     private let webview: WebView2Host
     public let bridge: WebView2Bridge
+    private let webviewOptions: KSWebViewOptions?
+    private let backdropType: KSWindowBackdrop?
 
     public init(windowConfig: KSWindowConfig,
                 registry: KSCommandRegistry) throws(KSError) {
@@ -27,6 +29,8 @@ public final class KSWindowsDemoHost {
         self.window = try Win32Window(config: windowConfig)
         self.webview = WebView2Host(label: windowConfig.label)
         self.bridge = WebView2Bridge(host: webview, registry: registry)
+        self.webviewOptions = windowConfig.webview
+        self.backdropType = windowConfig.webview?.backdropType
         // WndProc가 Win32 시스템 이벤트(WM_SIZE/WM_MOVE/WM_DPICHANGED 등)를
         // JS로 포워딩할 수 있도록 sink를 설치한다. 웹뷰가 아직 초기화되지
         // 않은 시점의 emit은 PostJSON에서 실패하지만 try?로 무시된다.
@@ -37,13 +41,7 @@ public final class KSWindowsDemoHost {
     }
 
     public func start(url: String, devtools: Bool) throws(KSError) {
-        guard let hwnd = window.hwnd else {
-            throw KSError(code: .windowCreationFailed,
-                          message: "Window has no HWND")
-        }
-        try webview.initialize(hwnd: hwnd, devtools: devtools)
-        window.attach(host: webview)
-        try bridge.install()
+        try ensureWebViewInitialized(devtools: devtools)
         try webview.navigate(url: url)
         if devtools {
             try? webview.openDevTools()
@@ -66,12 +64,7 @@ public final class KSWindowsDemoHost {
             throw KSError(code: .windowCreationFailed,
                           message: "Window has no HWND")
         }
-        if !webviewInitialized {
-            try webview.initialize(hwnd: hwnd, devtools: pendingDevtools)
-            window.attach(host: webview)
-            try bridge.install()
-            webviewInitialized = true
-        }
+        try ensureWebViewInitialized(devtools: pendingDevtools)
         try webview.setVirtualHostMapping(host: host, folder: folder)
     }
 
@@ -82,12 +75,7 @@ public final class KSWindowsDemoHost {
             throw KSError(code: .windowCreationFailed,
                           message: "Window has no HWND")
         }
-        if !webviewInitialized {
-            try webview.initialize(hwnd: hwnd, devtools: pendingDevtools)
-            window.attach(host: webview)
-            try bridge.install()
-            webviewInitialized = true
-        }
+        try ensureWebViewInitialized(devtools: pendingDevtools)
         try webview.addDocumentCreatedScript(script)
     }
 
@@ -102,12 +90,7 @@ public final class KSWindowsDemoHost {
             throw KSError(code: .windowCreationFailed,
                           message: "Window has no HWND")
         }
-        if !webviewInitialized {
-            try webview.initialize(hwnd: hwnd, devtools: pendingDevtools)
-            window.attach(host: webview)
-            try bridge.install()
-            webviewInitialized = true
-        }
+        try ensureWebViewInitialized(devtools: pendingDevtools)
         try webview.setResourceHandler(resolver: resolver, csp: csp, host: host)
     }
 
@@ -167,16 +150,7 @@ public final class KSWindowsDemoHost {
     /// performed beforehand.
     public func startPrepared(url: String, devtools: Bool) throws(KSError) {
         pendingDevtools = devtools
-        if !webviewInitialized {
-            guard let hwnd = window.hwnd else {
-                throw KSError(code: .windowCreationFailed,
-                              message: "Window has no HWND")
-            }
-            try webview.initialize(hwnd: hwnd, devtools: devtools)
-            window.attach(host: webview)
-            try bridge.install()
-            webviewInitialized = true
-        }
+        try ensureWebViewInitialized(devtools: devtools)
         try webview.navigate(url: url)
         if devtools { try? webview.openDevTools() }
     }
@@ -187,15 +161,47 @@ public final class KSWindowsDemoHost {
     /// latch the wrong setting.
     public func prepare(devtools: Bool) throws(KSError) {
         pendingDevtools = devtools
-        if !webviewInitialized {
-            guard let hwnd = window.hwnd else {
-                throw KSError(code: .windowCreationFailed,
-                              message: "Window has no HWND")
-            }
-            try webview.initialize(hwnd: hwnd, devtools: devtools)
-            window.attach(host: webview)
-            try bridge.install()
-            webviewInitialized = true
+        try ensureWebViewInitialized(devtools: devtools)
+    }
+
+    /// Centralised lazy webview initialisation. Pulls the per-window
+    /// `userDataPath` override from `KSWebViewOptions`, then applies the
+    /// other Phase C2 visual settings (`transparent`, `disablePinchZoom`,
+    /// `zoomFactor`, `backdropType`) immediately after the controller is
+    /// available. Idempotent.
+    private func ensureWebViewInitialized(devtools: Bool) throws(KSError) {
+        if webviewInitialized { return }
+        guard let hwnd = window.hwnd else {
+            throw KSError(code: .windowCreationFailed,
+                          message: "Window has no HWND")
+        }
+        try webview.initialize(
+            hwnd: hwnd,
+            devtools: devtools,
+            userDataFolderOverride: webviewOptions?.userDataPath)
+        window.attach(host: webview)
+        try bridge.install()
+        applyVisualOptions()
+        webviewInitialized = true
+    }
+
+    /// Applies `KSWebViewOptions` (transparent / pinch-zoom / zoom
+    /// factor) and the optional Win11 system backdrop. All best-effort.
+    private func applyVisualOptions() {
+        if let backdrop = backdropType {
+            window.setSystemBackdrop(backdrop)
+        }
+        guard let opts = webviewOptions else { return }
+        if opts.transparent {
+            // 알파 0으로 설정해 WebView2 컨트롤러가 호스트 윈도우
+            // 배경을 더이상 가리지 않도록 한다. r/g/b는 0.
+            webview.setDefaultBackgroundColor(KSColorRGBA(r: 0, g: 0, b: 0, a: 0))
+        }
+        if opts.disablePinchZoom {
+            webview.setPinchZoomEnabled(false)
+        }
+        if let z = opts.zoomFactor {
+            webview.setZoomFactor(z)
         }
     }
 

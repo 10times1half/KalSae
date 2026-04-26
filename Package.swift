@@ -107,6 +107,7 @@ let package = Package(
                 .linkedLibrary("gdi32", .when(platforms: [.windows])),
                 .linkedLibrary("ole32", .when(platforms: [.windows])),
                 .linkedLibrary("comctl32", .when(platforms: [.windows])),
+                .linkedLibrary("dwmapi", .when(platforms: [.windows])),
             ]
         ),
         .target(
