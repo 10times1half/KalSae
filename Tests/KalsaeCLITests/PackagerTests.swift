@@ -10,12 +10,29 @@ struct PackagerZipTests {
     private func makeTree(at root: URL) throws {
         let fm = FileManager.default
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        try "hello".write(to: root.appendingPathComponent("a.txt"),
-                          atomically: true, encoding: .utf8)
+        try Self.writeWithRetry("hello",
+                                to: root.appendingPathComponent("a.txt"))
         let sub = root.appendingPathComponent("nested")
         try fm.createDirectory(at: sub, withIntermediateDirectories: true)
-        try "world".write(to: sub.appendingPathComponent("b.txt"),
-                          atomically: true, encoding: .utf8)
+        try Self.writeWithRetry("world",
+                                to: sub.appendingPathComponent("b.txt"))
+    }
+
+    /// Windows에서 Defender/검색 인덱서가 새로 만든 파일에 잠시 핸들을 걸어
+    /// `atomically: true`(temp + rename) 경로가 ERROR_SHARING_VIOLATION(32)으로
+    /// 실패하는 경우가 있다. 비원자적 쓰기 + 짧은 백오프 재시도로 우회한다.
+    private static func writeWithRetry(_ string: String, to url: URL) throws {
+        var lastError: Error?
+        for attempt in 0..<5 {
+            do {
+                try string.write(to: url, atomically: false, encoding: .utf8)
+                return
+            } catch {
+                lastError = error
+                Thread.sleep(forTimeInterval: 0.05 * Double(attempt + 1))
+            }
+        }
+        throw lastError!
     }
 
     private func uniqueDir(suffix: String) -> URL {
