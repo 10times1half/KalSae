@@ -57,6 +57,7 @@ let package = Package(
                     "WebView2LoaderStatic",
                     .when(platforms: [.windows])),
                 .linkedLibrary("runtimeobject", .when(platforms: [.windows])),
+                .linkedLibrary("windowscodecs", .when(platforms: [.windows])),
             ]
         ),
         .systemLibrary(

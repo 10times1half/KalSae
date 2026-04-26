@@ -5,8 +5,8 @@ public import Foundation
 
 /// Win32 implementation of `KSClipboardBackend`.
 ///
-/// Image read/write is currently a no-op (returns `nil` / throws
-/// `unsupportedPlatform`); a follow-up phase wires PNG ↔ DIB conversion.
+/// Image read/write converts between PNG and `CF_DIB` via WIC; see
+/// `KSWindowsClipboardBackend+Image.swift`.
 public struct KSWindowsClipboardBackend: KSClipboardBackend, Sendable {
     public init() {}
 
@@ -76,19 +76,14 @@ public struct KSWindowsClipboardBackend: KSClipboardBackend, Sendable {
         try result.unwrap()
     }
 
-    // MARK: - Image (deferred)
+    // MARK: - Image (PNG ↔ CF_DIB via WIC, see `+Image.swift`)
 
     public func readImage() async throws(KSError) -> Data? {
-        // PNG ↔ DIB 변환은 보류한다. nil을 반환해 "이미지 없음"에 대해
-        // 호출자가 하드 실패 대신 Mac/Linux 기본 동작과 같은 결과를 받도록 한다.
-        nil
+        try await readImageImpl()
     }
 
     public func writeImage(_ image: Data) async throws(KSError) {
-        _ = image
-        throw KSError(
-            code: .unsupportedPlatform,
-            message: "Clipboard image writes are not implemented yet on Windows.")
+        try await writeImageImpl(image)
     }
 
     // MARK: - Misc

@@ -239,6 +239,28 @@ int32_t KSWV2_ShowToast(
     const wchar_t *title,
     const wchar_t *body);
 
+// MARK: - 이미지(WIC) — PNG ↔ DIB 변환
+//
+// 클립보드 이미지 입출력에 쓰인다. Windows의 클립보드는 PNG가 아닌
+// `CF_DIB`/`CF_DIBV5` 비트맵을 표준으로 다루므로 PNG↔DIB 변환을
+// 거쳐야 한다.
+//
+// 둘 다 성공 시 0을 반환하고 `out_data`/`out_size`에 새로 할당된
+// 버퍼를 기록한다. 호출자는 `KSWV2_Free`로 해제해야 한다. 실패 시
+// HRESULT(또는 음수 errno)를 반환하며 출력 인자는 건드리지 않는다.
+//
+// `dib_bytes`는 `BITMAPINFOHEADER`(또는 `BITMAPV5HEADER`)부터 시작하는
+// 보통 `CF_DIB` 페이로드다 — `BITMAPFILEHEADER`는 포함되지 않는다.
+// 출력 DIB는 32-bpp BGRA, bottom-up이다.
+
+int32_t KSImage_PNGToDIB(
+    const uint8_t *png_bytes, size_t png_size,
+    uint8_t **out_data, size_t *out_size);
+
+int32_t KSImage_DIBToPNG(
+    const uint8_t *dib_bytes, size_t dib_size,
+    uint8_t **out_data, size_t *out_size);
+
 #ifdef __cplusplus
 }
 #endif
