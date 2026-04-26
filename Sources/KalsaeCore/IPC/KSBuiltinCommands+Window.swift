@@ -136,5 +136,12 @@ extension KSBuiltinCommands {
             let full = try await windows.isFullscreen(h)
             return !(mini || maxi || full)
         }
+        // 인터셉터가 켜지면 close 버튼/Alt-F4가 즉시 닫지 않고
+        // `__ks.window.beforeClose` 이벤트를 발사한다.
+        await register(registry, "__ks.window.setCloseInterceptor") { (args: BoolArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            try await windows.setCloseInterceptor(h, enabled: args.enabled)
+            return Empty()
+        }
     }
 }

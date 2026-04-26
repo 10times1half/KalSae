@@ -133,6 +133,21 @@ internal final class Win32Window {
     /// Owned by this window — released in `dispose()`/WM_DESTROY.
     internal var backgroundBrush: HBRUSH?
 
+    /// Sink invoked by `WNDPROC` to surface window/system events to the
+    /// JS side. Demo host wires this to `WebView2Bridge.emit`. Optional —
+    /// when `nil`, events are simply dropped.
+    internal var eventSink: (@MainActor (String, any Encodable & Sendable) -> Void)?
+
+    /// When `true`, `WM_CLOSE` is suppressed and a
+    /// `__ks.window.beforeClose` event is emitted instead. JS must call
+    /// `__ks.window.close` (or set the interceptor back to `false`) to
+    /// actually close the window.
+    internal var closeInterceptEnabled: Bool = false
+
+    /// Last observed minimize/maximize/restore state — used to debounce
+    /// `WM_SIZE` so that we don't emit the same transition twice.
+    internal var lastSizeState: Int32 = SIZE_RESTORED
+
     func setMinSize(width: Int, height: Int) {
         minSize = (width, height)
     }

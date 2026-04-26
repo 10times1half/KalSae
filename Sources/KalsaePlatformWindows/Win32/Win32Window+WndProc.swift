@@ -24,7 +24,105 @@ extension Win32Window {
         switch Int32(msg) {
         case WM_SIZE:
             resizeWebViewToClient()
+            // wparam이 SIZE_MINIMIZED/SIZE_MAXIMIZED/SIZE_RESTORED를
+            // 알려주므로 상태 전이가 있을 때만 minimize/maximize/restore
+            // 이벤트를 발사한다. resize 이벤트는 매번 발사하되 페이로드는
+            // 새 클라이언트 크기.
+            let state = Int32(wparam)
+            if state != lastSizeState {
+                switch state {
+                case SIZE_MINIMIZED:
+                    emit("__ks.window.minimize", EmptyPayload())
+                case SIZE_MAXIMIZED:
+                    emit("__ks.window.maximize", EmptyPayload())
+                case SIZE_RESTORED:
+                    if lastSizeState == SIZE_MINIMIZED || lastSizeState == SIZE_MAXIMIZED {
+                        emit("__ks.window.restore", EmptyPayload())
+                    }
+                default:
+                    break
+                }
+                lastSizeState = state
+            }
+            // SIZE_RESTORED일 때만 의미 있는 새 크기. 최소화 시
+            // (0,0)이 들어와 노이즈가 되므로 거른다.
+            if state == SIZE_RESTORED || state == SIZE_MAXIMIZED {
+                let w = Int(lparam & 0xFFFF)
+                let h = Int((lparam >> 16) & 0xFFFF)
+                emit("__ks.window.resize", WindowSizePayload(w: w, h: h))
+            }
             return 0
+
+        case WM_MOVE:
+            // LOWORD/HIWORD는 클라이언트 영역 좌상단의 화면 좌표(부호 있음).
+            let x = Int16(truncatingIfNeeded: lparam & 0xFFFF)
+            let y = Int16(truncatingIfNeeded: (lparam >> 16) & 0xFFFF)
+            emit("__ks.window.move",
+                 WindowPointPayload(x: Int(x), y: Int(y)))
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        case WM_ACTIVATE:
+            let activeState = Int32(wparam & 0xFFFF)
+            if activeState == WA_INACTIVE {
+                emit("__ks.window.blur", EmptyPayload())
+            } else {
+                emit("__ks.window.focus", EmptyPayload())
+            }
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        case WM_DPICHANGED:
+            let dpi = Int((wparam >> 16) & 0xFFFF)  // HIWORD = Y-DPI(=X-DPI)
+            let scale = Double(dpi) / 96.0
+            // OS가 새 권장 사각형을 lparam(RECT*)로 넘긴다 — 수용한다.
+            if let rectPtr = UnsafeMutablePointer<RECT>(
+                bitPattern: UInt(lparam)), let hwnd
+            {
+                let r = rectPtr.pointee
+                _ = SetWindowPos(
+                    hwnd, nil,
+                    r.left, r.top,
+                    r.right - r.left, r.bottom - r.top,
+                    UINT(SWP_NOZORDER) | UINT(SWP_NOACTIVATE))
+            }
+            emit("__ks.system.dpiChanged",
+                 DPIPayload(dpi: dpi, scale: scale))
+            return 0
+
+        case WM_SETTINGCHANGE:
+            // lparam은 변경된 설정 이름의 와이드 문자열. "ImmersiveColorSet"이면
+            // 다크/라이트 모드 토글이다. 그 외는 무시.
+            if let cstr = UnsafePointer<UInt16>(bitPattern: UInt(lparam)) {
+                let name = String(decodingCString: cstr, as: UTF16.self)
+                if name == "ImmersiveColorSet" {
+                    let theme = readSystemAppsTheme()
+                    emit("__ks.system.themeChanged",
+                         ThemePayload(theme: theme))
+                }
+            }
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        case WM_POWERBROADCAST:
+            // PBT_APMSUSPEND = 0x0004, PBT_APMRESUMEAUTOMATIC = 0x0012,
+            // PBT_APMRESUMESUSPEND = 0x0007 (사용자 입력으로 재시작).
+            switch Int32(wparam) {
+            case 0x0004:
+                emit("__ks.system.suspend", EmptyPayload())
+            case 0x0012, 0x0007:
+                emit("__ks.system.resume", EmptyPayload())
+            default:
+                break
+            }
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
+
+        case WM_CLOSE:
+            // 인터셉트가 켜진 경우 close를 취소하고 JS에 알린다.
+            // JS는 `__ks.window.close`를 호출해 강제 종료하거나,
+            // 인터셉터를 끄고 close를 다시 보낼 수 있다.
+            if closeInterceptEnabled {
+                emit("__ks.window.beforeClose", EmptyPayload())
+                return 0
+            }
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
 
         case WM_ERASEBKGND:
             // 사용자 브러시가 설정된 경우 클라이언트 영역을 그 색으로

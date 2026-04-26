@@ -187,6 +187,10 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
         try await runMain(handle) { $0.setBackgroundColor(rgba: rgba) }
     }
 
+    public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) {
+        try await runMain(handle) { $0.setCloseInterceptor(enabled) }
+    }
+
     // MARK: - Internals
 
     private func runMain(

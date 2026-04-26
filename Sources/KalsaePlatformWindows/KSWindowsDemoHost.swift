@@ -27,6 +27,13 @@ public final class KSWindowsDemoHost {
         self.window = try Win32Window(config: windowConfig)
         self.webview = WebView2Host(label: windowConfig.label)
         self.bridge = WebView2Bridge(host: webview, registry: registry)
+        // WndProc가 Win32 시스템 이벤트(WM_SIZE/WM_MOVE/WM_DPICHANGED 등)를
+        // JS로 포워딩할 수 있도록 sink를 설치한다. 웹뷰가 아직 초기화되지
+        // 않은 시점의 emit은 PostJSON에서 실패하지만 try?로 무시된다.
+        let bridgeRef = self.bridge
+        self.window.eventSink = { name, payload in
+            try? bridgeRef.emit(event: name, payload: payload)
+        }
     }
 
     public func start(url: String, devtools: Bool) throws(KSError) {

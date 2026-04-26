@@ -75,6 +75,11 @@ public protocol KSWindowState: Sendable {
     func setAlwaysOnTop(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError)
     func setTheme(_ handle: KSWindowHandle, theme: KSWindowTheme) async throws(KSError)
     func setBackgroundColor(_ handle: KSWindowHandle, rgba: UInt32) async throws(KSError)
+
+    /// Enables/disables the OS close button interceptor. When enabled,
+    /// pressing the close button emits a `__ks.window.beforeClose` JS
+    /// event and the window stays open until the app explicitly closes it.
+    func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError)
 }
 
 /// Creates, tracks, and manipulates native windows.
@@ -128,4 +133,5 @@ extension KSWindowState {
     public func setAlwaysOnTop(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setAlwaysOnTop") }
     public func setTheme(_ handle: KSWindowHandle, theme: KSWindowTheme) async throws(KSError) { try _unsupportedThrow("setTheme") }
     public func setBackgroundColor(_ handle: KSWindowHandle, rgba: UInt32) async throws(KSError) { try _unsupportedThrow("setBackgroundColor") }
+    public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setCloseInterceptor") }
 }

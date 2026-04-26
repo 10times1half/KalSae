@@ -103,6 +103,13 @@ extension Win32Window {
         webviewHost?.reload()
     }
 
+    /// Toggles WM_CLOSE interception. When `enabled` is `true`, the X
+    /// button / Alt-F4 emits `__ks.window.beforeClose` instead of
+    /// closing. JS calls `__ks.window.close` to actually close.
+    func setCloseInterceptor(_ enabled: Bool) {
+        closeInterceptEnabled = enabled
+    }
+
     /// Begins a non-client drag of this window from the current mouse
     /// position, mimicking a click on the title bar. Used by the JS
     /// drag-region (`app-region: drag`) hit-test in `KSRuntimeJS`.
