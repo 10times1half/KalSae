@@ -1,0 +1,39 @@
+name: Windows Build Verification
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows-build:
+    name: Windows (Swift + WebView2)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.0-release
+          tag: 6.0-RELEASE
+
+      - name: Show Swift Version
+        run: swift --version
+
+      - name: Fetch WebView2 SDK
+        shell: pwsh
+        run: ./Scripts/fetch-webview2.ps1
+
+      - name: Resolve Dependencies
+        run: swift package resolve
+
+      - name: Build Demo Product
+        run: swift build --product kalsae-demo
+
+      - name: Run Unit Tests
+        run: swift test
