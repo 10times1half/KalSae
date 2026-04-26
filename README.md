@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Kalsae
 
 > A Swift-native, cross-platform desktop framework for shipping web UIs as small, secure native apps.
@@ -417,3 +418,7 @@ License: TBD.
 라이선스: 미정.
 
 </details>
+=======
+# KalSae
+A modern cross-platform app framework for Swift using WebView. Build beautiful desktop and mobile apps with one Swift codebase.
+>>>>>>> 248e498382a1eaeb2f6f4bb74fe7b51a28dc3657
