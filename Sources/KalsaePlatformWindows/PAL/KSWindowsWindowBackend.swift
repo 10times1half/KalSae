@@ -199,6 +199,27 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
         try await queryMain(handle) { $0.webviewHost?.getZoomFactor() ?? 1.0 }
     }
 
+    public func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError) {
+        try await runMain(handle) { $0.webviewHost?.showPrintUI(systemDialog: systemDialog) }
+    }
+
+    public func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data {
+        // 동기 hop으로 host 핸들을 가져온 뒤, async 호출은 main-actor
+        // 안에서 직접 await 한다. (host 자체가 @MainActor 격리.)
+        let host: WebView2Host? = try await queryMain(handle) { $0.webviewHost }
+        guard let host else {
+            throw KSError(code: .webviewInitFailed,
+                          message: "capturePreview: webview not initialised")
+        }
+        let fmt = WebView2Host.CaptureFormat(rawValue: format) ?? .png
+        do {
+            return try await host.capturePreview(format: fmt)
+        } catch {
+            throw (error as? KSError)
+                ?? KSError(code: .internal, message: "capturePreview: \(error)")
+        }
+    }
+
     // MARK: - Internals
 
     private func runMain(

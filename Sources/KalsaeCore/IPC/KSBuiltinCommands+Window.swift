@@ -153,5 +153,18 @@ extension KSBuiltinCommands {
             let h = try await resolver.resolve(window: nil)
             return try await windows.getZoomFactor(h)
         }
+        // 인쇄 UI 표시 (Phase D1).
+        await register(registry, "__ks.window.print") { (args: PrintArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            try await windows.showPrintUI(h, systemDialog: args.systemDialog ?? false)
+            return Empty()
+        }
+        // 화면 캡처 → Base64 인코딩된 PNG/JPEG 반환 (Phase D3).
+        await registerQuery(registry, "__ks.window.capturePreview") { (args: CaptureArg) throws(KSError) -> String in
+            let h = try await resolver.resolve(window: args.window)
+            let fmt: Int32 = (args.format?.lowercased() == "jpeg" || args.format?.lowercased() == "jpg") ? 1 : 0
+            let data = try await windows.capturePreview(h, format: fmt)
+            return data.base64EncodedString()
+        }
     }
 }

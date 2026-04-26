@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Visual theme variant requested for a single window.
 public enum KSWindowTheme: String, Codable, Sendable, CaseIterable {
@@ -87,6 +87,16 @@ public protocol KSWindowState: Sendable {
 
     /// Reads the current WebView controller zoom factor.
     func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double
+
+    /// Opens the platform print UI for the window's WebView. Best-effort.
+    /// `systemDialog == true` requests the OS system print dialog;
+    /// otherwise the engine's built-in preview surface is used.
+    func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError)
+
+    /// Captures the current WebView contents as encoded image bytes.
+    /// Returns PNG when `format == 0`, JPEG when `format == 1`. Other
+    /// values are treated as PNG.
+    func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data
 }
 
 /// Creates, tracks, and manipulates native windows.
@@ -143,4 +153,6 @@ extension KSWindowState {
     public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setCloseInterceptor") }
     public func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError) { try _unsupportedThrow("setZoomFactor") }
     public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double { try _unsupportedThrow("getZoomFactor") }
+    public func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError) { try _unsupportedThrow("showPrintUI") }
+    public func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data { try _unsupportedThrow("capturePreview") }
 }

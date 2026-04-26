@@ -101,6 +101,14 @@ public enum KSBuiltinCommands {
         let factor: Double
         let window: String?
     }
+    struct PrintArg: Codable, Sendable {
+        let systemDialog: Bool?
+        let window: String?
+    }
+    struct CaptureArg: Codable, Sendable {
+        let format: String?
+        let window: String?
+    }
     struct URLArg: Codable, Sendable { let url: String }
     struct TextArg: Codable, Sendable { let text: String }
     struct FormatArg: Codable, Sendable { let format: String }

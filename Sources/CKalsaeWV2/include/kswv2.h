@@ -141,6 +141,28 @@ int32_t KSWV2_Controller_GetZoomFactor(
 /// on older runtimes.
 int32_t KSWV2_SetPinchZoomEnabled(KSWV2WebView webview, int32_t enabled);
 
+// MARK: - Print (Phase D1)
+//
+// `kind`: 0 = browser-style print preview (COREWEBVIEW2_PRINT_DIALOG_KIND_BROWSER),
+//         1 = OS system print dialog (COREWEBVIEW2_PRINT_DIALOG_KIND_SYSTEM).
+// 동기 호출. 반환값은 HRESULT. 런타임이 ICoreWebView2_16를 지원하지
+// 않으면 E_NOINTERFACE를 돌려준다.
+int32_t KSWV2_ShowPrintUI(KSWV2WebView webview, int32_t kind);
+
+// MARK: - Capture preview (Phase D3)
+//
+// `format`: 0 = PNG, 1 = JPEG.
+// 콜백은 UI 스레드에서 1회 발생한다. `data`/`len`은 콜백 동안만 유효하며
+// Swift 측은 즉시 복사해야 한다. 호출 자체가 실패하면(`E_POINTER` 등)
+// 콜백은 호출되지 않으므로 수신측에서 retain한 박스를 직접 해제해야 한다.
+typedef void (*KSWV2CaptureCB)(
+    void *user, int32_t hr,
+    const uint8_t *data, size_t len);
+
+int32_t KSWV2_CapturePreview(
+    KSWV2WebView webview, int32_t format,
+    void *user, KSWV2CaptureCB cb);
+
 // MARK: - 네이티브 파일 드래그 앤 드롭 (IDropTarget)
 //
 // `KSWV2_Controller_SetAllowExternalDrop(controller, 0)`과 호스트 HWND에
