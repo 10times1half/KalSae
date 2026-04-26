@@ -106,8 +106,10 @@ extension Win32Window {
             // PBT_APMRESUMESUSPEND = 0x0007 (사용자 입력으로 재시작).
             switch Int32(wparam) {
             case 0x0004:
+                onSuspendSwift?()
                 emit("__ks.system.suspend", EmptyPayload())
             case 0x0012, 0x0007:
+                onResumeSwift?()
                 emit("__ks.system.resume", EmptyPayload())
             default:
                 break
@@ -115,6 +117,13 @@ extension Win32Window {
             return DefWindowProcW(hwnd, msg, wparam, lparam)
 
         case WM_CLOSE:
+            // C4: Swift 측 onBeforeClose가 true를 돌려주면 JS 인터셉트
+            // 여부와 무관하게 close를 취소한다. 어느 쪽이든 JS에는
+            // `beforeClose`를 한 번 발사해 일관된 신호를 준다.
+            if let cb = onBeforeCloseSwift, cb() == true {
+                emit("__ks.window.beforeClose", EmptyPayload())
+                return 0
+            }
             // hideOnClose가 켜졌다면 destroy 대신 hide로 전환하고
             // 트레이 앱 패턴을 그대로 따른다(이벤트도 `beforeClose`로 발사).
             if hideOnClose {

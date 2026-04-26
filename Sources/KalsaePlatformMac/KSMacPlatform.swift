@@ -92,6 +92,11 @@ public final class KSMacDemoHost {
             NSApplication.shared.terminate(nil)
         }
     }
+
+    // MARK: - Phase C4 lifecycle hooks (no-op stubs on macOS preview)
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) { _ = cb }
+    public func setOnSuspend(_ cb: (@MainActor () -> Void)?) { _ = cb }
+    public func setOnResume(_ cb: (@MainActor () -> Void)?) { _ = cb }
 }
 
 // MARK: - Not-implemented PAL backends (Phase 2 stubs)

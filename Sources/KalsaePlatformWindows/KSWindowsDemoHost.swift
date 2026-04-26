@@ -100,6 +100,25 @@ public final class KSWindowsDemoHost {
         webview.setDefaultContextMenusEnabled(enabled)
     }
 
+    // MARK: - Phase C4 lifecycle hooks
+
+    /// Sets the native `WM_CLOSE` callback. The closure runs on the UI
+    /// thread; return `true` to cancel the close. Pass `nil` to remove.
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
+        window.onBeforeCloseSwift = cb
+    }
+
+    /// Sets the native `WM_POWERBROADCAST(PBT_APMSUSPEND)` callback.
+    public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
+        window.onSuspendSwift = cb
+    }
+
+    /// Sets the native `WM_POWERBROADCAST(PBT_APMRESUMEAUTOMATIC|RESUMESUSPEND)`
+    /// callback.
+    public func setOnResume(_ cb: (@MainActor () -> Void)?) {
+        window.onResumeSwift = cb
+    }
+
     /// Toggles whether the webview accepts external file drops directly.
     /// When `false`, OS file drops fall through to the host window's
     /// drop target (used by Phase 5-3).

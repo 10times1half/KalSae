@@ -282,5 +282,35 @@ public final class KSApp {
         #endif
     }
 
+    // MARK: - Phase C4 native lifecycle callbacks
+    //
+    // These hand the closure straight to the platform host. On Windows
+    // they fire from `WndProc` (UI thread); on macOS / Linux preview
+    // they're accepted but currently no-op until each PAL implements
+    // the corresponding system events.
+
+    /// Native close intercept. The closure runs on the UI thread when
+    /// the user attempts to close the window (e.g. clicks the [X] or
+    /// presses Alt-F4). Return `true` to cancel the close; return
+    /// `false` to let the platform's default behaviour run (which may
+    /// itself be `hideOnClose` / `__ks.window.beforeClose`). Pass `nil`
+    /// to remove the callback.
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
+        host.setOnBeforeClose(cb)
+    }
+
+    /// Invoked when the OS signals power suspend (Windows
+    /// `PBT_APMSUSPEND`). Best-effort — the system may suspend the
+    /// process before the callback dispatches.
+    public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
+        host.setOnSuspend(cb)
+    }
+
+    /// Invoked when the OS signals power resume (Windows
+    /// `PBT_APMRESUMEAUTOMATIC` / `PBT_APMRESUMESUSPEND`).
+    public func setOnResume(_ cb: (@MainActor () -> Void)?) {
+        host.setOnResume(cb)
+    }
+
     // MARK: - UI-thread convenience helpers — see `KSApp+UI.swift`.
 }

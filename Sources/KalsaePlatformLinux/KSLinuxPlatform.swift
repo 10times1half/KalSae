@@ -115,6 +115,11 @@ public final class KSLinuxDemoHost {
     nonisolated public func requestQuit() {
         webview.quit()
     }
+
+    // MARK: - Phase C4 lifecycle hooks (no-op stubs on Linux preview)
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) { _ = cb }
+    public func setOnSuspend(_ cb: (@MainActor () -> Void)?) { _ = cb }
+    public func setOnResume(_ cb: (@MainActor () -> Void)?) { _ = cb }
 }
 
 /// Heap-allocated holder passed through the activation C callback.

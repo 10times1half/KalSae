@@ -213,6 +213,27 @@ internal final class Win32Window {
     /// `WM_SIZE` so that we don't emit the same transition twice.
     internal var lastSizeState: Int32 = SIZE_RESTORED
 
+    // MARK: - Phase C4 native lifecycle hooks
+    //
+    // Optional Swift-level callbacks invoked from `WndProc` in addition
+    // to the JS event emit. Set by the demo host on behalf of `KSApp`.
+
+    /// Invoked from `WM_CLOSE`. Return `true` to cancel the close
+    /// (window stays open); return `false` (or leave `nil`) to fall
+    /// through to the existing intercept / hideOnClose / DefWindowProc
+    /// chain. Always called *before* the JS `__ks.window.beforeClose`
+    /// event is emitted.
+    internal var onBeforeCloseSwift: (@MainActor () -> Bool)?
+
+    /// Invoked from `WM_POWERBROADCAST` (PBT_APMSUSPEND). Best-effort:
+    /// the system may signal suspend after the process has been frozen,
+    /// in which case the callback never runs.
+    internal var onSuspendSwift: (@MainActor () -> Void)?
+
+    /// Invoked from `WM_POWERBROADCAST`
+    /// (PBT_APMRESUMEAUTOMATIC / PBT_APMRESUMESUSPEND).
+    internal var onResumeSwift: (@MainActor () -> Void)?
+
     func setMinSize(width: Int, height: Int) {
         minSize = (width, height)
     }
