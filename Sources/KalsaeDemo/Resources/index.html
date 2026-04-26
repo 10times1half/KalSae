@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Kalsae — Demo</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 14px/1.5 system-ui, "Segoe UI", sans-serif;
+    background: #0f1115; color: #e5e7eb;
+    display: flex; flex-direction: column;
+  }
+  /* Phase 5-2: 드래그 영역 */
+  .titlebar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; background: #171922;
+    border-bottom: 1px solid #2a2e3a;
+    app-region: drag; -webkit-app-region: drag;
+    --ks-app-region: drag;
+    user-select: none;
+  }
+  .titlebar .title { font-weight: 600; opacity: .85; flex: 1; }
+  .titlebar .nodrag {
+    app-region: no-drag; -webkit-app-region: no-drag;
+    --ks-app-region: no-drag;
+  }
+  .winbtn {
+    background: transparent; color: #cbd5e1;
+    border: 1px solid #2a2e3a; border-radius: 4px;
+    padding: 2px 8px; cursor: pointer; font: inherit;
+  }
+  .winbtn:hover { background: #1f2330; }
+  main { flex: 1; overflow: auto; padding: 20px; }
+  h1 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
+  h3 { margin: 0 0 8px; font-size: 14px; }
+  .card {
+    background: #171922; border: 1px solid #2a2e3a; border-radius: 10px;
+    padding: 14px; margin: 10px 0;
+  }
+  button.act {
+    background: #2b6cb0; color: white; border: 0; padding: 6px 12px;
+    border-radius: 6px; cursor: pointer; font: inherit; margin: 0 4px 4px 0;
+  }
+  button.act:hover { background: #3182ce; }
+  input {
+    background: #0f1115; color: #e5e7eb; border: 1px solid #2a2e3a;
+    border-radius: 6px; padding: 6px 10px; font: inherit;
+  }
+  pre {
+    background: #0b0d12; border: 1px solid #2a2e3a; border-radius: 6px;
+    padding: 8px; max-height: 160px; overflow: auto; margin: 0; font-size: 12px;
+  }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .dropzone {
+    border: 2px dashed #2a2e3a; border-radius: 10px;
+    padding: 24px; text-align: center; color: #94a3b8;
+    transition: all .15s ease;
+  }
+  .dropzone.hot { border-color: #3182ce; color: #93c5fd; background: #0f1f33; }
+</style>
+</head>
+<body>
+  <div class="titlebar">
+    <span class="title">Kalsae Demo — drag here to move</span>
+    <span class="nodrag row">
+      <button class="winbtn" data-win="minimize">_</button>
+      <button class="winbtn" data-win="toggleMaximize">▢</button>
+      <button class="winbtn" data-win="close">✕</button>
+    </span>
+  </div>
+
+  <main>
+    <h1>Kalsae Demo</h1>
+
+    <div class="card">
+      <h3>invoke("greet")</h3>
+      <div class="row">
+        <input id="name" value="Kalsae" />
+        <button class="act" id="greet">Greet</button>
+      </div>
+      <pre id="greetOut">—</pre>
+    </div>
+
+    <div class="card">
+      <h3>Native PAL</h3>
+      <div class="row">
+        <button class="act" data-cmd="app.showInfo">Info Dialog</button>
+        <button class="act" data-cmd="app.openFile">Open File…</button>
+        <button class="act" data-cmd="app.notify">Notification</button>
+        <button class="act" data-cmd="app.quit">Quit</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Phase 1 — Window controls</h3>
+      <div class="row">
+        <button class="act" data-win="minimize">Minimize</button>
+        <button class="act" data-win="maximize">Maximize</button>
+        <button class="act" data-win="restore">Restore</button>
+        <button class="act" data-win="center">Center</button>
+        <button class="act" data-fs="true">Fullscreen on</button>
+        <button class="act" data-fs="false">Fullscreen off</button>
+        <button class="act" data-theme="dark">Theme: dark</button>
+        <button class="act" data-theme="light">Theme: light</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Phase 1 — Shell / Clipboard</h3>
+      <div class="row">
+        <button class="act" id="openExt">Open https://example.com</button>
+        <input id="clip" placeholder="text to copy" value="Hello from Kalsae" />
+        <button class="act" id="clipWrite">Clipboard ← write</button>
+        <button class="act" id="clipRead">Clipboard → read</button>
+      </div>
+      <pre id="clipOut">—</pre>
+    </div>
+
+    <div class="card">
+      <h3>Phase 5-3 — File drop</h3>
+      <div id="dropzone" class="dropzone">Drop files here</div>
+      <pre id="dropOut">—</pre>
+    </div>
+
+    <div class="card">
+      <h3>Events</h3>
+      <pre id="eventLog">(menu / tray / tick events show up here…)</pre>
+    </div>
+  </main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const fmt = (v) => typeof v === "string" ? v : JSON.stringify(v, null, 2);
+  const set = (el, v) => el.textContent = fmt(v);
+  const prepend = (el, line, max = 10) => {
+    let lines = el.textContent.split("\n").filter(Boolean);
+    if (lines[0] && lines[0].startsWith("(")) lines = [];
+    lines.unshift(line);
+    if (lines.length > max) lines.length = max;
+    el.textContent = lines.join("\n");
+  };
+
+  const KS = window.__KS_ || window.Kalsae;
+  if (!KS) {
+    document.body.insertAdjacentHTML("beforeend",
+      "<p style='color:#f87171;padding:20px'>window.__KS_ is NOT installed</p>");
+  } else {
+    // 인사 호출
+    $("greet").addEventListener("click", async () => {
+      try { set($("greetOut"), await KS.invoke("greet", { name: $("name").value })); }
+      catch (e) { set($("greetOut"), "ERROR: " + fmt(e)); }
+    });
+
+    // 공용 invoke 버튼 (data-cmd)
+    document.querySelectorAll("button[data-cmd]").forEach(b => {
+      b.addEventListener("click", async () => {
+        try { await KS.invoke(b.dataset.cmd, {}); }
+        catch (e) { console.error(b.dataset.cmd, e); }
+      });
+    });
+
+    // 윈도우 네임스페이스 버튼 (data-win="action")
+    document.querySelectorAll("[data-win]").forEach(b => {
+      b.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const fn = KS.window[b.dataset.win];
+        if (typeof fn === "function") {
+          try { await fn(); } catch (e) { console.error(b.dataset.win, e); }
+        }
+      });
+    });
+
+    // 전체화면 토글
+    document.querySelectorAll("[data-fs]").forEach(b => {
+      b.addEventListener("click", async () => {
+        try { await KS.window.setFullscreen(b.dataset.fs === "true"); }
+        catch (e) { console.error("setFullscreen", e); }
+      });
+    });
+
+    // 테마 변경 버튼
+    document.querySelectorAll("[data-theme]").forEach(b => {
+      b.addEventListener("click", async () => {
+        try { await KS.window.setTheme(b.dataset.theme); }
+        catch (e) { console.error("setTheme", e); }
+      });
+    });
+
+    // 셸 / 클립보드
+    $("openExt").addEventListener("click", async () => {
+      try { await KS.shell.openExternal("https://example.com"); }
+      catch (e) { console.error(e); }
+    });
+    $("clipWrite").addEventListener("click", async () => {
+      try { await KS.clipboard.writeText($("clip").value); set($("clipOut"), "wrote"); }
+      catch (e) { set($("clipOut"), "ERR: " + fmt(e)); }
+    });
+    $("clipRead").addEventListener("click", async () => {
+      try { set($("clipOut"), await KS.clipboard.readText()); }
+      catch (e) { set($("clipOut"), "ERR: " + fmt(e)); }
+    });
+
+    // 파일 드롭 (Phase 5-3): __ks.file.drop 이벤트 { kind, x, y, paths }
+    const dz = $("dropzone");
+    KS.events.on("__ks.file.drop", (p) => {
+      if (p.kind === "enter") dz.classList.add("hot");
+      if (p.kind === "leave") dz.classList.remove("hot");
+      if (p.kind === "drop") {
+        dz.classList.remove("hot");
+        set($("dropOut"), p.paths);
+      }
+    });
+
+    // 기존 앱 이벤트
+    KS.events.on("menu", (p) =>
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  menu " + fmt(p)));
+    KS.events.on("openFile.result", (p) =>
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  openFile " + fmt(p)));
+    KS.events.on("tick", (p) =>
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  tick " + fmt(p)));
+  }
+</script>
+</body>
+</html>

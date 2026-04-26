@@ -1,0 +1,126 @@
+#if os(Windows)
+internal import WinSDK
+public import KalsaeCore
+public import Foundation
+
+/// Win32 implementation of `KSClipboardBackend`.
+///
+/// Image read/write is currently a no-op (returns `nil` / throws
+/// `unsupportedPlatform`); a follow-up phase wires PNG ↔ DIB conversion.
+public struct KSWindowsClipboardBackend: KSClipboardBackend, Sendable {
+    public init() {}
+
+    // MARK: - Text
+
+    public func readText() async throws(KSError) -> String? {
+        let result: Result<String?, KSError> = await MainActor.run {
+            guard OpenClipboard(nil) else {
+                return .failure(KSError(
+                    code: .ioFailed,
+                    message: "OpenClipboard failed (\(GetLastError()))"))
+            }
+            defer { _ = CloseClipboard() }
+
+            let handle = GetClipboardData(UINT(CF_UNICODETEXT))
+            guard let handle else { return .success(nil) }
+
+            // HGLOBAL → 와이드 문자열
+            let raw = GlobalLock(handle)
+            guard let raw else { return .success(nil) }
+            defer { _ = GlobalUnlock(handle) }
+
+            let wptr = raw.assumingMemoryBound(to: UInt16.self)
+            return .success(UnsafePointer(wptr).toString())
+        }
+        return try result.unwrap()
+    }
+
+    public func writeText(_ text: String) async throws(KSError) {
+        let result: Result<Void, KSError> = await MainActor.run {
+            guard OpenClipboard(nil) else {
+                return .failure(KSError(
+                    code: .ioFailed,
+                    message: "OpenClipboard failed (\(GetLastError()))"))
+            }
+            defer { _ = CloseClipboard() }
+
+            _ = EmptyClipboard()
+
+            // 와이드 문자 페이로드를 담은 이동 가능한 전역 메모리를 할당한다.
+            var utf16 = Array(text.utf16)
+            utf16.append(0)
+            let bytes = utf16.count * MemoryLayout<UInt16>.size
+            guard let h = GlobalAlloc(UINT(GMEM_MOVEABLE), SIZE_T(bytes)) else {
+                return .failure(KSError(
+                    code: .ioFailed,
+                    message: "GlobalAlloc(\(bytes)) failed (\(GetLastError()))"))
+            }
+            let dst = GlobalLock(h)
+            if let dst {
+                utf16.withUnsafeBufferPointer { buf in
+                    if let base = buf.baseAddress {
+                        memcpy(dst, base, bytes)
+                    }
+                }
+                _ = GlobalUnlock(h)
+            }
+            if SetClipboardData(UINT(CF_UNICODETEXT), h) == nil {
+                _ = GlobalFree(h)
+                return .failure(KSError(
+                    code: .ioFailed,
+                    message: "SetClipboardData failed (\(GetLastError()))"))
+            }
+            // 성공 시 클립보드로 소유권이 이전된다.
+            return .success(())
+        }
+        try result.unwrap()
+    }
+
+    // MARK: - Image (deferred)
+
+    public func readImage() async throws(KSError) -> Data? {
+        // PNG ↔ DIB 변환은 보류한다. nil을 반환해 "이미지 없음"에 대해
+        // 호출자가 하드 실패 대신 Mac/Linux 기본 동작과 같은 결과를 받도록 한다.
+        nil
+    }
+
+    public func writeImage(_ image: Data) async throws(KSError) {
+        _ = image
+        throw KSError(
+            code: .unsupportedPlatform,
+            message: "Clipboard image writes are not implemented yet on Windows.")
+    }
+
+    // MARK: - Misc
+
+    public func clear() async throws(KSError) {
+        let result: Result<Void, KSError> = await MainActor.run {
+            guard OpenClipboard(nil) else {
+                return .failure(KSError(
+                    code: .ioFailed,
+                    message: "OpenClipboard failed (\(GetLastError()))"))
+            }
+            defer { _ = CloseClipboard() }
+            _ = EmptyClipboard()
+            return .success(())
+        }
+        try result.unwrap()
+    }
+
+    public func hasFormat(_ format: String) async -> Bool {
+        await MainActor.run {
+            switch format.lowercased() {
+            case "text":
+                return IsClipboardFormatAvailable(UINT(CF_UNICODETEXT))
+            case "image":
+                return IsClipboardFormatAvailable(UINT(CF_BITMAP)) ||
+                       IsClipboardFormatAvailable(UINT(CF_DIB))
+            case "files":
+                return IsClipboardFormatAvailable(UINT(CF_HDROP))
+            default:
+                return false
+            }
+        }
+    }
+}
+#endif

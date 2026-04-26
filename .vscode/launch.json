@@ -1,0 +1,44 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Kalsae}",
+            "name": "Debug kalsae-demo",
+            "target": "kalsae-demo",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug kalsae-demo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Kalsae}",
+            "name": "Release kalsae-demo",
+            "target": "kalsae-demo",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release kalsae-demo"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Kalsae}",
+            "name": "Debug kalsae",
+            "target": "kalsae",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug kalsae"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Kalsae}",
+            "name": "Release kalsae",
+            "target": "kalsae",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release kalsae"
+        }
+    ]
+}

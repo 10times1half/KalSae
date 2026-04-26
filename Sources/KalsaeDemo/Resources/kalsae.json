@@ -1,0 +1,33 @@
+﻿{
+  "app": {
+    "name": "kalsae Demo",
+    "version": "0.1.0",
+    "identifier": "dev.kalsae.demo"
+  },
+  "build": {
+    "frontendDist": "Resources",
+    "devServerURL": "about:blank"
+  },
+  "windows": [
+    {
+      "label": "main",
+      "title": "kalsae ??Demo",
+      "width": 1024,
+      "height": 720,
+      "minWidth": 640,
+      "minHeight": 480,
+      "resizable": true,
+      "decorations": true,
+      "transparent": false,
+      "fullscreen": false,
+      "visible": true,
+      "center": true,
+      "alwaysOnTop": false
+    }
+  ],
+  "security": {
+    "csp": "default-src 'self' https://app.kalsae ks://app; script-src 'self' https://app.kalsae ks://app 'unsafe-inline'; style-src 'self' https://app.kalsae ks://app 'unsafe-inline'; img-src 'self' https://app.kalsae ks://app data:; connect-src 'self' https://app.kalsae ks://app",
+    "commandAllowlist": ["greet", "ping", "app.showInfo", "app.openFile", "app.notify", "app.quit"],
+    "devtools": true
+  }
+}

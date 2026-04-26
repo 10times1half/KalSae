@@ -1,0 +1,30 @@
+{
+  "app": {
+    "name": "{{NAME}}",
+    "version": "0.1.0",
+    "identifier": "{{IDENTIFIER}}"
+  },
+  "build": {
+    "frontendDist": "Resources",
+    "devServerURL": "about:blank"
+  },
+  "security": {
+    "commandAllowlist": ["hello"],
+    "devtools": true
+  },
+  "windows": [
+    {
+      "label": "main",
+      "title": "{{NAME}}",
+      "width": 1024,
+      "height": 720,
+      "resizable": true,
+      "decorations": true,
+      "transparent": false,
+      "fullscreen": false,
+      "visible": true,
+      "center": true,
+      "alwaysOnTop": false
+    }
+  ]
+}

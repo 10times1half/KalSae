@@ -1,0 +1,40 @@
+﻿name: Phase 10 Linux E2E Verification
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  phase10-linux-e2e:
+    name: Phase 10 Linux E2E
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux GUI Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-4-dev \
+            libwebkitgtk-6.0-dev \
+            libsoup-3.0-dev
+
+      - name: Show Swift Version
+        run: swift --version
+
+      - name: Resolve Dependencies
+        run: swift package resolve
+
+      - name: Build Demo Product
+        run: swift build --product kalsae-demo
+
+      - name: Run Unit Tests
+        run: swift test
+
+      - name: CLI Smoke Test
+        run: swift run kalsae --help

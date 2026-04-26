@@ -1,0 +1,49 @@
+# --- Swift / SwiftPM ---
+.build/
+.swiftpm/
+Package.resolved
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+
+# --- Vendored / fetched dependencies ---
+# Recreate via Scripts/fetch-webview2.ps1
+Vendor/WebView2/
+
+# --- Build outputs / packaging ---
+dist/
+out/
+release/
+*.zip
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+*.o
+
+# --- Logs ---
+*.log
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# --- Editor / IDE ---
+.idea/
+*.swp
+*.swo
+*.sublime-project
+*.sublime-workspace
+.vscode/*.log
+.vs/
+
+# --- Node (for kalsae generate bindings consumers) ---
+node_modules/

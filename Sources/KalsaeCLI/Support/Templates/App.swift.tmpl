@@ -1,0 +1,41 @@
+import Kalsae
+import Foundation
+
+// MARK: - Commands
+
+struct HelloOut: Codable, Sendable { let message: String }
+
+@KSCommand
+func hello(name: String?) -> HelloOut {
+    HelloOut(message: "Hello, \(name ?? "World")!")
+}
+
+// MARK: - Entry point
+
+@main
+struct App {
+    static func main() async {
+        do {
+            try await run()
+        } catch {
+            print("Error: \(error)")
+        }
+    }
+
+    @MainActor
+    static func run() async throws {
+        guard let configURL = Bundle.module.url(
+            forResource: "kalsae", withExtension: "json"
+        ) else {
+            throw KSError.configNotFound("kalsae.json not found in bundle")
+        }
+        let resourceRoot = configURL.deletingLastPathComponent()
+        let app = try await KSApp.boot(
+            configURL: configURL,
+            resourceRoot: resourceRoot
+        ) { registry in
+            await _ksRegister_hello(into: registry)
+        }
+        _ = app.run()
+    }
+}

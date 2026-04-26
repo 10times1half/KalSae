@@ -1,0 +1,67 @@
+﻿{
+  "app": {
+    "name": "kalsae Demo",
+    "version": "0.1.0",
+    "identifier": "dev.kalsae.demo",
+    "description": "Sample kalsae application",
+    "authors": ["kalsae Team"]
+  },
+  "build": {
+    "frontendDist": "dist",
+    "devServerURL": "http://localhost:5173",
+    "devCommand": "npm run dev",
+    "buildCommand": "npm run build"
+  },
+  "windows": [
+    {
+      "label": "main",
+      "title": "kalsae Demo",
+      "width": 1024,
+      "height": 720,
+      "minWidth": 640,
+      "minHeight": 480,
+      "resizable": true,
+      "decorations": true,
+      "transparent": false,
+      "fullscreen": false,
+      "visible": true,
+      "center": true,
+      "alwaysOnTop": false
+    }
+  ],
+  "security": {
+    "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ks://localhost",
+    "commandAllowlist": null,
+    "fs": {
+      "allow": ["$DOCS/kalsaeDemo/**"],
+      "deny": []
+    },
+    "devtools": true
+  },
+  "tray": {
+    "icon": "assets/tray.png",
+    "tooltip": "kalsae Demo",
+    "onLeftClick": "tray.toggleMain",
+    "menu": [
+      { "kind": "action", "id": "show", "label": "Show", "command": "window.showMain" },
+      { "kind": "separator" },
+      { "kind": "action", "id": "quit", "label": "Quit", "command": "app.quit" }
+    ]
+  },
+  "menu": {
+    "appMenu": [
+      {
+        "kind": "submenu", "id": "file", "label": "File",
+        "submenu": [
+          { "kind": "action", "id": "new", "label": "New", "accelerator": "CmdOrCtrl+N", "command": "file.new" },
+          { "kind": "separator" },
+          { "kind": "action", "id": "quit", "label": "Quit", "accelerator": "CmdOrCtrl+Q", "command": "app.quit" }
+        ]
+      }
+    ]
+  },
+  "notifications": {
+    "appUserModelID": "dev.kalsae.demo",
+    "defaultIcon": "assets/icon.png"
+  }
+}
