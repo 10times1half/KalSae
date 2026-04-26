@@ -118,5 +118,23 @@ extension KSBuiltinCommands {
             try await windows.setTheme(h, theme: args.theme)
             return Empty()
         }
+        // Wails-style: 단일 RGBA 인자(0~255). 내부적으로 0xRRGGBBAA로 패킹.
+        await register(registry, "__ks.window.setBackgroundColor") { (args: BackgroundColorArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            let rgba = (UInt32(args.r) << 24)
+                     | (UInt32(args.g) << 16)
+                     | (UInt32(args.b) << 8)
+                     |  UInt32(args.a)
+            try await windows.setBackgroundColor(h, rgba: rgba)
+            return Empty()
+        }
+        // 최소화/최대화/전체화면 어느 상태도 아닐 때 true.
+        await registerQuery(registry, "__ks.window.isNormal") { _ throws(KSError) -> Bool in
+            let h = try await resolver.resolve(window: nil)
+            let mini = try await windows.isMinimized(h)
+            let maxi = try await windows.isMaximized(h)
+            let full = try await windows.isFullscreen(h)
+            return !(mini || maxi || full)
+        }
     }
 }

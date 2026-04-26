@@ -108,6 +108,7 @@ internal enum KSRuntimeJS {
         isMinimized:      () => call('__ks.window.isMinimized'),
         isMaximized:      () => call('__ks.window.isMaximized'),
         isFullscreen:     () => call('__ks.window.isFullscreen'),
+        isNormal:         () => call('__ks.window.isNormal'),
         setFullscreen:    (enabled, window) => call('__ks.window.setFullscreen', { enabled: !!enabled, window: window || null }),
         setAlwaysOnTop:   (enabled, window) => call('__ks.window.setAlwaysOnTop', { enabled: !!enabled, window: window || null }),
         center:           () => call('__ks.window.center'),
@@ -124,6 +125,7 @@ internal enum KSRuntimeJS {
         close:            () => call('__ks.window.close'),
         reload:           () => call('__ks.window.reload'),
         setTheme:         (theme, window) => call('__ks.window.setTheme', { theme: String(theme || 'system'), window: window || null }),
+        setBackgroundColor: (r, g, b, a, window) => call('__ks.window.setBackgroundColor', { r: (r|0)&0xFF, g: (g|0)&0xFF, b: (b|0)&0xFF, a: a === undefined ? 255 : (a|0)&0xFF, window: window || null }),
       });
 
       // ---- 셸 ----

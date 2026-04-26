@@ -85,6 +85,13 @@ public enum KSBuiltinCommands {
         let theme: KSWindowTheme
         let window: String?
     }
+    struct BackgroundColorArg: Codable, Sendable {
+        let r: UInt8
+        let g: UInt8
+        let b: UInt8
+        let a: UInt8
+        let window: String?
+    }
     struct URLArg: Codable, Sendable { let url: String }
     struct TextArg: Codable, Sendable { let text: String }
     struct FormatArg: Codable, Sendable { let format: String }
