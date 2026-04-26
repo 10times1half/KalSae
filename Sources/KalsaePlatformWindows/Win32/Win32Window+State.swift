@@ -76,11 +76,27 @@ extension Win32Window {
     }
 
     func setBackgroundColor(rgba: UInt32) {
-        // Win32에는 윈도우 클래스 브러시 밖에 HWND 자체의 배경색이 없다.
-        // 커스텀 브러시로 재그림하려면 WM_ERASEBKGND를 서브클래스싱해야
-        // 해서 보류한다. 우선 no-op으로 두어 호출자가 플랫폼 분기를
-        // 두지 않아도 되도록 한다.
-        _ = rgba
+        guard let hwnd else { return }
+        // 우리는 RGBA(0xRRGGBBAA)를 받지만 Win32 `COLORREF`는 0x00BBGGRR
+        // (alpha 무시). Wails 패리티: 알파 0/255만 의미가 있어 0이 아니면
+        // 255처럼 취급. 알파=0(완전 투명)은 layered window가 필요하므로
+        // 솔리드 브러시로 폴백 — 향후 Phase C의 `transparent` 옵션에서
+        // 처리한다.
+        let r = UInt8((rgba >> 24) & 0xFF)
+        let g = UInt8((rgba >> 16) & 0xFF)
+        let b = UInt8((rgba >> 8) & 0xFF)
+        let cref: COLORREF = (COLORREF(b) << 16) | (COLORREF(g) << 8) | COLORREF(r)
+
+        // 새 브러시를 만든 뒤에야 이전 것을 풀어 GDI leak을 회피한다.
+        let newBrush = CreateSolidBrush(cref)
+        let old = backgroundBrush
+        backgroundBrush = newBrush
+        if let old { _ = DeleteObject(old) }
+
+        // 즉시 다시 그리도록 클라이언트 영역 무효화. WebView2가 가린
+        // 영역은 어차피 WebView2가 다시 그리지만, 리사이즈 중 노출되는
+        // 가장자리는 새 색으로 칠해진다.
+        _ = InvalidateRect(hwnd, nil, true)
     }
 
     func reload() {

@@ -128,6 +128,11 @@ internal final class Win32Window {
     var minSize: (width: Int, height: Int)?
     var maxSize: (width: Int, height: Int)?
 
+    /// Per-window background brush used by WM_ERASEBKGND. `nil` means
+    /// "fall through to DefWindowProc" (use the class brush).
+    /// Owned by this window — released in `dispose()`/WM_DESTROY.
+    internal var backgroundBrush: HBRUSH?
+
     func setMinSize(width: Int, height: Int) {
         minSize = (width, height)
     }

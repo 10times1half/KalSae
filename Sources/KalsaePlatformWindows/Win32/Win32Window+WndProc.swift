@@ -26,6 +26,21 @@ extension Win32Window {
             resizeWebViewToClient()
             return 0
 
+        case WM_ERASEBKGND:
+            // 사용자 브러시가 설정된 경우 클라이언트 영역을 그 색으로
+            // 채우고 처리됨을 알린다(0이 아닌 값 반환). 미설정 시 기본
+            // 처리(클래스 브러시)에 위임한다.
+            if let brush = backgroundBrush, let hwnd {
+                let hdc = HDC(bitPattern: UInt(lparam))
+                if let hdc {
+                    var rc = RECT()
+                    _ = GetClientRect(hwnd, &rc)
+                    _ = FillRect(hdc, &rc, brush)
+                    return 1
+                }
+            }
+            return DefWindowProcW(hwnd, msg, wparam, lparam)
+
         case WM_GETMINMAXINFO:
             if minSize != nil || maxSize != nil {
                 let info = UnsafeMutablePointer<MINMAXINFO>(bitPattern: UInt(lparam))
@@ -63,6 +78,10 @@ extension Win32Window {
             }
             webviewHost?.dispose()
             webviewHost = nil
+            if let brush = backgroundBrush {
+                _ = DeleteObject(brush)
+                backgroundBrush = nil
+            }
             hwnd = nil
             // 데모용 종료 메시지. 실제 PAL은 윈도우 수를 추적해 마지막
             // 윈도우가 닫힐 때만 종료한다.

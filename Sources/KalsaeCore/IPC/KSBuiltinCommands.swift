@@ -24,6 +24,7 @@ public enum KSBuiltinCommands {
         shell: (any KSShellBackend)?,
         clipboard: (any KSClipboardBackend)?,
         notifications: (any KSNotificationBackend)? = nil,
+        dialogs: (any KSDialogBackend)? = nil,
         mainWindow: @escaping @Sendable () -> KSWindowHandle?,
         quit: @escaping @Sendable () -> Void,
         platformName: String,
@@ -43,6 +44,10 @@ public enum KSBuiltinCommands {
         if let notifications {
             await registerNotificationCommands(
                 into: registry, notifications: notifications, scope: notificationScope)
+        }
+        if let dialogs {
+            await registerDialogCommands(
+                into: registry, dialogs: dialogs, resolver: resolver)
         }
         await registerAppCommands(
             into: registry, quit: quit, platformName: platformName)

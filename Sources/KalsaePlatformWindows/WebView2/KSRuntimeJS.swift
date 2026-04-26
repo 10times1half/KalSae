@@ -135,6 +135,22 @@ internal enum KSRuntimeJS {
         moveToTrash:      (path) => call('__ks.shell.moveToTrash', { url: String(path) }),
       });
 
+      // ---- 다이얼로그 ----
+      const Dialog = Object.freeze({
+        // opts: { title?, defaultDirectory?, filters?: [{name, extensions}], allowsMultiple?, window? }
+        // → { paths: string[] }   (취소 시 paths.length === 0)
+        openFile:     (opts) => call('__ks.dialog.openFile', opts || {}),
+        // opts: { title?, defaultDirectory?, defaultFileName?, filters?, window? }
+        // → { path: string|null }
+        saveFile:     (opts) => call('__ks.dialog.saveFile', opts || {}),
+        // opts: { title?, defaultDirectory?, window? } → { path: string|null }
+        selectFolder: (opts) => call('__ks.dialog.selectFolder', opts || {}),
+        // opts: { kind: 'info'|'warning'|'error'|'question', title, message, detail?,
+        //         buttons?: 'ok'|'okCancel'|'yesNo'|'yesNoCancel', window? }
+        // → { result: 'ok'|'cancel'|'yes'|'no' }
+        message:      (opts) => call('__ks.dialog.message', opts || {}),
+      });
+
       // ---- 클립보드 ----
       const Clipboard = Object.freeze({
         readText:  () => call('__ks.clipboard.readText'),
@@ -201,6 +217,7 @@ internal enum KSRuntimeJS {
         emit:   KB.emit,
         window: Win,
         shell:  Shell,
+        dialog: Dialog,
         clipboard: Clipboard,
         app:    App,
         events: Events,

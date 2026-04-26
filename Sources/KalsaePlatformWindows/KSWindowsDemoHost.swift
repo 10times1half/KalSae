@@ -241,6 +241,7 @@ public final class KSWindowsDemoHost {
         let shellBackend = KSWindowsShellBackend()
         let clipboardBackend = KSWindowsClipboardBackend()
         let notificationBackend = KSWindowsNotificationBackend()
+        let dialogBackend = KSWindowsDialogBackend()
 
         let mainProvider: @Sendable () -> KSWindowHandle? = { [weak self] in
             // 재생성이 제대로 동작하도록 매번 살아있는 HWND를 조회한다.
@@ -263,6 +264,7 @@ public final class KSWindowsDemoHost {
             shell: shellBackend,
             clipboard: clipboardBackend,
             notifications: notificationBackend,
+            dialogs: dialogBackend,
             mainWindow: mainProvider,
             quit: quit,
             platformName: platformName,
