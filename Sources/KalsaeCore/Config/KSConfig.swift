@@ -11,6 +11,8 @@ public struct KSConfig: Codable, Sendable, Equatable {
     public var tray: KSTrayConfig?
     public var menu: KSMenuConfig?
     public var notifications: KSNotificationConfig?
+    public var autostart: KSAutostartConfig?
+    public var deepLink: KSDeepLinkConfig?
 
     public init(
         app: KSAppInfo,
@@ -19,7 +21,9 @@ public struct KSConfig: Codable, Sendable, Equatable {
         security: KSSecurityConfig = .default,
         tray: KSTrayConfig? = nil,
         menu: KSMenuConfig? = nil,
-        notifications: KSNotificationConfig? = nil
+        notifications: KSNotificationConfig? = nil,
+        autostart: KSAutostartConfig? = nil,
+        deepLink: KSDeepLinkConfig? = nil
     ) {
         self.app = app
         self.build = build
@@ -28,11 +32,14 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.tray = tray
         self.menu = menu
         self.notifications = notifications
+        self.autostart = autostart
+        self.deepLink = deepLink
     }
 
     // `security` 등 필수가 아닌 섹션은 JSON에서 생략 가능하도록 한다.
     private enum CodingKeys: String, CodingKey {
         case app, build, windows, security, tray, menu, notifications
+        case autostart, deepLink
     }
 
     public init(from decoder: any Decoder) throws {
@@ -44,6 +51,8 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.tray = try c.decodeIfPresent(KSTrayConfig.self, forKey: .tray)
         self.menu = try c.decodeIfPresent(KSMenuConfig.self, forKey: .menu)
         self.notifications = try c.decodeIfPresent(KSNotificationConfig.self, forKey: .notifications)
+        self.autostart = try c.decodeIfPresent(KSAutostartConfig.self, forKey: .autostart)
+        self.deepLink = try c.decodeIfPresent(KSDeepLinkConfig.self, forKey: .deepLink)
     }
 }
 

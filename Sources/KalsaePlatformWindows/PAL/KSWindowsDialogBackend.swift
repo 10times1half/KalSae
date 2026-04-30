@@ -7,8 +7,12 @@ public import Foundation
 ///
 /// Uses:
 ///   • `MessageBoxW` for `message`
-///   • `GetOpenFileNameW` / `GetSaveFileNameW` for files
-///   • `SHBrowseForFolderW` + `SHGetPathFromIDListW` for folders
+///   • `IFileOpenDialog` (CLSID_FileOpenDialog) for open / folder picker
+///   • `IFileSaveDialog` (CLSID_FileSaveDialog) for save
+///
+/// 모던 Vista+ Common Item Dialog로 구현되어 있어 긴 경로(>MAX_PATH)와
+/// breadcrumb UI를 지원한다. 파일 다이얼로그 구현은
+/// `KSWindowsDialogBackend+Files.swift` + C++ 쉬밌(`kswv2_dialog.cpp`).
 ///
 /// All native calls run on the UI thread via `MainActor.run { … }`.
 public struct KSWindowsDialogBackend: KSDialogBackend, Sendable {

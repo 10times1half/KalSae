@@ -1,6 +1,6 @@
 ﻿#if os(Windows)
 internal import WinSDK
-public import KalsaeCore
+internal import KalsaeCore
 
 /// Process-wide Win32 application state: module handle, registered window
 /// class, and the message pump.

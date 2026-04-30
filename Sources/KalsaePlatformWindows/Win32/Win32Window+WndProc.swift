@@ -50,6 +50,7 @@ extension Win32Window {
                 let w = Int(lparam & 0xFFFF)
                 let h = Int((lparam >> 16) & 0xFFFF)
                 emit("__ks.window.resize", WindowSizePayload(w: w, h: h))
+                dispatchStateSave()
             }
             return 0
 
@@ -59,6 +60,7 @@ extension Win32Window {
             let y = Int16(truncatingIfNeeded: (lparam >> 16) & 0xFFFF)
             emit("__ks.window.move",
                  WindowPointPayload(x: Int(x), y: Int(y)))
+            dispatchStateSave()
             return DefWindowProcW(hwnd, msg, wparam, lparam)
 
         case WM_ACTIVATE:
@@ -117,6 +119,11 @@ extension Win32Window {
             return DefWindowProcW(hwnd, msg, wparam, lparam)
 
         case WM_CLOSE:
+            // 윈도우가 destroy되기 전에 마지막 위치/크기를 저장한다.
+            // 인터셉트 또는 hideOnClose 분기를 거쳐도 사용자 시점의
+            // "마지막 본 상태"를 안정적으로 보존하려면 분기 이전에 한 번
+            // 호출하는 게 가장 안전하다.
+            dispatchStateSave()
             // C4: Swift 측 onBeforeClose가 true를 돌려주면 JS 인터셉트
             // 여부와 무관하게 close를 취소한다. 어느 쪽이든 JS에는
             // `beforeClose`를 한 번 발사해 일관된 신호를 준다.

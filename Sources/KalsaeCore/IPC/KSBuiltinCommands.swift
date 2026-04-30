@@ -1,4 +1,4 @@
-import Foundation
+public import Foundation
 
 /// Wires the built-in `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`,
 /// `__ks.notification.*`, and `__ks.app.*` commands so the JS-side
@@ -29,7 +29,12 @@ public enum KSBuiltinCommands {
         quit: @escaping @Sendable () -> Void,
         platformName: String,
         shellScope: KSShellScope = .init(),
-        notificationScope: KSNotificationScope = .init()
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
     ) async {
         let resolver = WindowResolver(windows: windows, mainWindow: mainWindow)
 
@@ -51,6 +56,19 @@ public enum KSBuiltinCommands {
         }
         await registerAppCommands(
             into: registry, quit: quit, platformName: platformName)
+        let appDir = appDirectory
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        await registerFSCommands(
+            into: registry, scope: fsScope, appDirectory: appDir)
+        await registerHTTPCommands(
+            into: registry, scope: httpScope)
+        if let autostart {
+            await registerAutostartCommands(into: registry, backend: autostart)
+        }
+        if let deepLink {
+            await registerDeepLinkCommands(
+                into: registry, backend: deepLink.backend, config: deepLink.config)
+        }
     }
 
     // MARK: - Public arg/result types

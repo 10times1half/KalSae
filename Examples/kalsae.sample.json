@@ -26,7 +26,8 @@
       "fullscreen": false,
       "visible": true,
       "center": true,
-      "alwaysOnTop": false
+      "alwaysOnTop": false,
+      "persistState": false
     }
   ],
   "security": {
@@ -36,7 +37,29 @@
       "allow": ["$DOCS/kalsaeDemo/**"],
       "deny": []
     },
-    "devtools": true
+    "devtools": true,
+    "http": {
+      "allow": ["https://api.example.com/**"],
+      "deny": [],
+      "methods": ["GET", "POST"],
+      "defaultHeaders": {}
+    },
+    "downloads": {
+      "enabled": false,
+      "defaultDirectory": "$DOCS/kalsaeDemo/Downloads",
+      "promptUser": true
+    },
+    "navigation": {
+      "allow": ["ks://localhost/**", "http://localhost:5173/**"],
+      "openExternallyOnReject": true
+    }
+  },
+  "autostart": {
+    "args": ["--launched-by-os"]
+  },
+  "deepLink": {
+    "schemes": ["kalsae-demo"],
+    "autoRegisterOnLaunch": false
   },
   "tray": {
     "icon": "assets/tray.png",

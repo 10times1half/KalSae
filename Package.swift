@@ -50,6 +50,7 @@ let package = Package(
                 .linkedLibrary("version", .when(platforms: [.windows])),
                 .linkedLibrary("shlwapi", .when(platforms: [.windows])),
                 .linkedLibrary("shell32", .when(platforms: [.windows])),
+                .linkedLibrary("uuid", .when(platforms: [.windows])),
                 .unsafeFlags(
                     ["-L", "Vendor/WebView2/build/native/x64"],
                     .when(platforms: [.windows])),

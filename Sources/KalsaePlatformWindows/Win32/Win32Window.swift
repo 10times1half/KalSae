@@ -21,7 +21,8 @@ internal final class Win32Window {
     internal(set) var webviewHost: WebView2Host?
     private let log = KSLog.logger("platform.windows.window")
 
-    init(config: KSWindowConfig) throws(KSError) {
+    init(config: KSWindowConfig,
+         restoredState: KSPersistedWindowState? = nil) throws(KSError) {
         self.label = config.label
         try Win32App.shared.ensureWindowClassRegistered()
 
@@ -99,10 +100,33 @@ internal final class Win32Window {
             centerOnScreen()
         }
 
-        // 표시는 마지막에. startState가 있으면 그에 맞춰 표시,
-        // 없으면 fullscreen 플래그(레거시) 또는 visible 플래그를 따른다.
-        let state: KSWindowStartState? = config.startState
-            ?? (config.fullscreen ? .fullscreen : nil)
+        // 영속화된 윈도우 상태를 적용한다(설정에 `persistState=true`일 때만
+        // 호출자가 `restoredState`를 넘긴다). 좌표가 모든 모니터의 work
+        // area 밖이면 무시하고 기본 위치(또는 `center`)를 유지한다.
+        if let restored = restoredState,
+           Self.rectIntersectsAnyMonitor(
+               x: restored.x, y: restored.y,
+               width: restored.width, height: restored.height)
+        {
+            _ = SetWindowPos(
+                hwnd, nil,
+                Int32(restored.x), Int32(restored.y),
+                Int32(restored.width), Int32(restored.height),
+                UINT(SWP_NOZORDER) | UINT(SWP_NOACTIVATE))
+        }
+
+        // 표시는 마지막에. 영속화된 상태가 있으면 maximized/fullscreen
+        // 플래그를 우선 따르고, 없으면 startState → fullscreen → visible
+        // 순으로 폴백한다.
+        let state: KSWindowStartState? = {
+            if let r = restoredState {
+                if r.fullscreen { return .fullscreen }
+                if r.maximized { return .maximized }
+                return .normal
+            }
+            return config.startState
+                ?? (config.fullscreen ? .fullscreen : nil)
+        }()
         if let state {
             switch state {
             case .normal:
@@ -233,6 +257,60 @@ internal final class Win32Window {
     /// Invoked from `WM_POWERBROADCAST`
     /// (PBT_APMRESUMEAUTOMATIC / PBT_APMRESUMESUSPEND).
     internal var onResumeSwift: (@MainActor () -> Void)?
+
+    /// Optional sink that receives the current persisted state whenever
+    /// the window moves, resizes, or is about to close. The host plumbs
+    /// this into `KSWindowStateStore.save(label:state:)` when the
+    /// window's config has `persistState: true`. Captures are best-
+    /// effort — failures are silently dropped to avoid spamming the
+    /// log on every WM_MOVE tick.
+    internal var stateSaveSink: (@MainActor (KSPersistedWindowState) -> Void)?
+
+    /// Reads the current persisted state from Win32. Uses
+    /// `GetWindowPlacement` so the saved rectangle reflects the
+    /// "normal" position even when the window is currently maximized
+    /// or minimized.
+    internal func capturePersistedState() -> KSPersistedWindowState? {
+        guard let hwnd else { return nil }
+        var wp = WINDOWPLACEMENT()
+        wp.length = UINT(MemoryLayout<WINDOWPLACEMENT>.size)
+        guard GetWindowPlacement(hwnd, &wp) else { return nil }
+        let r = wp.rcNormalPosition
+        let isMax = IsZoomed(hwnd)
+        let isFullscreen = (savedFullscreenStyle != nil)
+        return KSPersistedWindowState(
+            x: Int(r.left), y: Int(r.top),
+            width: Int(r.right - r.left),
+            height: Int(r.bottom - r.top),
+            maximized: isMax,
+            fullscreen: isFullscreen)
+    }
+
+    /// Captures the current state and forwards it to `stateSaveSink`.
+    /// Skips minimized windows (`IsIconic`) so the persisted geometry
+    /// stays stable across taskbar toggles.
+    internal func dispatchStateSave() {
+        guard let sink = stateSaveSink, let hwnd else { return }
+        if IsIconic(hwnd) { return }
+        if let state = capturePersistedState() {
+            sink(state)
+        }
+    }
+
+    /// Returns `true` when `(x, y, width, height)` intersects at least
+    /// one monitor's work area. Used to validate persisted coordinates
+    /// before applying them — a saved laptop position becomes invalid
+    /// after the user undocks.
+    nonisolated internal static func rectIntersectsAnyMonitor(
+        x: Int, y: Int, width: Int, height: Int
+    ) -> Bool {
+        var rc = RECT()
+        rc.left = Int32(x)
+        rc.top = Int32(y)
+        rc.right = Int32(x + width)
+        rc.bottom = Int32(y + height)
+        return MonitorFromRect(&rc, DWORD(MONITOR_DEFAULTTONULL)) != nil
+    }
 
     func setMinSize(width: Int, height: Int) {
         minSize = (width, height)

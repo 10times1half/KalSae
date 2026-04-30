@@ -314,6 +314,48 @@ int32_t KSImage_DIBToPNG(
     const uint8_t *dib_bytes, size_t dib_size,
     uint8_t **out_data, size_t *out_size);
 
+// MARK: - 모던 파일 다이얼로그 (IFileOpenDialog / IFileSaveDialog)
+//
+// 레거시 GetOpenFileNameW / SHBrowseForFolderW를 대체. 호스트 HWND를
+// 소유한 UI 스레드에서 호출해야 하며, 호출 스레드는 STA로 COM이
+// 초기화되어 있어야 한다. 모든 입력 문자열은 NULL 가능(있는 경우만 적용).
+//
+// 반환값은 HRESULT(0=S_OK). 사용자가 취소하면 S_OK + `*out_count == 0`
+// 또는 `*out_chosen == 0`이 돌아온다.
+//
+// 출력 문자열은 KSWV2_WcsDupCopy로 할당되었으므로 호출자는 KSWV2_Free로
+// 각 문자열을 해제해야 하며, OpenFile의 배열도 KSWV2_Free로 해제한다.
+
+typedef struct {
+    const wchar_t *name;     // 표시 이름 (예: L"이미지")
+    const wchar_t *spec;     // 패턴 — 세미콜론 구분 (예: L"*.png;*.jpg")
+} KSWV2DialogFilter;
+
+int32_t KSWV2_DialogOpenFile(
+    void *hwnd,
+    const wchar_t *title,            // NULL 가능
+    const wchar_t *default_dir,      // NULL 가능
+    const KSWV2DialogFilter *filters, int32_t filter_count,
+    int32_t allow_multiple,
+    wchar_t ***out_paths,            // KSWV2_Free 각 요소 + 배열
+    int32_t *out_count);
+
+int32_t KSWV2_DialogSaveFile(
+    void *hwnd,
+    const wchar_t *title,
+    const wchar_t *default_dir,
+    const wchar_t *default_name,
+    const KSWV2DialogFilter *filters, int32_t filter_count,
+    wchar_t **out_path,              // KSWV2_Free
+    int32_t *out_chosen);
+
+int32_t KSWV2_DialogSelectFolder(
+    void *hwnd,
+    const wchar_t *title,
+    const wchar_t *default_dir,
+    wchar_t **out_path,              // KSWV2_Free
+    int32_t *out_chosen);
+
 #ifdef __cplusplus
 }
 #endif

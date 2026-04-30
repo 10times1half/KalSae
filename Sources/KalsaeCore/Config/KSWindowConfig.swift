@@ -159,6 +159,13 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
     /// `KSWebViewOptions` for the field-level docs.
     public var webview: KSWebViewOptions?
 
+    /// When `true`, the window's last position / size / maximized state
+    /// is persisted across launches under `%APPDATA%\<identifier>\`
+    /// (Windows) or `~/Library/Application Support/<identifier>/`
+    /// (macOS) and restored on the next boot. Off by default to keep
+    /// the boot path deterministic for tests.
+    public var persistState: Bool
+
     /// `Identifiable` conformance — same as `label`.
     public var id: String { label }
 
@@ -184,7 +191,8 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         backgroundColor: KSColorRGBA? = nil,
         disableWindowIcon: Bool = false,
         contentProtection: Bool = false,
-        webview: KSWebViewOptions? = nil
+        webview: KSWebViewOptions? = nil,
+        persistState: Bool = false
     ) {
         self.label = label
         self.title = title
@@ -208,6 +216,7 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.disableWindowIcon = disableWindowIcon
         self.contentProtection = contentProtection
         self.webview = webview
+        self.persistState = persistState
     }
 
     // 멤버와이즈 이니셔라이저의 기본값이 있는 필드를 `Kalsae.json`에서
@@ -220,6 +229,7 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         case startState, hideOnClose, backgroundColor
         case disableWindowIcon, contentProtection
         case webview
+        case persistState
     }
 
     public init(from decoder: any Decoder) throws {
@@ -246,5 +256,6 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
         self.disableWindowIcon = try c.decodeIfPresent(Bool.self, forKey: .disableWindowIcon) ?? false
         self.contentProtection = try c.decodeIfPresent(Bool.self, forKey: .contentProtection) ?? false
         self.webview = try c.decodeIfPresent(KSWebViewOptions.self, forKey: .webview)
+        self.persistState = try c.decodeIfPresent(Bool.self, forKey: .persistState) ?? false
     }
 }

@@ -44,6 +44,10 @@ public final class KSApp {
 
     #if os(Windows)
     private let host: KSWindowsDemoHost
+    /// Optional deep-link backend installed when `config.deepLink` is
+    /// declared. Used by `dispatchDeepLinkURLs` to filter incoming
+    /// arguments and emit `__ks.deepLink.openURL` events.
+    private let deepLinkBackend: (any KSDeepLinkBackend)?
     #elseif os(macOS)
     private let host: KSMacDemoHost
     #elseif os(Linux)
@@ -53,10 +57,14 @@ public final class KSApp {
     private init(config: KSConfig,
                  registry: KSCommandRegistry,
                  platform: any KSPlatform,
-                 host: AnyPlatformHost) {
+                 host: AnyPlatformHost,
+                 deepLinkBackend: (Any)? = nil) {
         self.config = config
         self.registry = registry
         self.platform = platform
+        #if os(Windows)
+        self.deepLinkBackend = deepLinkBackend as? any KSDeepLinkBackend
+        #endif
         // 컴파일 타임에 한 case만 활성화되므로 망라적 switch가
         // 강제 언래핑 없이 정확히 하나의 호스트를 추출한다.
         switch host {
@@ -134,9 +142,27 @@ public final class KSApp {
 
         // 4. 플랫폼 호스트 구성.
         #if os(Windows)
+        // Phase 8: 윈도우 상태 영속화 — `persistState=true`일 때만 활성화.
+        // 부팅 직후의 첫 `Win32Window.init`에서 복원 상태를 적용해야 하므로
+        // 호스트 생성 전에 store를 만들고 load한다.
+        let stateStore: KSWindowStateStore? = window.persistState
+            ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+            : nil
+        let restoredState = stateStore?.load(label: window.label)
+
         let concrete = try KSWindowsDemoHost(
-            windowConfig: window, registry: registry)
+            windowConfig: window, registry: registry,
+            restoredState: restoredState)
         let wrapper = AnyPlatformHost.windows(concrete)
+
+        // 저장 sink 설치 — WM_MOVE/SIZE/CLOSE에서 호출되며 디스크 쓰기는
+        // `KSWindowStateStore.save`가 atomic + 비-atomic 폴백으로 처리한다.
+        if let store = stateStore {
+            let label = window.label
+            concrete.setWindowStateSaveSink { state in
+                _ = store.save(label: label, state: state)
+            }
+        }
         #elseif os(macOS)
         let concrete = try KSMacDemoHost(
             windowConfig: window, registry: registry)
@@ -234,14 +260,51 @@ public final class KSApp {
         // `__KS_.app.*` 네임스페이스가 즉시 동작하도록 한다. 해당
         // 백엔드가 노출된 플랫폼에서만 사용 가능하다.
         #if os(Windows)
+        // 자동 시작 백엔드는 config에 `autostart` 섹션이 있을 때만
+        // 활성화한다. 설치되지 않으면 JS는 `commandNotRegistered`로
+        // 거부 응답을 받아 기능이 꺼졌다는 신호로 해석할 수 있다.
+        let autostartBackend: (any KSAutostartBackend)? = config.autostart.map {
+            KSWindowsAutostartBackend(
+                identifier: config.app.identifier,
+                args: $0.args)
+        }
+        // 딥링크 백엔드. config에 `deepLink` 섹션이 있을 때만 활성화.
+        // `autoRegisterOnLaunch=true`면 부팅 시점에 모든 스킴을 등록.
+        let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {
+            guard let dlc = config.deepLink else { return nil }
+            let backend = KSWindowsDeepLinkBackend(identifier: config.app.identifier)
+            if dlc.autoRegisterOnLaunch {
+                for s in dlc.schemes {
+                    do {
+                        try backend.register(scheme: s)
+                    } catch {
+                        KSLog.logger("kalsae.app").error(
+                            "deepLink auto-register failed for '\(s)': \(error)")
+                    }
+                }
+            }
+            return (backend, dlc)
+        }()
         await concrete.registerBuiltinCommands(
             platformName: platform.name,
             shellScope: config.security.shell,
-            notificationScope: config.security.notifications)
+            notificationScope: config.security.notifications,
+            fsScope: config.security.fs,
+            httpScope: config.security.http,
+            autostart: autostartBackend,
+            deepLink: deepLinkPair,
+            appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         #endif
 
         let app = KSApp(config: config, registry: registry,
-                        platform: platform, host: wrapper)
+                        platform: platform, host: wrapper,
+                        deepLinkBackend: {
+                            #if os(Windows)
+                            return deepLinkPair?.backend
+                            #else
+                            return nil
+                            #endif
+                        }())
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.
         #if os(Windows)
@@ -262,6 +325,32 @@ public final class KSApp {
     /// Emits a `__KB_.listen`-compatible event to the frontend.
     public func emit(_ event: String, payload: any Encodable) throws(KSError) {
         try host.emit(event, payload: payload)
+    }
+
+    /// Filters `args` for declared deep-link URLs and emits one
+    /// `__ks.deepLink.openURL` event per match. The payload is
+    /// `{ "url": "<scheme>://..." }`. Safe to call when the app has no
+    /// deep-link configuration — the call becomes a no-op.
+    ///
+    /// Recommended call sites:
+    ///   * From `KSApp.singleInstance`'s `onSecondInstance` callback,
+    ///     forwarding the relayed argv.
+    ///   * Once at startup with `CommandLine.arguments` so the page can
+    ///     observe the URL the app was launched with.
+    public func dispatchDeepLinkURLs(args: [String]) {
+        #if os(Windows)
+        guard let backend = deepLinkBackend, let dlc = config.deepLink else { return }
+        let urls = backend.extractURLs(fromArgs: args, forSchemes: dlc.schemes)
+        struct Payload: Encodable { let url: String }
+        for u in urls {
+            do {
+                try emit("__ks.deepLink.openURL", payload: Payload(url: u))
+            } catch {
+                KSLog.logger("kalsae.app").error(
+                    "deepLink emit failed for '\(u)': \(error)")
+            }
+        }
+        #endif
     }
 
     /// Runs the platform message loop until exit.

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Kalsae — Demo</title>
 <style>
   :root { color-scheme: dark; }
@@ -16,13 +17,13 @@
     display: flex; align-items: center; gap: 8px;
     padding: 6px 12px; background: #171922;
     border-bottom: 1px solid #2a2e3a;
-    app-region: drag; -webkit-app-region: drag;
+    -webkit-app-region: drag; app-region: drag;
     --ks-app-region: drag;
-    user-select: none;
+    -webkit-user-select: none; user-select: none;
   }
   .titlebar .title { font-weight: 600; opacity: .85; flex: 1; }
   .titlebar .nodrag {
-    app-region: no-drag; -webkit-app-region: no-drag;
+    -webkit-app-region: no-drag; app-region: no-drag;
     --ks-app-region: no-drag;
   }
   .winbtn {
@@ -76,7 +77,7 @@
     <div class="card">
       <h3>invoke("greet")</h3>
       <div class="row">
-        <input id="name" value="Kalsae" />
+        <input id="name" value="Kalsae" placeholder="Kalse" />
         <button class="act" id="greet">Greet</button>
       </div>
       <pre id="greetOut">—</pre>

@@ -42,6 +42,23 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// commands (`requestPermission`, `post`, `cancel`).
     public var notifications: KSNotificationScope
 
+    /// HTTP-fetch permission scope. Gates `__ks.http.fetch`. Empty by
+    /// default — the JS side cannot reach the network until the host
+    /// app declares trusted origins.
+    public var http: KSHTTPScope
+
+    /// WebView download policy. Disabled by default; when enabled,
+    /// the page may initiate downloads which the host process can
+    /// observe through the `__ks.webview.downloadStarting` event.
+    public var downloads: KSDownloadScope
+
+    /// Top-level navigation allowlist enforced via WebView2's
+    /// `add_NavigationStarting` handler. An empty `allow` list means
+    /// "no restriction" (legacy behaviour). When non-empty, navigation
+    /// to URLs outside the list is cancelled and (optionally) opened
+    /// in the user's default browser.
+    public var navigation: KSNavigationScope
+
     /// Policy values for `contextMenu`. See the `contextMenu` field doc.
     public enum ContextMenuPolicy: String, Codable, Sendable, Equatable {
         /// Native browser-style context menu (Cut/Copy/Paste/Inspect).
@@ -58,7 +75,10 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         contextMenu: ContextMenuPolicy = .default,
         allowExternalDrop: Bool = false,
         shell: KSShellScope = .init(),
-        notifications: KSNotificationScope = .init()
+        notifications: KSNotificationScope = .init(),
+        http: KSHTTPScope = .init(),
+        downloads: KSDownloadScope = .init(),
+        navigation: KSNavigationScope = .init()
     ) {
         self.csp = csp
         self.commandAllowlist = commandAllowlist
@@ -68,10 +88,14 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.allowExternalDrop = allowExternalDrop
         self.shell = shell
         self.notifications = notifications
+        self.http = http
+        self.downloads = downloads
+        self.navigation = navigation
     }
 
     private enum CodingKeys: String, CodingKey {
-        case csp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop, shell, notifications
+        case csp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
+        case shell, notifications, http, downloads, navigation
     }
 
     public init(from decoder: any Decoder) throws {
@@ -84,6 +108,9 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.allowExternalDrop = try c.decodeIfPresent(Bool.self, forKey: .allowExternalDrop) ?? false
         self.shell = try c.decodeIfPresent(KSShellScope.self, forKey: .shell) ?? .init()
         self.notifications = try c.decodeIfPresent(KSNotificationScope.self, forKey: .notifications) ?? .init()
+        self.http = try c.decodeIfPresent(KSHTTPScope.self, forKey: .http) ?? .init()
+        self.downloads = try c.decodeIfPresent(KSDownloadScope.self, forKey: .downloads) ?? .init()
+        self.navigation = try c.decodeIfPresent(KSNavigationScope.self, forKey: .navigation) ?? .init()
     }
 
     public static let defaultCSP =

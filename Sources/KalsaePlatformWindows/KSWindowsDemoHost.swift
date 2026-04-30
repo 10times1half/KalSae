@@ -19,14 +19,17 @@ public final class KSWindowsDemoHost {
     private let backdropType: KSWindowBackdrop?
 
     public init(windowConfig: KSWindowConfig,
-                registry: KSCommandRegistry) throws(KSError) {
+                registry: KSCommandRegistry,
+                restoredState: KSPersistedWindowState? = nil) throws(KSError) {
         // WebView2는 CreateCoreWebView2Environment 호출 전에 UI 스레드가
         // STA완다는 조건을 요구한다. 이후 모든 Win32 / WebView2 호출이
         // 안전하도록 가능한 한 이른 시점에 초기화한다.
         try Win32App.shared.ensureCOMInitialized()
 
         self.registry = registry
-        self.window = try Win32Window(config: windowConfig)
+        self.window = try Win32Window(
+            config: windowConfig,
+            restoredState: restoredState)
         self.webview = WebView2Host(label: windowConfig.label)
         self.bridge = WebView2Bridge(host: webview, registry: registry)
         self.webviewOptions = windowConfig.webview
@@ -117,6 +120,16 @@ public final class KSWindowsDemoHost {
     /// callback.
     public func setOnResume(_ cb: (@MainActor () -> Void)?) {
         window.onResumeSwift = cb
+    }
+
+    /// Installs a sink that receives the current persisted state on
+    /// every `WM_MOVE` / `WM_SIZE(restored|maximized)` / `WM_CLOSE`.
+    /// Pass `nil` to remove. Used by `KSApp.boot` to drive
+    /// `KSWindowStateStore` when `KSWindowConfig.persistState` is set.
+    public func setWindowStateSaveSink(
+        _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
+    ) {
+        window.stateSaveSink = sink
     }
 
     /// Toggles whether the webview accepts external file drops directly.
@@ -266,7 +279,12 @@ public final class KSWindowsDemoHost {
     public func registerBuiltinCommands(
         platformName: String = "Windows",
         shellScope: KSShellScope = .init(),
-        notificationScope: KSNotificationScope = .init()
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
     ) async {
         let mainLabel = window.label
         let windowsBackend = KSWindowsWindowBackend()
@@ -301,7 +319,12 @@ public final class KSWindowsDemoHost {
             quit: quit,
             platformName: platformName,
             shellScope: shellScope,
-            notificationScope: notificationScope)
+            notificationScope: notificationScope,
+            fsScope: fsScope,
+            httpScope: httpScope,
+            autostart: autostart,
+            deepLink: deepLink,
+            appDirectory: appDirectory)
 
         // Windows 전용: `KSRuntimeJS`의 `app-region: drag` mousedown 히트
         // 테스트에서 사용하는 드래그 영역 헬퍼. 살아있는 HWND를 조회해

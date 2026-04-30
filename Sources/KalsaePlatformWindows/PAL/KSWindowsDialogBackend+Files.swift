@@ -1,14 +1,16 @@
 #if os(Windows)
 internal import WinSDK
+internal import CKalsaeWV2
 public import KalsaeCore
 public import Foundation
 
 // MARK: - KSWindowsDialogBackend file dialog implementation
 //
-// `KSWindowsDialogBackend`의 파일 다이얼로그 UI-스레드 구현부.
-// `_openFileOnMain` / `_saveFileOnMain` / `_selectFolderOnMain`은
-// 메인 파일이 노출하는 `*OnUI` 진입점에서 위임받아 호출한다.
-// 보조 헬퍼(`makeFilterString` / `parseOpenFileResult`)도 함께 둔다.
+// 모던 Vista+ Common Item Dialog (`IFileOpenDialog` / `IFileSaveDialog`)을
+// `kswv2_dialog.cpp` C++ 쉬밌을 통해 호출한다. 레거시
+// `GetOpenFileNameW` / `GetSaveFileNameW` / `SHBrowseForFolderW`를 대체.
+// 긴 경로(>MAX_PATH) 지원, 기본 폴더는 `IShellItem`로 정확하게 지정,
+// 폴더 선택은 `FOS_PICKFOLDERS` 사용.
 
 extension KSWindowsDialogBackend {
 
@@ -17,41 +19,29 @@ extension KSWindowsDialogBackend {
         options: KSOpenFileOptions,
         parent: KSWindowHandle?
     ) -> [URL] {
+        ensureCOMInitialized()
         let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-        let bufLen = 64 * 1024
-        var buffer = [UInt16](repeating: 0, count: bufLen)
-        let filterUTF16 = makeFilterString(options.filters)
+        let title = options.title ?? "Open"
+        let dir = options.defaultDirectory?.path ?? ""
 
-        let success: Bool = filterUTF16.withUnsafeBufferPointer { filterPtr in
-            let title = options.title ?? "Open"
-            let initialDir = options.defaultDirectory?.path ?? ""
-
-            return title.withUTF16Pointer { titlePtr in
-                initialDir.withUTF16Pointer { initialPtr in
-                    var ofn = OPENFILENAMEW()
-                    ofn.lStructSize = DWORD(MemoryLayout<OPENFILENAMEW>.size)
-                    ofn.hwndOwner = parentHWND
-                    ofn.lpstrFilter = filterPtr.baseAddress
-                    ofn.lpstrTitle = titlePtr
-                    ofn.lpstrInitialDir = initialPtr
-                    ofn.nMaxFile = DWORD(bufLen)
-                    var flags: DWORD = DWORD(OFN_FILEMUSTEXIST) |
-                                       DWORD(OFN_PATHMUSTEXIST) |
-                                       DWORD(OFN_EXPLORER)
-                    if options.allowsMultiple {
-                        flags |= DWORD(OFN_ALLOWMULTISELECT)
-                    }
-                    ofn.Flags = flags
-                    return buffer.withUnsafeMutableBufferPointer { bufPtr in
-                        ofn.lpstrFile = bufPtr.baseAddress
-                        return GetOpenFileNameW(&ofn)
-                    }
+        return withFilterSpecs(options.filters) { specs, count in
+            title.withUTF16Pointer { titlePtr in
+                dir.withUTF16Pointer { dirPtr in
+                    var paths: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>? = nil
+                    var written: Int32 = 0
+                    let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
+                    let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
+                    let hr = KSWV2_DialogOpenFile(
+                        parentHWND.map { UnsafeMutableRawPointer($0) },
+                        titleArg, dirArg,
+                        specs, count,
+                        options.allowsMultiple ? 1 : 0,
+                        &paths, &written)
+                    if hr != 0 || written <= 0 || paths == nil { return [] }
+                    return drainPathArray(paths!, count: Int(written))
                 }
             }
         }
-
-        guard success else { return [] }
-        return parseOpenFileResult(buffer: buffer, allowsMultiple: options.allowsMultiple)
     }
 
     @MainActor
@@ -59,45 +49,33 @@ extension KSWindowsDialogBackend {
         options: KSSaveFileOptions,
         parent: KSWindowHandle?
     ) -> URL? {
+        ensureCOMInitialized()
         let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-        let bufLen = 4096
-        var buffer = [UInt16](repeating: 0, count: bufLen)
-        if let name = options.defaultFileName {
-            for (i, c) in name.utf16.enumerated() where i < bufLen - 1 {
-                buffer[i] = c
-            }
-        }
-        let filterUTF16 = makeFilterString(options.filters)
+        let title = options.title ?? "Save"
+        let dir = options.defaultDirectory?.path ?? ""
+        let name = options.defaultFileName ?? ""
 
-        let success: Bool = filterUTF16.withUnsafeBufferPointer { filterPtr in
-            let title = options.title ?? "Save"
-            let initialDir = options.defaultDirectory?.path ?? ""
-
-            return title.withUTF16Pointer { titlePtr in
-                initialDir.withUTF16Pointer { initialPtr in
-                    var ofn = OPENFILENAMEW()
-                    ofn.lStructSize = DWORD(MemoryLayout<OPENFILENAMEW>.size)
-                    ofn.hwndOwner = parentHWND
-                    ofn.lpstrFilter = filterPtr.baseAddress
-                    ofn.lpstrTitle = titlePtr
-                    ofn.lpstrInitialDir = initialPtr
-                    ofn.nMaxFile = DWORD(bufLen)
-                    ofn.Flags = DWORD(OFN_PATHMUSTEXIST) |
-                                DWORD(OFN_OVERWRITEPROMPT) |
-                                DWORD(OFN_EXPLORER)
-                    return buffer.withUnsafeMutableBufferPointer { bufPtr in
-                        ofn.lpstrFile = bufPtr.baseAddress
-                        return GetSaveFileNameW(&ofn)
+        return withFilterSpecs(options.filters) { specs, count -> URL? in
+            title.withUTF16Pointer { titlePtr in
+                dir.withUTF16Pointer { dirPtr in
+                    name.withUTF16Pointer { namePtr in
+                        var out: UnsafeMutablePointer<wchar_t>? = nil
+                        var chosen: Int32 = 0
+                        let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
+                        let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
+                        let nameArg: UnsafePointer<wchar_t>? = name.isEmpty ? nil : namePtr
+                        let hr = KSWV2_DialogSaveFile(
+                            parentHWND.map { UnsafeMutableRawPointer($0) },
+                            titleArg, dirArg, nameArg,
+                            specs, count,
+                            &out, &chosen)
+                        if hr != 0 || chosen == 0 || out == nil { return nil }
+                        let path = UnsafePointer(out!).toString()
+                        KSWV2_Free(out)
+                        return path.isEmpty ? nil : URL(fileURLWithPath: path)
                     }
                 }
             }
-        }
-
-        guard success else { return nil }
-        return buffer.withUnsafeBufferPointer { bp -> URL? in
-            guard let base = bp.baseAddress else { return nil }
-            let path = base.toString()
-            return path.isEmpty ? nil : URL(fileURLWithPath: path)
         }
     }
 
@@ -106,83 +84,109 @@ extension KSWindowsDialogBackend {
         options: KSSelectFolderOptions,
         parent: KSWindowHandle?
     ) -> URL? {
+        ensureCOMInitialized()
         let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
         let title = options.title ?? "Select folder"
+        let dir = options.defaultDirectory?.path ?? ""
 
         return title.withUTF16Pointer { titlePtr -> URL? in
-            var bi = BROWSEINFOW()
-            bi.hwndOwner = parentHWND
-            bi.lpszTitle = titlePtr
-            bi.ulFlags = UINT(BIF_RETURNONLYFSDIRS) | UINT(BIF_NEWDIALOGSTYLE)
-
-            guard let pidl = SHBrowseForFolderW(&bi) else { return nil }
-            defer { CoTaskMemFree(pidl) }
-
-            var pathBuf = [UInt16](repeating: 0, count: Int(MAX_PATH) + 1)
-            let ok = pathBuf.withUnsafeMutableBufferPointer { ptr -> Bool in
-                guard let base = ptr.baseAddress else { return false }
-                return SHGetPathFromIDListW(pidl, base)
+            dir.withUTF16Pointer { dirPtr -> URL? in
+                var out: UnsafeMutablePointer<wchar_t>? = nil
+                var chosen: Int32 = 0
+                let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
+                let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
+                let hr = KSWV2_DialogSelectFolder(
+                    parentHWND.map { UnsafeMutableRawPointer($0) },
+                    titleArg, dirArg,
+                    &out, &chosen)
+                if hr != 0 || chosen == 0 || out == nil { return nil }
+                let path = UnsafePointer(out!).toString()
+                KSWV2_Free(out)
+                return path.isEmpty ? nil : URL(fileURLWithPath: path)
             }
-            guard ok else { return nil }
-            // pathBuf는 MAX_PATH+1 고정 크기로 항상 non-empty → baseAddress는 non-nil.
-            let path = pathBuf.withUnsafeBufferPointer {
-                $0.baseAddress.unsafelyUnwrapped.toString()
-            }
-            return path.isEmpty ? nil : URL(fileURLWithPath: path)
         }
     }
 
-    // MARK: - Filter / result helpers
+    // MARK: - 헬퍼
 
-    /// Builds a `GetOpenFileName`-style filter:
-    /// `"All Files\0*.*\0Images\0*.png;*.jpg\0\0"`
-    fileprivate static func makeFilterString(_ filters: [KSFileFilter]) -> [UInt16] {
-        var u16: [UInt16] = []
-        let entries = filters.isEmpty
+    /// COM은 STA로 초기화되어 있어야 IFileOpenDialog가 동작한다.
+    /// `KSWV2_OleInitializeOnce`는 호출 스레드별 idempotent.
+    @MainActor
+    private static func ensureCOMInitialized() {
+        _ = KSWV2_OleInitializeOnce()
+    }
+
+    /// 필터 입력을 `KSWV2DialogFilter` 배열로 변환해 작업을 실행한다.
+    /// UTF-16 버퍼는 호출 동안 메모리에 고정된다.
+    @MainActor
+    private static func withFilterSpecs<R>(
+        _ filters: [KSFileFilter],
+        _ body: (UnsafePointer<KSWV2DialogFilter>?, Int32) -> R
+    ) -> R {
+        let entries: [KSFileFilter] = filters.isEmpty
             ? [KSFileFilter(name: "All Files", extensions: ["*"])]
             : filters
-        for f in entries {
-            for c in f.name.utf16 { u16.append(c) }
-            u16.append(0)
+
+        // UTF-16 버퍼를 직접 할당해 호출 끝까지 안정된 포인터를 보장.
+        var allocations: [UnsafeMutablePointer<UInt16>] = []
+        allocations.reserveCapacity(entries.count * 2)
+        defer {
+            for p in allocations { p.deallocate() }
+        }
+        var specs = [KSWV2DialogFilter](
+            repeating: KSWV2DialogFilter(name: nil, spec: nil),
+            count: entries.count)
+
+        for (i, f) in entries.enumerated() {
+            let namePtr = allocateUTF16NullTerminated(f.name)
             let pattern = f.extensions
                 .map { $0.hasPrefix("*.") ? $0 : "*.\($0)" }
                 .joined(separator: ";")
-            for c in pattern.utf16 { u16.append(c) }
-            u16.append(0)
+            let specPtr = allocateUTF16NullTerminated(
+                pattern.isEmpty ? "*.*" : pattern)
+            allocations.append(namePtr)
+            allocations.append(specPtr)
+            specs[i] = KSWV2DialogFilter(
+                name: UnsafePointer(namePtr),
+                spec: UnsafePointer(specPtr))
         }
-        u16.append(0)        // double-null terminator
-        return u16
+        return specs.withUnsafeBufferPointer { sp in
+            body(sp.baseAddress, Int32(entries.count))
+        }
     }
 
-    /// Parses the multi-select buffer returned by `GetOpenFileNameW`. The
-    /// classic format is `"<dir>\0<file1>\0<file2>\0\0"` for multi-select,
-    /// or just `"<full path>\0"` for single select.
-    fileprivate static func parseOpenFileResult(
-        buffer: [UInt16], allowsMultiple: Bool
+    private static func allocateUTF16NullTerminated(
+        _ s: String
+    ) -> UnsafeMutablePointer<UInt16> {
+        let units = Array(s.utf16)
+        let p = UnsafeMutablePointer<UInt16>.allocate(capacity: units.count + 1)
+        for (i, u) in units.enumerated() {
+            p[i] = u
+        }
+        p[units.count] = 0
+        return p
+    }
+
+    /// `KSWV2_DialogOpenFile`이 반환한 wchar_t** 배열을 URL로 변환하고
+    /// 메모리를 해제한다.
+    @MainActor
+    private static func drainPathArray(
+        _ array: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>,
+        count: Int
     ) -> [URL] {
-        // null 바이트로 분리.
-        var pieces: [String] = []
-        var start = 0
-        for i in 0..<buffer.count {
-            if buffer[i] == 0 {
-                if start == i { break }     // empty piece → end
-                let slice = buffer[start..<i]
-                pieces.append(String(decoding: slice, as: UTF16.self))
-                start = i + 1
+        var urls: [URL] = []
+        urls.reserveCapacity(count)
+        for i in 0..<count {
+            if let p = array[i] {
+                let path = UnsafePointer(p).toString()
+                if !path.isEmpty {
+                    urls.append(URL(fileURLWithPath: path))
+                }
+                KSWV2_Free(p)
             }
         }
-
-        if pieces.isEmpty { return [] }
-
-        if !allowsMultiple || pieces.count == 1 {
-            // 단일 프레임의 전체 경로.
-            return [URL(fileURLWithPath: pieces[0])]
-        }
-
-        // 다중 선택: 첫 조각은 디렉터리, 나머지는 파일 이름.
-        let dir = pieces[0]
-        let dirURL = URL(fileURLWithPath: dir)
-        return pieces.dropFirst().map { dirURL.appendingPathComponent($0) }
+        KSWV2_Free(array)
+        return urls
     }
 }
 #endif
