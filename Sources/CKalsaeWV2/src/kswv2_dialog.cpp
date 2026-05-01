@@ -114,7 +114,7 @@ extern "C" int32_t KSWV2_DialogOpenFile(
     hr = dlg->Show((HWND)hwnd);
     if (hr == HRESULT_FROM_WIN32(ERROR_CANCELLED)) {
         dlg->Release();
-        return S_OK;     // user cancelled
+        return S_OK;     // 사용자가 취소함
     }
     if (FAILED(hr)) { dlg->Release(); return hr; }
 

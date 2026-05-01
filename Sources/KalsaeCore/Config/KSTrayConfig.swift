@@ -1,14 +1,16 @@
 import Foundation
 
-/// System tray (status item) configuration.
+/// 시스템 트레이(상태 항목) 설정.
 public struct KSTrayConfig: Codable, Sendable, Equatable {
-    /// Path, relative to project root, of the icon file. Platform layers
-    /// pick an appropriate format (`.icns`/`.ico`/`.png`).
+    /// 아이콘 파일 경로. 프로젝트 루트 기준 상대 경로이며,
+    /// 플랫폼 레이어가 적절한 형식(`.icns`/`.ico`/`.png`)을 고른다.
     public var icon: String
+    /// 트레이 항목 위에 마우스를 올렸을 때 보이는 툴팁.
     public var tooltip: String?
+    /// 트레이 아이콘 클릭 또는 우클릭 시 표시할 메뉴.
     public var menu: [KSMenuItem]?
-    /// Command id invoked on primary (left) click. When `nil`, the tray
-    /// only shows the menu.
+    /// 기본(왼쪽) 클릭 시 실행할 명령 ID.
+    /// `nil`이면 트레이는 메뉴만 표시한다.
     public var onLeftClick: String?
 
     public init(icon: String,

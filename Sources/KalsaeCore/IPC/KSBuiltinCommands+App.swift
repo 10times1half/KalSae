@@ -1,8 +1,8 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.app.*`, `__ks.environment`, and `__ks.log` —
-    /// the catch-all set that doesn't belong to a more specific domain.
+    /// `__ks.app.*`, `__ks.environment`, `__ks.log`를 등록한다 —
+    /// 특정 도메인에 속하지 않는 포괄적인 명령 집합이다.
     static func registerAppCommands(
         into registry: KSCommandRegistry,
         quit: @escaping @Sendable () -> Void,

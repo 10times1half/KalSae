@@ -3,7 +3,7 @@ internal import AppKit
 public import KalsaeCore
 public import Foundation
 
-/// macOS implementation of `KSDialogBackend`.
+/// `KSDialogBackend`의 macOS 구현체.
 public struct KSMacDialogBackend: KSDialogBackend, Sendable {
     public init() {}
 
@@ -107,7 +107,7 @@ public struct KSMacDialogBackend: KSDialogBackend, Sendable {
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - 헬퍼
 
     @MainActor
     private func resolveParent(_ handle: KSWindowHandle?) -> NSWindow? {

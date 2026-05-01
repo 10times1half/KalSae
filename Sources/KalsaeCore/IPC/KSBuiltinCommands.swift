@@ -1,23 +1,23 @@
 public import Foundation
 
-/// Wires the built-in `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`,
-/// `__ks.notification.*`, and `__ks.app.*` commands so the JS-side
-/// `__KS_.window.*` namespaces have a Swift counterpart.
+/// 내장 `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`,
+/// `__ks.notification.*`, `__ks.app.*` 명령을 연결하여 JS 측
+/// `__KS_.window.*` 네임스페이스에 Swift 대응부가 있도록 한다.
 ///
-/// Call this at application startup, after the primary window has been
-/// registered with the platform's `KSWindowBackend`. The registrar reads
-/// from the supplied platform and resolves the target window via the
-/// `mainWindow` handle (used when JS does not specify a `window` field).
+/// 애플리케이션 시작 시, 기본 윈도우가 플랫폼의 `KSWindowBackend`에
+/// 등록된 후에 호출한다. 등록자는 제공된 플랫폼에서 읽어와
+/// `mainWindow` 핸들(JS가 `window` 필드를 지정하지 않을 때 사용)을
+/// 통해 대상 윈도우를 해석한다.
 ///
-/// Implementation is split by domain across sibling files:
+/// 구현은 도메인별로 형제 파일에 분할되어 있다:
 ///   - `KSBuiltinCommands+Window.swift`        — window.*
 ///   - `KSBuiltinCommands+Shell.swift`         — shell.*
 ///   - `KSBuiltinCommands+Clipboard.swift`     — clipboard.*
 ///   - `KSBuiltinCommands+Notification.swift`  — notification.*
 ///   - `KSBuiltinCommands+App.swift`           — app.*, environment, log
 public enum KSBuiltinCommands {
-    /// Registers all built-in commands. Calling this more than once
-    /// silently overwrites prior handlers.
+    /// 모든 내장 명령을 등록한다. 두 번 이상 호출하면
+    /// 이전 핸들러를 조용히 덮어쓴다.
     public static func register(
         into registry: KSCommandRegistry,
         windows: any KSWindowBackend,
@@ -135,9 +135,9 @@ public enum KSBuiltinCommands {
 
     // MARK: - Generic register helpers
 
-    /// Registers `handler` taking decoded `In` and returning encoded `Out`.
-    /// Decode failures surface as `commandDecodeFailed`; non-`KSError`
-    /// throws are wrapped as `commandExecutionFailed`.
+    /// 디코딩된 `In`을 받아 인코딩된 `Out`을 반환하는 `handler`를 등록한다.
+    /// 디코딩 실패는 `commandDecodeFailed`로 표시되고, `KSError`가 아닌
+    /// throw는 `commandExecutionFailed`로 감싸진다.
     static func register<In: Codable & Sendable, Out: Codable & Sendable>(
         _ registry: KSCommandRegistry,
         _ name: String,
@@ -159,6 +159,7 @@ public enum KSBuiltinCommands {
                 let encoded = try JSONEncoder().encode(out)
                 return .success(encoded)
             } catch let e as KSError {
+                // 혼합 throw 지점 (JSONEncoder + handler(KSError)) — AGENTS §4 참조
                 return .failure(e)
             } catch {
                 return .failure(KSError(
@@ -168,8 +169,8 @@ public enum KSBuiltinCommands {
         }
     }
 
-    /// Same as `register` but for handlers that take no args. Accepts any
-    /// JSON shape and ignores it.
+    /// `register`와 동일하지만 인자를 받지 않는 핸들러용. 모든 JSON
+    /// 형태를 수용하고 무시한다.
     static func register<Out: Codable & Sendable>(
         _ registry: KSCommandRegistry,
         _ name: String,
@@ -181,6 +182,7 @@ public enum KSBuiltinCommands {
                 let encoded = try JSONEncoder().encode(out)
                 return .success(encoded)
             } catch let e as KSError {
+                // 혼합 throw 지점 (JSONEncoder + handler(KSError)) — AGENTS §4 참조
                 return .failure(e)
             } catch {
                 return .failure(KSError(
@@ -190,8 +192,8 @@ public enum KSBuiltinCommands {
         }
     }
 
-    /// Like `register` but advertises that the encoded result is meant
-    /// as a query response (semantic alias for readability).
+    /// `register`와 유사하지만 인코딩된 결과가 쿼리 응답으로
+    /// 의도되었음을 알린다 (가독성을 위한 의미론적 별칭).
     static func registerQuery<Out: Codable & Sendable>(
         _ registry: KSCommandRegistry,
         _ name: String,
@@ -211,8 +213,8 @@ public enum KSBuiltinCommands {
 
 // MARK: - Window resolver
 
-/// Resolves a window label (or absence thereof) to a concrete handle.
-/// Used by every `window.*` and any other command that targets a window.
+/// 윈도우 레이블(또는 부재)을 구체적인 핸들로 해석한다.
+/// 모든 `window.*` 및 윈도우를 대상으로 하는 다른 명령에서 사용된다.
 actor WindowResolver {
     let windows: any KSWindowBackend
     let mainWindowProvider: @Sendable () -> KSWindowHandle?

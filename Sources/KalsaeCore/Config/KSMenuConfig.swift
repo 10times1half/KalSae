@@ -1,9 +1,11 @@
 import Foundation
 
-/// Declarative menu tree used for the app menu (macOS), window menu
-/// (Windows), tray menu, and context menus.
+/// 앱 메뉴(macOS), 창 메뉴(Windows), 트레이 메뉴, 컨텍스트 메뉴에 사용되는
+/// 선언적 메뉴 트리.
 public struct KSMenuConfig: Codable, Sendable, Equatable {
+    /// 앱 전역 메뉴 트리.
     public var appMenu: [KSMenuItem]?
+    /// 창별 메뉴 트리.
     public var windowMenu: [KSMenuItem]?
 
     public init(appMenu: [KSMenuItem]? = nil,
@@ -13,7 +15,8 @@ public struct KSMenuConfig: Codable, Sendable, Equatable {
     }
 }
 
-/// A single menu item. Either a leaf action, a submenu, or a separator.
+/// 단일 메뉴 항목.
+/// 리프 액션, 서브메뉴, 구분선 중 하나다.
 public struct KSMenuItem: Codable, Sendable, Equatable {
     public enum Kind: String, Codable, Sendable {
         case action
@@ -21,15 +24,21 @@ public struct KSMenuItem: Codable, Sendable, Equatable {
         case separator
     }
 
+    /// 메뉴 항목 종류.
     public var kind: Kind
+    /// 항목의 안정적인 내부 식별자.
     public var id: String?
+    /// 사용자에게 보이는 메뉴 레이블.
     public var label: String?
-    /// Accelerator in cross-platform notation, e.g. `"CmdOrCtrl+Shift+N"`.
+    /// 크로스플랫폼 표기법의 가속키. 예: `"CmdOrCtrl+Shift+N"`.
     public var accelerator: String?
+    /// 현재 항목이 선택 가능 상태인지 여부.
     public var enabled: Bool
+    /// 체크형 메뉴에서 현재 체크 상태.
     public var checked: Bool?
+    /// `kind == .submenu`일 때 포함되는 하위 항목들.
     public var submenu: [KSMenuItem]?
-    /// `@KSCommand` id (or an event name) fired when this item is clicked.
+    /// 이 항목이 클릭될 때 실행되는 `@KSCommand` ID(또는 이벤트 이름).
     public var command: String?
 
     public init(kind: Kind,
@@ -95,12 +104,12 @@ public struct KSMenuItem: Codable, Sendable, Equatable {
     }
 }
 
-/// Notification runtime configuration.
+/// 알림 런타임 설정.
 public struct KSNotificationConfig: Codable, Sendable, Equatable {
-    /// Required on Windows to display toasts with app identity. Falls back
-    /// to `KSAppInfo.identifier` when `nil`.
+    /// Windows에서 앱 식별성이 있는 토스트를 표시할 때 필요하다.
+    /// `nil`이면 `KSAppInfo.identifier`로 폴백한다.
     public var appUserModelID: String?
-    /// Default icon, relative to project root.
+    /// 프로젝트 루트 기준 기본 아이콘 경로.
     public var defaultIcon: String?
 
     public init(appUserModelID: String? = nil, defaultIcon: String? = nil) {

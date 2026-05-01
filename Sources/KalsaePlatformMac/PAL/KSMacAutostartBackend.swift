@@ -3,7 +3,7 @@ internal import ServiceManagement
 public import KalsaeCore
 public import Foundation
 
-/// macOS implementation of `KSAutostartBackend` using SMAppService (macOS 13+).
+/// SMAppService (macOS 13+)를 사용하는 `KSAutostartBackend`의 macOS 구현체.
 public struct KSMacAutostartBackend: KSAutostartBackend, Sendable {
     public init() {}
 

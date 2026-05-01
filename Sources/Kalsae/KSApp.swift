@@ -7,15 +7,19 @@ internal import KalsaePlatformMac
 internal import KalsaePlatformWindows
 #elseif os(Linux)
 internal import KalsaePlatformLinux
+#elseif os(iOS)
+internal import KalsaePlatformIOS
+#elseif os(Android)
+internal import KalsaePlatformAndroid
 #endif
 
-/// High-level entry point for Kalsae applications.
+/// Kalsae 애플리케이션의 최상위 진입점.
 ///
-/// `KSApp` loads `Kalsae.json`, applies its security posture, creates
-/// the platform-appropriate demo host, and exposes a small cross-platform
-/// API (`emit`, `postJob`, `run`) that mirrors each platform's DemoHost.
+/// `KSApp`은 `Kalsae.json`을 로드하고, 보안 설정을 적용하며,
+/// 플랫폼에 맞는 데모 호스트를 생성하고, 각 플랫폼의 DemoHost가
+/// 제공하는 소형 크로스플랫폼 API(`emit`, `postJob`, `run`)를 노출한다.
 ///
-/// Typical usage:
+/// 일반적인 사용법:
 /// ```swift
 /// let app = try await KSApp.boot(configURL: configURL) { registry in
 ///     await registry.register("greet") { ... }
@@ -24,22 +28,21 @@ internal import KalsaePlatformLinux
 /// ```
 @MainActor
 public final class KSApp {
-    /// Loaded application configuration (security posture, windows,
-    /// menus, tray, build directories). Populated by `boot(...)` and
-    /// immutable thereafter.
+    /// 로드된 애플리케이션 설정 (보안 설정, 윈도우, 메뉴, 트레이, 빌드 디렉터리).
+    /// `boot(...)`에서 채워지며 이후 불변이다.
     public let config: KSConfig
 
-    /// Command registry that maps `invoke(name, args)` from JS to native
-    /// handlers. Apps register handlers in the `configure` closure of
-    /// `boot(...)`; the registry is cooperative-actor isolated, so
-    /// registration from any thread requires `await`.
+    /// JS의 `invoke(name, args)`를 네이티브 핸들러에 매핑하는 명령 레지스트리.
+    /// 앱은 `boot(...)`의 `configure` 클로저에서 핸들러를 등록한다;
+    /// 레지스트리는 협력 액터로 격리되어 있으므로 모든 스레드에서의
+    /// 등록에는 `await`가 필요하다.
     public let registry: KSCommandRegistry
 
-    /// Platform abstraction (PAL) — exposes `dialogs`, `menus`, `tray`,
-    /// `notifications`, etc. so apps can drive the host OS without
-    /// importing the platform-specific module directly. `KSPlatform`
-    /// itself is `Sendable`, so this property is `nonisolated` to allow
-    /// access from background dispatch handlers.
+    /// 플랫폼 추상화 계층(PAL) — `dialogs`, `menus`, `tray`,
+    /// `notifications` 등을 노출해 앱이 플랫폼별 모듈을 직접 임포트하지
+    /// 않고도 호스트 OS를 구동할 수 있게 한다. `KSPlatform` 자체는
+    /// `Sendable`이므로 이 프로퍼티는 `nonisolated`로 선언되어
+    /// 백그라운드 디스패치 핸들러에서 접근할 수 있다.
     nonisolated public let platform: any KSPlatform
 
     #if os(Windows)
@@ -48,11 +51,15 @@ public final class KSApp {
     private let host: KSMacDemoHost
     #elseif os(Linux)
     private let host: KSLinuxDemoHost
+    #elseif os(iOS)
+    private let host: KSiOSDemoHost
+    #elseif os(Android)
+    private let host: KSAndroidDemoHost
     #endif
 
-    /// Optional deep-link backend installed when `config.deepLink` is
-    /// declared. Used by `dispatchDeepLinkURLs` to filter incoming
-    /// arguments and emit `__ks.deepLink.openURL` events.
+    /// `config.deepLink`가 선언되었을 때 설치되는 선택적 딥링크 백엔드.
+    /// `dispatchDeepLinkURLs`에서 들어오는 인자를 필터링하고
+    /// `__ks.deepLink.openURL` 이벤트를 방출하는 데 사용된다.
     private let deepLinkBackend: (any KSDeepLinkBackend)?
 
     private init(config: KSConfig,
@@ -73,30 +80,29 @@ public final class KSApp {
         case .mac(let h): self.host = h
         #elseif os(Linux)
         case .linux(let h): self.host = h
+        #elseif os(iOS)
+        case .ios(let h): self.host = h
+        #elseif os(Android)
+        case .android(let h): self.host = h
         #endif
         }
     }
 
-    // MARK: - Single instance
+    // MARK: - 단일 인스턴스
     //
-    // See `KSApp+SingleInstance.swift`.
+    // `KSApp+SingleInstance.swift` 참조.
 
-    /// Boots an application from `Kalsae.json`.
+    /// `Kalsae.json`에서 애플리케이션을 부팅한다.
     ///
     /// - Parameters:
-    ///   - configURL: Absolute file URL to `Kalsae.json`.
-    ///   - windowLabel: Which window from `config.windows` to open. When
-    ///     `nil`, the first entry is used.
-    ///   - urlOverride: When non-nil, takes precedence over
-    ///     `config.windows[i].url` and the default resolution.
-    ///   - resourceRoot: Overrides where static assets are served from.
-    ///     When `nil`, resolved as `configURL.deletingLastPathComponent()
-    ///     / config.build.frontendDist`. When the resolved directory
-    ///     exists the app is served from a real HTTPS virtual host
-    ///     (`https://app.Kalsae/`) instead of `file://`, enabling
-    ///     header-level security such as a proper CSP.
-    ///   - configure: Invoked before the message loop starts. Register
-    ///     commands here.
+    ///   - configURL: `Kalsae.json`의 절대 파일 URL.
+    ///   - windowLabel: `config.windows`에서 열 윈도우. `nil`이면 첫 번째 항목이 사용된다.
+    ///   - urlOverride: nil이 아닐 경우 `config.windows[i].url` 및 기본 해상도보다 우선한다.
+    ///   - resourceRoot: 정적 자산이 제공되는 위치를 재정의한다.
+    ///     `nil`일 경우 `configURL.deletingLastPathComponent() / config.build.frontendDist`로
+    ///     결정된다. 해결된 디렉터리가 존재하면 앱은 `file://` 대신 실제 HTTPS 가상 호스트
+    ///     (`https://app.Kalsae/`)에서 제공되어 적절한 CSP와 같은 헤더 수준 보안이 가능해진다.
+    ///   - configure: 메시지 루프가 시작되기 전에 호출된다. 여기서 명령을 등록한다.
     public static func boot(
         configURL: URL,
         windowLabel: String? = nil,
@@ -117,8 +123,8 @@ public final class KSApp {
             configure: configure)
     }
 
-    /// Boots an application from an in-memory `KSConfig`. Useful for
-    /// tests and for apps that assemble their config programmatically.
+    /// 메모리 내 `KSConfig`에서 애플리케이션을 부팅한다. 테스트와
+    /// 설정을 프로그래밍 방식으로 조합하는 앱에 유용하다.
     public static func boot(
         config: KSConfig,
         windowLabel: String? = nil,
@@ -180,9 +186,17 @@ public final class KSApp {
         let concrete = try KSLinuxDemoHost(
             windowConfig: window, registry: registry)
         let wrapper = AnyPlatformHost.linux(concrete)
+        #elseif os(iOS)
+        let concrete = try KSiOSDemoHost(
+            windowConfig: window, registry: registry)
+        let wrapper = AnyPlatformHost.ios(concrete)
+        #elseif os(Android)
+        let concrete = try KSAndroidDemoHost(
+            windowConfig: window, registry: registry)
+        let wrapper = AnyPlatformHost.android(concrete)
         #else
         throw KSError.unsupportedPlatform(
-            "KSApp requires macOS, Windows, or Linux")
+            "KSApp requires macOS, Windows, Linux, iOS, or Android")
         #endif
 
         // 5. 프론트엔드 제공 방식 결정.
@@ -209,7 +223,7 @@ public final class KSApp {
                 resolver: resolver,
                 csp: config.security.csp,
                 host: Self.virtualHost)
-            #elseif os(macOS) || os(Linux)
+            #elseif os(macOS) || os(Linux) || os(iOS) || os(Android)
             try concrete.setAssetRoot(servedRoot)
             #endif
             #if os(Linux)
@@ -339,13 +353,32 @@ public final class KSApp {
                                 }
                             }
                             return backend
+                            #elseif os(iOS)
+                            guard let dlc = config.deepLink else { return nil }
+                            let backend = KSiOSDeepLinkBackend(identifier: config.app.identifier)
+                            if dlc.autoRegisterOnLaunch {
+                                for s in dlc.schemes {
+                                    do {
+                                        try backend.register(scheme: s)
+                                    } catch {
+                                        KSLog.logger("kalsae.app").error(
+                                            "deepLink auto-register failed for '\(s)': \(error)")
+                                    }
+                                }
+                            }
+                            return backend
+                            #elseif os(Android)
+                            guard let dlc = config.deepLink else { return nil }
+                            let backend = KSAndroidDeepLinkBackend(identifier: config.app.identifier)
+                            KSAndroidDeepLinkBackend.knownSchemes = Set(dlc.schemes.map { $0.lowercased() })
+                            return backend
                             #else
                             return nil
                             #endif
                         }())
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.
-        #if os(Windows)
+        #if os(Windows) || os(Linux)
         subscribeMenuRouter(app: app)
         #endif
 
@@ -353,28 +386,28 @@ public final class KSApp {
     }
 
     // virtualHost / cspInjectionScript / isDirectory / isRemoteURL —
-    // see `KSApp+Helpers.swift`.
+    // `KSApp+Helpers.swift` 참조.
 
-    /// Posts a closure onto the UI thread. Thread-safe.
+    /// 클로저를 UI 스레드에 게시한다. 스레드 안전.
     nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
         host.postJob(block)
     }
 
-    /// Emits a `__KB_.listen`-compatible event to the frontend.
+    /// 프론트엔드에 `__KB_.listen` 호환 이벤트를 방출한다.
     public func emit(_ event: String, payload: any Encodable) throws(KSError) {
         try host.emit(event, payload: payload)
     }
 
-    /// Filters `args` for declared deep-link URLs and emits one
-    /// `__ks.deepLink.openURL` event per match. The payload is
-    /// `{ "url": "<scheme>://..." }`. Safe to call when the app has no
-    /// deep-link configuration — the call becomes a no-op.
+    /// `args`에서 선언된 딥링크 URL을 필터링하고 일치하는 각 URL에 대해
+    /// 하나의 `__ks.deepLink.openURL` 이벤트를 방출한다. 페이로드는
+    /// `{ "url": "<scheme>://..." }`이다. 앱에 딥링크 설정이 없어도
+    /// 안전하게 호출할 수 있다 — 호출은 아무 동작도 하지 않는다.
     ///
-    /// Recommended call sites:
-    ///   * From `KSApp.singleInstance`'s `onSecondInstance` callback,
-    ///     forwarding the relayed argv.
-    ///   * Once at startup with `CommandLine.arguments` so the page can
-    ///     observe the URL the app was launched with.
+    /// 권장 호출 위치:
+    ///   * `KSApp.singleInstance`의 `onSecondInstance` 콜백 내에서,
+    ///     전달된 argv를 전달.
+    ///   * 시작 시 `CommandLine.arguments`로 한 번 호출해 페이지가
+    ///     앱이 실행된 URL을 관찰할 수 있도록.
     public func dispatchDeepLinkURLs(args: [String]) {
         guard let backend = deepLinkBackend, let dlc = config.deepLink else { return }
         var urls = backend.currentLaunchURLs(forSchemes: dlc.schemes)
@@ -383,6 +416,13 @@ public final class KSApp {
         struct Payload: Encodable { let url: String }
         for u in urls {
             if !seen.insert(u).inserted { continue }
+            // 보안: 악의적인 명령줄 인자나 두 번째 인스턴스 전달로 인한
+            // DoS를 방지하기 위해 긴 URL을 거부한다.
+            guard u.utf8.count <= 4096 else {
+                KSLog.logger("kalsae.app").warning(
+                    "deepLink URL exceeds 4 KB limit (\(u.utf8.count) bytes); dropped")
+                continue
+            }
             do {
                 try emit("__ks.deepLink.openURL", payload: Payload(url: u))
             } catch {
@@ -392,14 +432,14 @@ public final class KSApp {
         }
     }
 
-    /// Runs the platform message loop until exit.
+    /// 종료될 때까지 플랫폼 메시지 루프를 실행한다.
     public func run() -> Int32 {
         host.runMessageLoop()
     }
 
-    /// Requests an orderly shutdown of the application. On Windows this
-    /// posts `WM_CLOSE` to the demo window; on macOS this terminates
-    /// `NSApplication`; on Linux this requests `GtkApplication` quit.
+    /// 애플리케이션의 정리된 종료를 요청한다. Windows에서는 데모 윈도우에
+    /// `WM_CLOSE`를 게시하고, macOS에서는 `NSApplication`을 종료하며,
+    /// Linux에서는 `GtkApplication` 종료를 요청한다.
     nonisolated public func quit() {
         #if os(Windows)
         host.requestQuit()
@@ -407,38 +447,40 @@ public final class KSApp {
         host.requestQuit()
         #elseif os(Linux)
         host.requestQuit()
+        #elseif os(iOS)
+        host.requestQuit()
+        #elseif os(Android)
+        host.requestQuit()
         #endif
     }
 
-    // MARK: - Phase C4 native lifecycle callbacks
+    // MARK: - 네이티브 라이프사이클 콜백
     //
-    // These hand the closure straight to the platform host. On Windows
-    // they fire from `WndProc` (UI thread); on macOS / Linux preview
-    // they're accepted but currently no-op until each PAL implements
-    // the corresponding system events.
+    // 클로저를 플랫폼 호스트에 직접 전달한다. Windows에서는 `WndProc`
+    // (UI 스레드)에서 실행된다; macOS/Linux 프리뷰에서는 수용되지만
+    // 각 PAL이 해당 시스템 이벤트를 구현할 때까지 현재는 노옵이다.
 
-    /// Native close intercept. The closure runs on the UI thread when
-    /// the user attempts to close the window (e.g. clicks the [X] or
-    /// presses Alt-F4). Return `true` to cancel the close; return
-    /// `false` to let the platform's default behaviour run (which may
-    /// itself be `hideOnClose` / `__ks.window.beforeClose`). Pass `nil`
-    /// to remove the callback.
+    /// 네이티브 닫기 가로채기. 사용자가 윈도우를 닫으려고 할 때
+    /// (예: [X] 클릭 또는 Alt-F4) UI 스레드에서 클로저가 실행된다.
+    /// `true`를 반환하면 닫기를 취소하고, `false`를 반환하면 플랫폼의
+    /// 기본 동작(`hideOnClose` / `__ks.window.beforeClose`일 수 있음)이
+    /// 실행된다. `nil`을 전달하면 콜백을 제거한다.
     public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
         host.setOnBeforeClose(cb)
     }
 
-    /// Invoked when the OS signals power suspend (Windows
-    /// `PBT_APMSUSPEND`). Best-effort — the system may suspend the
-    /// process before the callback dispatches.
+    /// OS가 전원 일시 중단을 알릴 때 호출된다 (Windows
+    /// `PBT_APMSUSPEND`). 최선 노력 — 콜백이 디스패치되기 전에
+    /// 시스템이 프로세스를 일시 중단할 수 있다.
     public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
         host.setOnSuspend(cb)
     }
 
-    /// Invoked when the OS signals power resume (Windows
+    /// OS가 전원 재개를 알릴 때 호출된다 (Windows
     /// `PBT_APMRESUMEAUTOMATIC` / `PBT_APMRESUMESUSPEND`).
     public func setOnResume(_ cb: (@MainActor () -> Void)?) {
         host.setOnResume(cb)
     }
 
-    // MARK: - UI-thread convenience helpers — see `KSApp+UI.swift`.
+    // MARK: - UI 스레드 편의 헬퍼 — `KSApp+UI.swift` 참조.
 }

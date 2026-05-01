@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 import KalsaeCLICore
 
-/// `kalsae generate ...` group.
+/// `kalsae generate ...` 그룹.
 struct GenerateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "generate",

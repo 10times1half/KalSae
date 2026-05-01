@@ -1,19 +1,19 @@
 import SwiftSyntax
 
 extension KSBindingsGenerator {
-    /// Walks a parsed Swift file and collects `@KSCommand` functions and
-    /// Codable struct/enum declarations.
+    /// Swift 파일을 파싱하여 `@KSCommand` 함수와
+    /// Codable struct/enum 선언을 수집한다.
     ///
-    /// This visitor is intentionally lenient: it accepts source that
-    /// wouldn't compile (e.g. references to types it can't see) because
-    /// `kalsae generate` runs against raw source under a watch loop.
+    /// 이 방문자는 의도적으로 너그럽rd하게 설계되어 있다:
+    /// `kalsae generate`는 와치 루프에서 실행되므로
+    /// (e.g. 볼 수 없는 타입 참조 등) 컴파일이 안 되는 소스도 허용한다.
     final class Visitor: SyntaxVisitor {
         var commands: [Command] = []
         var types: [TypeDecl] = []
 
         init() { super.init(viewMode: .sourceAccurate) }
 
-        // MARK: Functions
+        // MARK: 함수
 
         override func visit(_ node: FunctionDeclSyntax) -> SyntaxVisitorContinueKind {
             guard let attr = ksCommandAttribute(node.attributes) else {
@@ -41,7 +41,7 @@ extension KSBindingsGenerator {
             return .visitChildren
         }
 
-        // MARK: Structs
+        // MARK: 구조체
 
         override func visit(_ node: StructDeclSyntax) -> SyntaxVisitorContinueKind {
             guard inheritsCodable(node.inheritanceClause) else {
@@ -78,7 +78,7 @@ extension KSBindingsGenerator {
             return .visitChildren
         }
 
-        // MARK: Enums
+        // MARK: 열거형
 
         override func visit(_ node: EnumDeclSyntax) -> SyntaxVisitorContinueKind {
             guard inheritsCodable(node.inheritanceClause) else {
@@ -121,12 +121,11 @@ extension KSBindingsGenerator {
             return .visitChildren
         }
 
-        // MARK: Helpers
+        // MARK: 헬퍼
 
-        /// Returns the literal command-name argument if present
-        /// (`@KSCommand("foo.bar")` → `"foo.bar"`), an empty string when
-        /// the attribute is bare (`@KSCommand`), or `nil` if the function
-        /// has no `@KSCommand` attribute at all.
+        /// 속성이 있는 리터럴 명령 이름 인수를 반환한다
+        /// (`@KSCommand("foo.bar")` → `"foo.bar"`), 속성이 없는 경우는 빈 문자열
+        /// (`@KSCommand`), 함수에 `@KSCommand` 속성이 없으면 `nil`을 반환한다.
         private func ksCommandAttribute(_ attrs: AttributeListSyntax) -> String? {
             for entry in attrs {
                 guard let a = entry.as(AttributeSyntax.self) else { continue }

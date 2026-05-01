@@ -3,14 +3,14 @@ internal import AppKit
 public import KalsaeCore
 public import Foundation
 
-/// macOS deep-link / custom URL scheme feature.
+/// macOS 딥링크 / 커스텀 URL 스킴 기능.
 ///
-/// Runtime registration uses `LSSetDefaultHandlerForURLScheme` (macOS 12+).
-/// Launch-time URL capture uses `NSAppleEventManager` for `kAEGetURL` events.
+/// 런타임 등록은 `LSSetDefaultHandlerForURLScheme` (macOS 12+)을 사용한다.
+/// 시작 시 URL 캐포는 `kAEGetURL` 이벤트에 `NSAppleEventManager`를 사용한다.
 public struct KSMacDeepLinkBackend: KSDeepLinkBackend, Sendable {
-    /// App identifier — used as the bundle identifier for URL scheme registration.
+    /// 앱 식별자 — URL 스킴 등록에 사용되는 번들 식별자.
     public let identifier: String
-    /// Collected URLs from launch events, filled by `installAppleEventHandler()`.
+    /// 시작 이벤트에서 수집된 URL들, `installAppleEventHandler()`에 의해 채워진다.
     nonisolated(unsafe) private static var launchURLs: [String] = []
     private static var urlHandler: (@MainActor (String) -> Void)?
 
@@ -18,7 +18,7 @@ public struct KSMacDeepLinkBackend: KSDeepLinkBackend, Sendable {
         self.identifier = identifier
     }
 
-    /// Must be called once at app startup to capture `kAEGetURL` events.
+    /// `kAEGetURL` 이벤트를 캐포하려면 앱 시작 시 한 번 호출해야 한다.
     @MainActor
     public static func installAppleEventHandler() {
         NSAppleEventManager.shared().setEventHandler(
@@ -43,7 +43,7 @@ public struct KSMacDeepLinkBackend: KSDeepLinkBackend, Sendable {
                           message: "Deep link unregistration requires macOS 12+")
         }
         let s = try normalizeSchema(scheme)
-        // Reset to system default by passing empty string.
+        // 빈 문자열을 전달해 시스템 기본값으로 초기화한다.
         LSSetDefaultHandlerForURLScheme(s as CFString, "" as CFString)
     }
 
@@ -72,7 +72,7 @@ public struct KSMacDeepLinkBackend: KSDeepLinkBackend, Sendable {
         }
     }
 
-    /// Called by `NSAppleEventManager` handler.
+    /// `NSAppleEventManager` 핸들러에 의해 호출된다.
     public static func addLaunchURL(_ url: String) {
         launchURLs.append(url)
     }
@@ -87,7 +87,7 @@ public struct KSMacDeepLinkBackend: KSDeepLinkBackend, Sendable {
     }
 }
 
-/// NSObject-based AppleEvent handler.
+/// NSObject 기반의 AppleEvent 핸들러.
 @MainActor
 internal final class KSMacAppleEventRouter: NSObject {
     @objc static func handleGetURLEvent(_ event: NSAppleEventDescriptor,

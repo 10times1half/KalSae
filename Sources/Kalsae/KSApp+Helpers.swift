@@ -2,12 +2,12 @@ internal import Foundation
 
 extension KSApp {
 
-    /// Virtual host used by the built-in asset mapping.
+    /// 내장 자산 매핑에 사용되는 가상 호스트.
     public static let virtualHost = "app.kalsae"
 
-    /// Small JS snippet that installs a CSP `<meta>` tag at the earliest
-    /// possible moment. Platform hosts register it via the engine's
-    /// document-created hook, so it runs before any HTML is parsed.
+    /// 가능한 가장 이른 시점에 CSP `<meta>` 태그를 설치하는 작은 JS 스니펫.
+    /// 플랫폼 호스트가 엔진의 document-created 훅을 통해 등록하므로,
+    /// HTML이 파싱되기 전에 실행된다.
     internal static func cspInjectionScript(_ csp: String) -> String {
         // JS 리터럴에 안전하게 넣기 위해 따옴표와 역슬래시를 이스케이프한다.
         var escaped = ""
@@ -53,9 +53,9 @@ extension KSApp {
         return exists && isDir.boolValue
     }
 
-    /// Treats `http://…` and `https://…` (anything but `about:blank`) as
-    /// a live dev server endpoint. Empty strings and `about:blank` are
-    /// interpreted as "no dev server configured".
+    /// `http://…`와 `https://…`(`about:blank` 제외)를 라이브 dev 서버
+    /// 엔드포인트로 간주한다. 빈 문자열과 `about:blank`는
+    /// "dev 서버가 구성되지 않음"으로 해석된다.
     internal static func isRemoteURL(_ s: String) -> Bool {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }

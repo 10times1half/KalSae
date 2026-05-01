@@ -1,9 +1,9 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.notification.*` handlers — `requestPermission`,
-    /// `post`, `cancel`. Each operation is gated by its own scope flag;
-    /// denied calls fail with `commandNotAllowed`.
+    /// `__ks.notification.*` 핸들러를 등록한다 — `requestPermission`,
+    /// `post`, `cancel`. 각 작업은 고유한 scope 플래그로 게이팅되며,
+    /// 거부된 호출은 `commandNotAllowed`로 실패한다.
     static func registerNotificationCommands(
         into registry: KSCommandRegistry,
         notifications: any KSNotificationBackend,

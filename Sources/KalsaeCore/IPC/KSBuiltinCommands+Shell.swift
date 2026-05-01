@@ -1,9 +1,9 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.shell.*` handlers — `openExternal`,
-    /// `showItemInFolder`, `moveToTrash`. All gated by `scope`; denied
-    /// requests fail with `commandNotAllowed`.
+    /// `__ks.shell.*` 핸들러를 등록한다 — `openExternal`,
+    /// `showItemInFolder`, `moveToTrash`. 모두 `scope`로 게이팅되며,
+    /// 거부된 요청은 `commandNotAllowed`로 실패한다.
     static func registerShellCommands(
         into registry: KSCommandRegistry,
         shell: any KSShellBackend,

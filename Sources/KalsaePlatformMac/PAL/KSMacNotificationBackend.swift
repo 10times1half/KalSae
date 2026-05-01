@@ -43,7 +43,9 @@ public final class KSMacNotificationBackend: KSNotificationBackend, @unchecked S
     }
 
     public func cancel(id: String) async {
-        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [id])
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [id])
+        center.removePendingNotificationRequests(withIdentifiers: [id])
     }
 }
 #endif

@@ -1,25 +1,22 @@
 public import Foundation
 
-/// Minimal asset resolver used by platform-specific scheme handlers to
-/// serve the frontend's static files under a custom origin such as
-/// `https://app.Kalsae/` (Windows virtual host) or
-/// `ks://localhost/` (macOS/Linux).
+/// 플랫폼별 스킴 핸들러가 `https://app.Kalsae/`(Windows 가상 호스트) 또는
+/// `ks://localhost/`(macOS/Linux)와 같은 커스텀 오리진 아래에서
+/// 프론트엔드의 정적 파일을 제공하는 데 사용하는 최소 자산 리졸버.
 ///
-/// The resolver is a pure value; it owns no file handles and performs
-/// blocking I/O on the caller's thread. Scheme handlers are expected to
-/// invoke it from a background queue and deliver the result to the
-/// web engine via its own threading conventions.
+/// 리졸버는 순수 값이다; 파일 핸들을 소유하지 않으며 호출자 스레드에서
+/// 블로킹 I/O를 수행한다. 스킴 핸들러는 백그라운드 큐에서 이를 호출하고
+/// 자체 스레딩 규칙을 통해 웹 엔진에 결과를 전달할 것으로 예상된다.
 public struct KSAssetResolver: Sendable {
-    /// Absolute root directory. Every resolved path must stay inside
-    /// this directory — requests that escape via `..` are rejected with
-    /// `.fsScopeDenied`.
+    /// 절대 루트 디렉터리. 모든 해결 경로는 이 디렉터리 내에 있어야 한다 —
+    /// `..`를 통해 이스케이프하는 요청은 `.fsScopeDenied`로 거부된다.
     public let root: URL
 
-    /// File served when the request path is `""` or `"/"`.
+    /// 요청 경로가 `""` 또는 `"/"`일 때 제공되는 파일.
     public let indexFileName: String
 
-    /// Optional in-process LRU cache for asset bytes. When `nil`,
-    /// every request re-reads from disk (the original behaviour).
+    /// 자산 바이트를 위한 선택적 인프로세스 LRU 캐시. `nil`이면
+    /// 모든 요청이 디스크에서 다시 읽는다 (원래 동작).
     public let cache: KSAssetCache?
 
     public init(root: URL,
@@ -30,7 +27,7 @@ public struct KSAssetResolver: Sendable {
         self.cache = cache
     }
 
-    /// Result of a resolver lookup.
+    /// 리졸버 조회 결과.
     public struct Asset: Sendable {
         public let data: Data
         public let mimeType: String
@@ -43,12 +40,11 @@ public struct KSAssetResolver: Sendable {
         }
     }
 
-    /// Resolve `path` against the resolver root and return the bytes
-    /// plus a best-guess MIME type. Throws `KSError` for missing files
-    /// or sandbox escapes.
+    /// 리졸버 루트에 대해 `path`를 해석하고 바이트와 추정 MIME 타입을
+    /// 반환한다. 파일이 없거나 샌드박스 이스케이프 시 `KSError`를 던진다.
     ///
-    /// - `path` is a URL path without query/fragment. A leading `/` is
-    ///   tolerated. `""` and `"/"` map to `indexFileName`.
+    /// - `path`는 쿼리/프래그먼트가 없는 URL 경로다. 선행 `/`는 허용된다.
+    ///   `""`와 `"/"`는 `indexFileName`에 매핑된다.
     public func resolve(path: String) throws(KSError) -> Asset {
         var rel = path
         if rel.hasPrefix("/") { rel.removeFirst() }
@@ -74,6 +70,15 @@ public struct KSAssetResolver: Sendable {
                 message: "asset path escapes resolver root: \(path)")
         }
 
+        // 심링크 해석: 루트 내부의 심링크가 외부를 가리킬 수 있다.
+        // 두 번째 방어선으로 실제 경로(모든 심링크가 해석된)를 비교한다.
+        let realCandidate = candidate.resolvingSymlinksInPath().path
+        let realRoot = root.resolvingSymlinksInPath().path
+        if !realCandidate.hasPrefix(realRoot) {
+            throw KSError(code: .fsScopeDenied,
+                message: "asset path resolves via symlink outside resolver root: \(path)")
+        }
+
         // 캐시 조회는 정규화된 절대 경로로. 동일 파일에 대한 여러
         // 표기(예: `/x` vs `x`)가 동일 슬롯을 공유하도록 보장.
         if let cache, let cached = cache.lookup(candidatePath) {
@@ -97,8 +102,8 @@ public struct KSAssetResolver: Sendable {
     }
 }
 
-/// Tiny extension-to-MIME mapper covering the types a typical frontend
-/// bundle emits. Unknown extensions get `application/octet-stream`.
+/// 일반적인 프론트엔드 번들이 내보내는 타입을 다루는 작은 확장자-MIME 매퍼.
+/// 알 수 없는 확장자는 `application/octet-stream`을 받는다.
 public enum KSContentType {
     public static func forExtension(_ ext: String) -> String {
         switch ext.lowercased() {

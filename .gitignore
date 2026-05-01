@@ -38,12 +38,16 @@ ehthumbs.db
 
 # --- Editor / IDE ---
 .idea/
+.vscode/
+.vs/
+.continue/
+.cursor/
 *.swp
 *.swo
+*~
+*.code-workspace
 *.sublime-project
 *.sublime-workspace
-.vscode/*.log
-.vs/
 
 # --- Node (for kalsae generate bindings consumers) ---
 node_modules/

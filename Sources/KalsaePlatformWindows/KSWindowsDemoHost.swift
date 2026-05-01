@@ -4,9 +4,9 @@ internal import Logging
 public import KalsaeCore
 public import Foundation
 
-// MARK: - Phase 1 demo host
+// MARK: - Phase 1 데모 호스트
 
-/// Single-window host used by the Phase 1 demo executable.
+/// Phase 1 데모 실행 파일에서 사용하는 단일 윈도우 호스트.
 @MainActor
 public final class KSWindowsDemoHost {
     public let registry: KSCommandRegistry
@@ -51,8 +51,8 @@ public final class KSWindowsDemoHost {
         }
     }
 
-    /// Configures the host to serve `folder` under `https://{host}/...`
-    /// before navigation. Call this before `start(url:devtools:)`.
+    /// 탐색 전에 `https://{host}/...` 하위에서 `folder`를 제공하도록
+    /// 호스트를 구성한다. `start(url:devtools:)` 호출 전에 사용한다.
     public func setVirtualHostMapping(
         host: String, folder: URL
     ) throws(KSError) {
@@ -71,8 +71,8 @@ public final class KSWindowsDemoHost {
         try webview.setVirtualHostMapping(host: host, folder: folder)
     }
 
-    /// Installs a script to run at the start of every document. Use this
-    /// to inject a CSP `<meta>` tag before any page script can execute.
+    /// 모든 문서 시작 시 실행될 스크립트를 설치한다.
+    /// 페이지 스크립트가 실행되기 전에 CSP `<meta>` 태그를 주입할 때 사용한다.
     public func addDocumentCreatedScript(_ script: String) throws(KSError) {
         guard let hwnd = window.hwnd else {
             throw KSError(code: .windowCreationFailed,
@@ -82,10 +82,10 @@ public final class KSWindowsDemoHost {
         try webview.addDocumentCreatedScript(script)
     }
 
-    /// Registers a synchronous `WebResourceRequested` handler that serves
-    /// every request under `https://{host}/*` from `resolver`, attaching
-    /// `csp` as `Content-Security-Policy`. Mutually exclusive with
-    /// `setVirtualHostMapping` for the same host.
+    /// `resolver`에서 `https://{host}/*` 하위의 모든 요청을 처리하는
+    /// 동기 `WebResourceRequested` 핸들러를 등록하고 `csp`를
+    /// `Content-Security-Policy`로 쳊부한다. 동일 호스트에
+    /// `setVirtualHostMapping`과 상호 배타적이다.
     public func setResourceHandler(
         resolver: KSAssetResolver, csp: String, host: String
     ) throws(KSError) {
@@ -97,54 +97,54 @@ public final class KSWindowsDemoHost {
         try webview.setResourceHandler(resolver: resolver, csp: csp, host: host)
     }
 
-    /// Toggles WebView2's default browser-style context menu. Pass
-    /// `false` to suppress it (page may still render its own).
+    /// WebView2의 기본 브라우저 스타일 컨텍스트 메뉴를 토글한다.
+    /// `false`를 전달하면 억제된다 (페이지에서 자체 메뉴를 렌더링할 수 있음).
     public func setDefaultContextMenusEnabled(_ enabled: Bool) {
         webview.setDefaultContextMenusEnabled(enabled)
     }
 
-    // MARK: - Phase C4 lifecycle hooks
+    // MARK: - Phase C4 라이프사이클 훅
 
-    /// Sets the native `WM_CLOSE` callback. The closure runs on the UI
-    /// thread; return `true` to cancel the close. Pass `nil` to remove.
+    /// 네이티브 `WM_CLOSE` 콜백을 설정한다. 클로저는 UI 스레드에서 실행되며
+    /// `true`를 반환하면 닫기를 취소한다. `nil`을 전달하면 제거된다.
     public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
         window.onBeforeCloseSwift = cb
     }
 
-    /// Sets the native `WM_POWERBROADCAST(PBT_APMSUSPEND)` callback.
+    /// 네이티브 `WM_POWERBROADCAST(PBT_APMSUSPEND)` 콜백을 설정한다.
     public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
         window.onSuspendSwift = cb
     }
 
-    /// Sets the native `WM_POWERBROADCAST(PBT_APMRESUMEAUTOMATIC|RESUMESUSPEND)`
-    /// callback.
+    /// 네이티브 `WM_POWERBROADCAST(PBT_APMRESUMEAUTOMATIC|RESUMESUSPEND)`
+    /// 콜백을 설정한다.
     public func setOnResume(_ cb: (@MainActor () -> Void)?) {
         window.onResumeSwift = cb
     }
 
-    /// Installs a sink that receives the current persisted state on
-    /// every `WM_MOVE` / `WM_SIZE(restored|maximized)` / `WM_CLOSE`.
-    /// Pass `nil` to remove. Used by `KSApp.boot` to drive
-    /// `KSWindowStateStore` when `KSWindowConfig.persistState` is set.
+    /// 모든 `WM_MOVE` / `WM_SIZE(restored|maximized)` / `WM_CLOSE`에서
+    /// 현재 영속 상태를 수신하는 싱크를 설치한다.
+    /// `nil`을 전달하면 제거된다. `KSWindowConfig.persistState`가 설정될 때
+    /// `KSWindowStateStore`를 구동하기 위해 `KSApp.boot`에서 사용한다.
     public func setWindowStateSaveSink(
         _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
     ) {
         window.stateSaveSink = sink
     }
 
-    /// Toggles whether the webview accepts external file drops directly.
-    /// When `false`, OS file drops fall through to the host window's
-    /// drop target (used by Phase 5-3).
+    /// 웹뷰가 외부 파일 드롱을 직접 수락할지 토글한다.
+    /// `false`이면 OS 파일 드롱이 호스트 윈도우의 드롱 타겟으로
+    /// 전달된다 (Phase 5-3에서 사용).
     public func setAllowExternalDrop(_ allow: Bool) {
         webview.setAllowExternalDrop(allow)
     }
 
-    /// Installs a host-side `IDropTarget` on the window's HWND that
-    /// emits the drop as a `__ks.file.drop` JS event via the bridge.
-    /// Call this only after disabling the webview's internal drop with
-    /// `setAllowExternalDrop(false)`.
+    /// 윈도우의 HWND에 호스트 측 `IDropTarget`을 설치하여 드뜩을
+    /// 브리지를 통해 `__ks.file.drop` JS 이벤트로 발행한다.
+    /// `setAllowExternalDrop(false)`로 웹뷰의 내부 드롱을 비활성화한 후에만
+    /// 호출해야 한다.
     ///
-    /// Payload schema (kept stable; consumed by `__KS_.listen`):
+    /// 페이로드 스키마 (안정적 유지; `__KS_.listen`에서 소비):
     /// ```json
     /// { "kind": "enter" | "leave" | "drop",
     ///   "x": <screenX>, "y": <screenY>,
@@ -177,9 +177,8 @@ public final class KSWindowsDemoHost {
     private var webviewInitialized = false
     private var pendingDevtools = false
 
-    /// Two-phase start: prepare the webview + virtual host, then navigate.
-    /// Equivalent to `start(url:devtools:)` when no prepare steps were
-    /// performed beforehand.
+    /// 2단계 시작: 웹뷰 + 가상 호스트를 준비한 후 탐색한다.
+    /// 사전에 준비 단계가 없는 경우 `start(url:devtools:)`와 동일하다.
     public func startPrepared(url: String, devtools: Bool) throws(KSError) {
         pendingDevtools = devtools
         try ensureWebViewInitialized(devtools: devtools)
@@ -187,20 +186,18 @@ public final class KSWindowsDemoHost {
         if devtools { try? webview.openDevTools() }
     }
 
-    /// Ensures the webview is constructed with the right devtools flag,
-    /// so that subsequent `setVirtualHostMapping` /
-    /// `addDocumentCreatedScript` calls before `startPrepared` don't
-    /// latch the wrong setting.
+    /// 웹뷰가 올바른 devtools 플래그로 생성되도록 보장하여
+    /// `startPrepared` 이전의 `setVirtualHostMapping` /
+    /// `addDocumentCreatedScript` 호출이 잘못된 설정을 고착시키지 않도록 한다.
     public func prepare(devtools: Bool) throws(KSError) {
         pendingDevtools = devtools
         try ensureWebViewInitialized(devtools: devtools)
     }
 
-    /// Centralised lazy webview initialisation. Pulls the per-window
-    /// `userDataPath` override from `KSWebViewOptions`, then applies the
-    /// other Phase C2 visual settings (`transparent`, `disablePinchZoom`,
-    /// `zoomFactor`, `backdropType`) immediately after the controller is
-    /// available. Idempotent.
+    /// 중앙집중식 지연 웹뷰 초기화. `KSWebViewOptions`에서 윈도우별 `userDataPath`
+    /// 재정의를 가져온 후 콘트롤러가 사용 가능해지면 즉시 나머지
+    /// Phase C2 시각 설정 (`transparent`, `disablePinchZoom`,
+    /// `zoomFactor`, `backdropType`)을 적용한다. 멱등성 보장.
     private func ensureWebViewInitialized(devtools: Bool) throws(KSError) {
         if webviewInitialized { return }
         guard let hwnd = window.hwnd else {
@@ -217,8 +214,8 @@ public final class KSWindowsDemoHost {
         webviewInitialized = true
     }
 
-    /// Applies `KSWebViewOptions` (transparent / pinch-zoom / zoom
-    /// factor) and the optional Win11 system backdrop. All best-effort.
+    /// `KSWebViewOptions` (투명도 / 핀치줌 / 줌 배율)와 선택적 Win11
+    /// 시스템 배경을 적용한다. 모두 최선 노력(best-effort) 방식이다.
     private func applyVisualOptions() {
         if let backdrop = backdropType {
             window.setSystemBackdrop(backdrop)
@@ -245,37 +242,36 @@ public final class KSWindowsDemoHost {
         try bridge.emit(event: event, payload: payload)
     }
 
-    /// Posts a closure to the UI thread's message queue. Use this from
-    /// background threads / Task.detached to safely interact with the
-    /// window, webview, or IPC bridge. This exists because Swift's
-    /// `MainActor` executor is not integrated with the Win32 message pump.
+    /// 클로저를 UI 스레드의 메시지 큐에 전달한다. 백그라운드 스레드 /
+    /// Task.detached에서 윈도우, 웹뷰, IPC 브리지와 안전하게
+    /// 상호작용할 때 사용한다. Swift의 `MainActor` 실행기가 Win32
+    /// 메시지 펀프와 통합되지 않아 이 방법이 필요하다.
     nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
         window.postJob(block)
     }
 
-    /// Opaque handle for the demo window, suitable for passing to PAL
-    /// backends (`dialogs`, `menus`) as the modal parent.
+    /// 데모 윈도우의 불투명 핸들. PAL 백엔드(`dialogs`, `menus`)에
+    /// 모달 부모로 전달하는 데 적합하다.
     public var mainHandle: KSWindowHandle? {
         guard let hwnd = window.hwnd else { return nil }
         let raw = UInt64(UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd))))
         return KSWindowHandle(label: window.label, rawValue: raw)
     }
 
-    /// Posts `WM_CLOSE` to the demo window so the standard close path
-    /// runs (`WM_DESTROY` → `PostQuitMessage`). Safe to call from any
-    /// thread; uses `PostMessageW` which is documented thread-safe.
+    /// 표준 닫기 경로(`WM_DESTROY` → `PostQuitMessage`)가 실행되도록
+    /// 데모 윈도우에 `WM_CLOSE`를 전달한다. `PostMessageW`를 사용하므로
+    /// 모든 스레드에서 안전하게 호출할 수 있다.
     nonisolated public func requestQuit() {
         guard let hwnd = window.hwnd else { return }
         _ = PostMessageW(hwnd, UINT(WM_CLOSE), 0, 0)
     }
 
-    /// Registers the built-in `__ks.window.*`, `__ks.shell.*`,
-    /// `__ks.clipboard.*`, and `__ks.app.*` commands so the JS-side
-    /// `__KS_.window.*` namespaces work out of the box.
+    /// 내장 `__ks.window.*`, `__ks.shell.*`,
+    /// `__ks.clipboard.*`, `__ks.app.*` 명령을 등록하여
+    /// JS 측 `__KS_.window.*` 네임스페이스가 바로 동작하도록 한다.
     ///
-    /// Call this once after constructing the host (and before
-    /// `start`/`startPrepared`) so the registrations are in place by the
-    /// time the page issues its first invoke.
+    /// 호스트 생성 후 (`start`/`startPrepared` 이전에) 한 번 호출하여
+    /// 페이지가 첫 번째 invoke를 실행할 시점에 등록이 완료되도록 한다.
     public func registerBuiltinCommands(
         platformName: String = "Windows",
         shellScope: KSShellScope = .init(),

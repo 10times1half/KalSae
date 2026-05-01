@@ -1,37 +1,33 @@
-public import Foundation
-
-/// PAL contract for the deep-link / custom URL scheme feature.
+/// 딥 링크 / 커스텀 URL 스킴 기능에 대한 PAL 계약.
 ///
-/// Implementations register `<scheme>://` URLs with the OS so that
-/// invoking such a URL from a browser or another app launches (or
-/// reuses) this app. Together with `KSApp.singleInstance`, the URL is
-/// forwarded to the primary instance and surfaces in JS as a
-/// `__ks.deepLink.openURL` event.
+/// 구현체는 `<scheme>://` URL을 OS에 등록하여 브라우저나 다른 앱에서
+/// 해당 URL을 호출하면 이 앱이 실행(또는 재사용)되도록 한다.
+/// `KSApp.singleInstance`와 함께 URL이 기본 인스턴스로 전달되고
+/// JS에 `__ks.deepLink.openURL` 이벤트로 노출된다.
 ///
-/// - Windows: writes `HKCU\Software\Classes\<scheme>` (per-user, no
-///   admin rights). The default ProgID is `<identifier>.<scheme>`.
-/// - macOS  : reserved (declared in `Info.plist`'s
-///   `CFBundleURLTypes` — handled at bundle build time, not at runtime).
-/// - Linux  : reserved (XDG `.desktop` MimeType association).
+/// - Windows: `HKCU\Software\Classes\<scheme>` 기록(사용자 수준, 관리자 권한 불필요).
+///   기본 ProgID는 `<identifier>.<scheme>`이다.
+/// - macOS  : 예약됨 (`Info.plist`의 `CFBundleURLTypes`에 선언 — 번들 빌드 시 처리).
+/// - Linux  : 예약됨 (XDG `.desktop` MimeType 연관).
 public protocol KSDeepLinkBackend: Sendable {
-    /// Registers `scheme` with the OS so external invocations of
-    /// `<scheme>://...` are routed to this executable. Idempotent.
+    /// `scheme`을 OS에 등록하여 `<scheme>://...` 외부 호출이 이 실행 파일로
+    /// 라우팅되도록 한다. 멱등 연산.
     func register(scheme: String) throws(KSError) -> Void
 
-    /// Removes the registry entry for `scheme`. Idempotent — a missing
-    /// entry is treated as success.
+    /// `scheme`의 레지스트리 항목을 제거한다. 멱등 연산 — 항목이 없으면
+    /// 성공으로 처리된다.
     func unregister(scheme: String) throws(KSError) -> Void
 
-    /// Returns `true` when `scheme` is currently registered to point at
-    /// this executable (string match on the `shell\open\command` value).
+    /// `scheme`이 현재 이 실행 파일을 가리키도록 등록되어 있으면 `true`를
+    /// 반환한다(`shell\open\command` 값의 문자열 일치).
     func isRegistered(scheme: String) -> Bool
 
-    /// Returns every URL passed on the current process's command line
-    /// whose scheme is in `schemes`. Used at startup to surface launch
-    /// URLs to the page the same way as relayed second-instance URLs.
+    /// 현재 프로세스의 커맨드라인에서 `schemes`에 포함된 스킴을 가진 URL을
+    /// 모두 반환한다. 시작 시 두 번째 인스턴스에서 릴레이된 URL과 동일하게
+    /// 페이지에 노출하는 데 사용된다.
     func currentLaunchURLs(forSchemes schemes: [String]) -> [String]
 
-    /// Filters arguments relayed from a second instance, returning only
-    /// those that look like deep-link URLs whose scheme is in `schemes`.
+    /// 두 번째 인스턴스에서 릴레이된 인자를 필터링하여 `schemes`에 포함된
+    /// 스킴을 가진 딥 링크 URL만 반환한다.
     func extractURLs(fromArgs args: [String], forSchemes schemes: [String]) -> [String]
 }

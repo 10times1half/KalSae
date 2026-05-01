@@ -5,7 +5,7 @@ public import KalsaeCore
 internal import KalsaePlatformWindows
 #endif
 
-// MARK: - UI-thread convenience helpers
+// MARK: - UI 스레드 편의 헬퍼
 //
 // 백그라운드 컨텍스트(예: `Task.detached`에서 돌아가는 IPC 디스패치
 // 핸들러)에서 호출된 명령이 데드락 없이 네이티브 UI를 조작할 수
@@ -16,8 +16,9 @@ internal import KalsaePlatformWindows
 
 extension KSApp {
 
-    /// Shows a native message dialog. `completion` runs on the UI thread
-    /// after the user dismisses the dialog. Safe to call from any thread.
+    /// 네이티브 메시지 대화상자를 표시한다. `completion`은 사용자가
+    /// 대화상자를 닫은 후 UI 스레드에서 실행된다. 모든 스레드에서
+    /// 안전하게 호출할 수 있다.
     nonisolated public func showMessage(
         _ options: KSMessageOptions,
         completion: @MainActor @Sendable @escaping (KSMessageResult) -> Void = { _ in }
@@ -35,8 +36,8 @@ extension KSApp {
         #endif
     }
 
-    /// Shows a native open-file dialog. `completion` receives the picked
-    /// URLs (empty when the user cancelled).
+    /// 네이티브 파일 열기 대화상자를 표시한다. `completion`은 선택된
+    /// URL을 받는다 (사용자가 취소하면 빈 배열).
     nonisolated public func openFile(
         _ options: KSOpenFileOptions,
         completion: @MainActor @Sendable @escaping ([URL]) -> Void
@@ -55,7 +56,7 @@ extension KSApp {
         #endif
     }
 
-    /// Posts a native desktop notification. Fire-and-forget.
+    /// 네이티브 데스크톱 알림을 게시한다. 발사 후 망각(Fire-and-forget).
     nonisolated public func postNotification(_ n: KSNotification) {
         #if os(Windows)
         let platform = self.platform
@@ -73,13 +74,12 @@ extension KSApp {
         #endif
     }
 
-    /// Registers an AppUserModelID so subsequent `postNotification` calls
-    /// use the modern WinRT toast pipeline instead of legacy balloon
-    /// tips. Without a matching Start Menu shortcut Windows silently
-    /// drops the toast, so the backend automatically falls back to
-    /// balloons on failure.
+    /// AppUserModelID를 등록해 이후 `postNotification` 호출이 레거시
+    /// 풍선 도움말 대신 최신 WinRT 토스트 파이프라인을 사용하도록 한다.
+    /// 일치하는 시작 메뉴 바로가기가 없으면 Windows가 자동으로 토스트를
+    /// 삭제하므로, 백엔드는 실패 시 자동으로 풍선 도움말로 폴백한다.
     ///
-    /// On non-Windows platforms this is a no-op.
+    /// Windows 외 플랫폼에서는 아무 동작도 하지 않는다.
     @MainActor
     public func setAppUserModelID(_ aumid: String) {
         #if os(Windows)

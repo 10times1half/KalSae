@@ -5,7 +5,7 @@ import Foundation
 @Suite("ProjectTemplate")
 struct ProjectTemplateTests {
 
-    // MARK: - Helpers
+    // MARK: - 헬퍼
 
     private func scaffold(name: String = "MyApp") throws -> URL {
         let tmp = FileManager.default.temporaryDirectory
@@ -14,7 +14,7 @@ struct ProjectTemplateTests {
         return tmp
     }
 
-    // MARK: - File tree
+    // MARK: - 파일 트리
 
     @Test("Scaffold creates expected files")
     func scaffoldCreatesExpectedFiles() throws {
@@ -31,7 +31,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: res.appendingPathComponent("index.html").path))
     }
 
-    // MARK: - index.html JS bridge
+    // MARK: - index.html JS 브리지
 
     @Test("index.html uses window.__KS_ (not window.__kb)")
     func indexHTMLUsesCorrectGlobal() throws {

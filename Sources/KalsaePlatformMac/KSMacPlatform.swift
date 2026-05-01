@@ -4,10 +4,10 @@ internal import Darwin
 public import KalsaeCore
 public import Foundation
 
-/// macOS platform backend (AppKit + WKWebView). Phase 2 implementation:
-/// boots enough surface area to prove Phase 1's IPC contract against
-/// `WKWebView`. Full PAL coverage (dialogs, tray, menus, notifications)
-/// is scheduled for later phases.
+/// macOS 플랫폼 백엔드 (AppKit + WKWebView). Phase 2 구현:
+/// `WKWebView`에 대한 Phase 1의 IPC 계약을 검증할 수 있는
+/// 기본 기능을 부팅한다. 전체 PAL 커버리지(다이얼로그, 트레이, 메뉴, 알림)는
+/// 이후 단계에서 추가될 예정이다.
 public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
     public var name: String { "macOS (AppKit + WKWebView)" }
 
@@ -21,6 +21,8 @@ public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
     public var shell: (any KSShellBackend)? { _shell }
     public var clipboard: (any KSClipboardBackend)? { _clipboard }
     public var accelerators: (any KSAcceleratorBackend)? { _accelerators }
+    public var autostart: (any KSAutostartBackend)? { _autostart }
+    public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
 
     private let _windows: KSMacWindowBackend
     private let _dialogs: KSMacDialogBackend
@@ -30,6 +32,9 @@ public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
     private let _shell: KSMacShellBackend
     private let _clipboard: KSMacClipboardBackend
     private nonisolated(unsafe) var _accelerators: KSMacAcceleratorBackend?
+    // run(config:configure:) 중에 설정됨. @unchecked Sendable 계약으로 보호.
+    private nonisolated(unsafe) var _autostart: (any KSAutostartBackend)?
+    private nonisolated(unsafe) var _deepLink: (any KSDeepLinkBackend)?
 
     public init() {
         let registry = KSCommandRegistry()
@@ -65,6 +70,7 @@ public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
         let window = try Self.selectWindow(from: config)
 
         await commandRegistry.setAllowlist(config.security.commandAllowlist)
+        await commandRegistry.setRateLimit(config.security.commandRateLimit)
 
         let stateStore: KSWindowStateStore? = window.persistState
             ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
@@ -105,7 +111,14 @@ public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
             windowURL: window.url,
             devServerURL: config.build.devServerURL,
             servingMode: servingMode)
-        try host.startPrepared(url: url, devtools: config.security.devtools)
+        // 보안: 릴리스 빌드에서는 설정값에 무관하게 개발자 도구가 강제 비활성화된다.
+        // AGENTS §5 + 감사 결과 #8 참조.
+        #if DEBUG
+        let effectiveDevtools = config.security.devtools
+        #else
+        let effectiveDevtools = false
+        #endif
+        try host.startPrepared(url: url, devtools: effectiveDevtools)
 
         if let appMenu = config.menu?.appMenu {
             try await _menus.installAppMenu(appMenu)
@@ -146,6 +159,8 @@ public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
             }
             return (backend, dlc)
         }()
+        _autostart = autostartBackend
+        _deepLink = deepLinkPair?.backend
         let mainHandle = host.mainHandle
 
         await KSBuiltinCommands.register(
@@ -267,11 +282,11 @@ private extension KSMacPlatform {
     }
 }
 
-// MARK: - Phase 2 demo host
+// MARK: - Phase 2 데모 호스트
 
-/// Single-window host used by the Phase 2 demo executable. Shaped
-/// identically to `KSWindowsDemoHost` so that the `KalsaeDemo` target
-/// can share its command-registration logic.
+/// Phase 2 데모 실행 파일에서 사용하는 단일 윈도우 호스트.
+/// `KalsaeDemo` 타겟이 명령 등록 로직을 공유할 수 있도록
+/// `KSWindowsDemoHost`와 동일하게 설계되었다.
 @MainActor
 public final class KSMacDemoHost {
     public let registry: KSCommandRegistry
@@ -313,13 +328,13 @@ public final class KSMacDemoHost {
         try start(url: url, devtools: devtools)
     }
 
-    /// Binds the `ks://` scheme handler to serve assets from `root`.
-    /// On macOS the navigation URL is `ks://app/index.html`.
+    /// `root`에서 에셋을 제공하도록 `ks://` 스킴 핸들러를 바인딩한다.
+    /// macOS에서 탐색 URL은 `ks://app/index.html`이다.
     public func setAssetRoot(_ root: URL) throws(KSError) {
         try webview.setAssetRoot(root)
     }
 
-    /// Queues a JS snippet to run at the start of every document.
+    /// 모든 문서 시작 시 실행될 JS 스니폫을 대기열에 추가한다.
     public func addDocumentCreatedScript(_ script: String) throws(KSError) {
         try webview.addDocumentCreatedScript(script)
     }
@@ -336,13 +351,12 @@ public final class KSMacDemoHost {
         KSMacHandleRegistry.shared.handle(for: window.config.label)
     }
 
-    /// Posts a closure onto the UI thread. API-compatible with
-    /// `KSWindowsDemoHost.postJob`.
+    /// UI 스레드로 클로저를 전달한다. `KSWindowsDemoHost.postJob`과 API 호환.
     nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
         window.postJob(block)
     }
 
-    /// Requests an orderly shutdown of the demo app.
+    /// 데모 앱의 정상 종료를 요청한다.
     nonisolated public func requestQuit() {
         window.postJob {
             NSApplication.shared.terminate(nil)
@@ -357,7 +371,7 @@ public final class KSMacDemoHost {
         workspaceObservers.removeAll()
     }
 
-    // MARK: - Phase C4 lifecycle hooks
+    // MARK: - Phase C4 라이프사이클 훅
     public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
         window.setOnBeforeClose(cb)
     }

@@ -4,8 +4,8 @@ internal import Logging
 public import KalsaeCore
 public import Foundation
 
-/// Bridges a `GtkWebViewHost` to `KSCommandRegistry`. Thin wrapper over
-/// `KSIPCBridgeCore`; only the GTK-specific plumbing lives here.
+/// `GtkWebViewHost`를 `KSCommandRegistry`에 연결하는 브리지.
+/// GTK 전용 배관만 여기에 있는 `KSIPCBridgeCore`의 업은 래퍼.
 @MainActor
 public final class GtkBridge {
     private let host: GtkWebViewHost
@@ -43,11 +43,11 @@ public final class GtkBridge {
     }
 }
 
-/// UI-thread dispatch helper used by `GtkBridge` (and exported via
-/// `KSLinuxDemoHost.postJob`). Schedules `block` onto the GTK main
-/// loop's idle queue.
+/// `GtkBridge` (및 `KSLinuxDemoHost.postJob`를 통해 노출)가 사용하는
+/// UI 스레드 디스패치 헬퍼. GTK 메인 루프의 idle 큐에
+/// 스케줄링한다.
 internal enum GtkMainQueue {
-    /// Schedules `block` on the GTK main thread. Safe to call from any thread.
+    /// `block`을 GTK 메인 스레드에 스케줄링한다. 또 어떤 스레드에서도 안전하게 호출할 수 있다.
     static func post(_ block: @escaping @MainActor () -> Void) {
         // 클로저를 힙 상의 박스에 담아 C 트램폴린에게 포인터를 넘긴다.
         // 이 박스는 트램폴린이 `block()` 실행을 끝낸 뒤 해제한다.
@@ -58,6 +58,7 @@ internal enum GtkMainQueue {
 }
 
 private final class JobBox: @unchecked Sendable {
+    // @unchecked: GTK main loop dispatch \u2014 @MainActor closure captured for callback
     let block: @MainActor () -> Void
     init(block: @escaping @MainActor () -> Void) { self.block = block }
 }
@@ -71,8 +72,8 @@ private let gtkMainQueueTrampoline: @convention(c) (
 }
 
 extension GtkWebViewHost {
-    /// Posts a closure onto the GTK main thread. Safe to call from any
-    /// thread (wraps `g_idle_add`).
+    /// GTK 메인 스레드로 클로저를 전달한다. 또 어떤 스레드에서도 안전하게
+    /// 호출할 수 있다 (`g_idle_add` 래퍼).
     nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
         GtkMainQueue.post(block)
     }

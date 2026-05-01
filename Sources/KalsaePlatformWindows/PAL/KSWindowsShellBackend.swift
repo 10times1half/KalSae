@@ -40,6 +40,12 @@ public struct KSWindowsShellBackend: KSShellBackend, Sendable {
         // PIDL 구성이 필요해 면 더 무겁지만, 이 방식은 모든 지원
         // 대상 Windows에서 동작한다.
         let path = url.path
+        // Security: a path containing a literal `"` would break the /select,
+        // argument quoting, allowing argument injection into explorer.exe.
+        guard !path.contains("\"") else {
+            throw KSError(code: .invalidArgument,
+                          message: "showItemInFolder: path contains illegal quote character")
+        }
         let result: Result<Void, KSError> = await MainActor.run {
             let app = "explorer.exe"
             let args = "/select,\"\(path)\""

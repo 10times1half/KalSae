@@ -10,29 +10,29 @@ internal import KalsaePlatformLinux
 
 extension KSApp {
 
-    /// Outcome of a single-instance acquisition attempt.
+    /// 단일 인스턴스 획득 시도의 결과.
     public enum SingleInstanceOutcome: Sendable {
-        /// This process is the primary instance. Continue normal startup.
+        /// 이 프로세스가 기본 인스턴스다. 정상 시작을 계속한다.
         case primary
-        /// Another instance is already running and arguments were
-        /// forwarded to it. Caller should exit immediately.
+        /// 다른 인스턴스가 이미 실행 중이며 인자가 전달되었다.
+        /// 호출자는 즉시 종료해야 한다.
         case relayed
     }
 
-    /// Ensures only one instance of the application runs at a time.
+    /// 한 번에 하나의 애플리케이션 인스턴스만 실행되도록 보장한다.
     ///
-    /// On the first launch this process becomes the **primary** and
-    /// returns `.primary`. Subsequent launches detect the primary, send
-    /// their command-line arguments to it, and return `.relayed` —
-    /// callers must exit immediately. The primary receives the relayed
-    /// arguments via `onSecondInstance` (invoked on the main thread).
+    /// 첫 번째 실행에서 이 프로세스가 **기본(primary)**이 되어
+    /// `.primary`를 반환한다. 이후 실행은 기본 인스턴스를 감지하고
+    /// 명령줄 인자를 전달한 후 `.relayed`를 반환한다 —
+    /// 호출자는 즉시 종료해야 한다. 기본 인스턴스는 `onSecondInstance`
+    /// (메인 스레드에서 호출됨)를 통해 전달된 인자를 수신한다.
     ///
-    /// On macOS this delegates to `KSMacSingleInstance`.
+    /// macOS에서는 `KSMacSingleInstance`에 위임한다.
     ///
-    /// Call this **before** `boot(...)`:
+    /// `boot(...)` **전에** 호출한다:
     /// ```swift
     /// switch await KSApp.singleInstance(identifier: "dev.example.MyApp") { args in
-    ///     // focus the existing window, parse `args`, etc.
+    ///     // 기존 윈도우에 포커스, `args` 파싱 등
     /// } {
     /// case .relayed: exit(EXIT_SUCCESS)
     /// case .primary: break

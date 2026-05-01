@@ -25,6 +25,9 @@ jobs:
       - name: Show Swift Version
         run: swift --version
 
+      - name: Lint Code Format
+        run: swift format lint --strict --recursive Sources Tests 2>&1 ; if ($LASTEXITCODE -ne 0) { exit 1 }
+
       - name: Fetch WebView2 SDK
         shell: pwsh
         run: ./Scripts/fetch-webview2.ps1
@@ -33,7 +36,7 @@ jobs:
         run: swift package resolve
 
       - name: Build Demo Product
-        run: swift build --product kalsae-demo
+        run: swift build --product kalsae-demo -Xswiftc -warnings-as-errors
 
       - name: Run Unit Tests
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors

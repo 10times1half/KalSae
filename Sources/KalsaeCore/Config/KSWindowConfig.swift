@@ -1,6 +1,6 @@
 ﻿import Foundation
 
-/// Initial display state requested for a new window.
+/// 새 창에 요청되는 초기 표시 상태.
 public enum KSWindowStartState: String, Codable, Sendable, CaseIterable {
     case normal
     case maximized
@@ -8,8 +8,8 @@ public enum KSWindowStartState: String, Codable, Sendable, CaseIterable {
     case fullscreen
 }
 
-/// Plain RGBA colour (0–255 per channel). Mirrors the JS surface used by
-/// `__ks.window.setBackgroundColor`.
+/// 일반 RGBA 색상(채널당 0-255).
+/// `__ks.window.setBackgroundColor`가 사용하는 JS 표면을 그대로 따른다.
 public struct KSColorRGBA: Codable, Sendable, Equatable {
     public var r: Int
     public var g: Int
@@ -20,9 +20,9 @@ public struct KSColorRGBA: Codable, Sendable, Equatable {
     }
 }
 
-/// System backdrop kind requested for the window background. Maps to
-/// `DWMWA_SYSTEMBACKDROP_TYPE` on Windows 11 (build ≥ 22621). Unknown
-/// values silently fall through to `auto`.
+/// 창 배경에 요청되는 시스템 백드롭 종류.
+/// Windows 11(build 22621 이상)에서는 `DWMWA_SYSTEMBACKDROP_TYPE`에 매핑된다.
+/// 알 수 없는 값은 조용히 `auto`로 폴백한다.
 public enum KSWindowBackdrop: String, Codable, Sendable, CaseIterable {
     case auto      // DWMSBT_AUTO            (0)
     case none      // DWMSBT_NONE            (1)
@@ -31,29 +31,27 @@ public enum KSWindowBackdrop: String, Codable, Sendable, CaseIterable {
     case tabbed    // DWMSBT_TABBEDWINDOW    (4)
 }
 
-/// WebView-level visual / runtime overrides. All fields optional so a
-/// `Kalsae.json` file written for an earlier release continues to load.
+/// WebView 수준의 시각/런타임 재정의.
+/// 모든 필드를 선택적으로 두어, 이전 릴리스용 `Kalsae.json`도 계속 로드되게 한다.
 public struct KSWebViewOptions: Codable, Sendable, Equatable {
-    /// When `true`, the WebView2 controller renders with a transparent
-    /// default background (`ICoreWebView2Controller2.DefaultBackgroundColor`).
-    /// The hosting window must also opt into transparency
-    /// (`KSWindowConfig.transparent`) for the effect to be visible.
+    /// `true`이면 WebView2 컨트롤러가 투명한 기본 배경
+    /// (`ICoreWebView2Controller2.DefaultBackgroundColor`)으로 렌더링된다.
+    /// 효과가 보이려면 호스팅 창도 투명 모드(`KSWindowConfig.transparent`)를 켜야 한다.
     public var transparent: Bool
-    /// Optional Windows 11 system backdrop request. Applied via
-    /// `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`. Ignored on
-    /// older builds.
+    /// 선택적 Windows 11 시스템 백드롭 요청.
+    /// `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE)`로 적용되며,
+    /// 구버전 빌드에서는 무시된다.
     public var backdropType: KSWindowBackdrop?
-    /// Disables touch / trackpad pinch-to-zoom in the page. Wraps
-    /// `ICoreWebView2Settings5.IsPinchZoomEnabled`.
+    /// 페이지에서 터치/트랙패드 핀치 줌을 비활성화한다.
+    /// `ICoreWebView2Settings5.IsPinchZoomEnabled`를 감싼다.
     public var disablePinchZoom: Bool
-    /// Initial zoom factor applied to the controller (`put_ZoomFactor`).
-    /// `1.0` is identity; `nil` leaves the WebView default.
+    /// 컨트롤러에 적용할 초기 확대 배율(`put_ZoomFactor`).
+    /// `1.0`은 원래 배율이며 `nil`이면 WebView 기본값을 유지한다.
     public var zoomFactor: Double?
-    /// Per-window override for the WebView2 user-data folder. Takes
-    /// precedence over `kalsae.runtime.json` when set. Used so that
-    /// multiple windows / app variants can keep separate browser
-    /// profiles (cookies, IndexedDB, etc.). Path may contain Windows
-    /// `%VAR%` env tokens which are expanded at boot time.
+    /// WebView2 사용자 데이터 폴더의 창별 재정의.
+    /// 설정되면 `kalsae.runtime.json`보다 우선하며, 여러 창/앱 변형이
+    /// 브라우저 프로필(쿠키, IndexedDB 등)을 분리해 유지하는 데 사용된다.
+    /// 경로에는 부팅 시 확장되는 Windows `%VAR%` 환경 변수 토큰을 포함할 수 있다.
     public var userDataPath: String?
 
     public init(
@@ -84,89 +82,85 @@ public struct KSWebViewOptions: Codable, Sendable, Equatable {
     }
 }
 
-/// Describes a single window, either declared up front in `Kalsae.json`
-/// or created dynamically at runtime via the Window API.
+/// `Kalsae.json`에 미리 선언되거나 Window API로 런타임에 동적으로 생성되는
+/// 단일 창을 설명한다.
 public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
-    /// Stable identifier. Tauri-style. Used by the multi-window API and by
-    /// cross-window event routing.
+    /// 안정적인 식별자. Tauri 스타일이며 멀티 윈도우 API와 창 간 이벤트 라우팅에 사용된다.
     public var label: String
-    /// Title shown in the window chrome (and in the OS taskbar/Dock).
+    /// 창 크롬(및 OS 작업 표시줄/Dock)에 표시되는 제목.
     public var title: String
-    /// Initial width in logical (DPI-independent) points. Default `1024`.
+    /// 논리 좌표(DPI 독립 포인트) 기준 초기 너비. 기본값은 `1024`.
     public var width: Int
-    /// Initial height in logical (DPI-independent) points. Default `768`.
+    /// 논리 좌표(DPI 독립 포인트) 기준 초기 높이. 기본값은 `768`.
     public var height: Int
 
-    /// Optional minimum content width. When `nil`, no lower bound is enforced.
+    /// 선택적 최소 콘텐츠 너비. `nil`이면 하한을 강제하지 않는다.
     public var minWidth: Int?
-    /// Optional minimum content height. When `nil`, no lower bound is enforced.
+    /// 선택적 최소 콘텐츠 높이. `nil`이면 하한을 강제하지 않는다.
     public var minHeight: Int?
-    /// Optional maximum content width. When `nil`, no upper bound is enforced.
+    /// 선택적 최대 콘텐츠 너비. `nil`이면 상한을 강제하지 않는다.
     public var maxWidth: Int?
-    /// Optional maximum content height. When `nil`, no upper bound is enforced.
+    /// 선택적 최대 콘텐츠 높이. `nil`이면 상한을 강제하지 않는다.
     public var maxHeight: Int?
 
-    /// Whether the user can resize the window by dragging its edges.
+    /// 사용자가 가장자리를 드래그해 창 크기를 조절할 수 있는지 여부.
     public var resizable: Bool
-    /// Whether the native window chrome (title bar, borders) is shown.
-    /// `false` produces a borderless window suitable for custom title bars.
+    /// 네이티브 창 크롬(제목 표시줄, 테두리)을 표시할지 여부.
+    /// `false`이면 커스텀 타이틀바에 적합한 무테 창이 된다.
     public var decorations: Bool
-    /// Whether the window background is transparent. Requires the page to
-    /// also avoid painting an opaque background.
+    /// 창 배경을 투명하게 할지 여부. 페이지도 불투명 배경을 그리지 않아야 한다.
     public var transparent: Bool
-    /// Whether the window starts in fullscreen mode.
+    /// 창이 전체 화면 모드로 시작하는지 여부.
     public var fullscreen: Bool
-    /// Whether the window is visible immediately after creation. Set to
-    /// `false` to perform deferred reveal once the page is ready.
+    /// 창 생성 직후 바로 표시할지 여부.
+    /// 페이지 준비 후 지연 표시하려면 `false`로 둔다.
     public var visible: Bool
-    /// Whether the window is centered on the active screen at creation.
+    /// 생성 시 활성 화면 중앙에 배치할지 여부.
     public var center: Bool
-    /// Whether the window stays above other top-level windows.
+    /// 다른 최상위 창들 위에 항상 머무를지 여부.
     public var alwaysOnTop: Bool
 
-    /// Optional override for the URL loaded into this window. When `nil`, the
-    /// app's default frontend entry point (`ks://localhost/` in release,
-    /// `build.devServerURL` in dev) is used.
+    /// 이 창에 로드할 URL의 선택적 재정의.
+    /// `nil`이면 앱의 기본 프론트엔드 진입점(릴리스의 `ks://localhost/`,
+    /// 개발 중의 `build.devServerURL`)을 사용한다.
     public var url: String?
 
-    // MARK: - Phase C lifecycle / decoration options
+    // MARK: - Phase C 라이프사이클 / 장식 옵션
 
-    /// Initial display state. When `nil`, behaviour falls back to the
-    /// legacy `fullscreen` flag for compatibility. Wails-style.
+    /// 초기 표시 상태. `nil`이면 호환성을 위해 기존 `fullscreen` 플래그로 폴백한다.
     public var startState: KSWindowStartState?
 
-    /// Hide the window on close instead of destroying it (tray-app
-    /// pattern). Implemented on top of the close interceptor.
+    /// 닫기 시 창을 파괴하지 않고 숨긴다(트레이 앱 패턴).
+    /// close interceptor 위에서 구현된다.
     public var hideOnClose: Bool
 
-    /// Optional initial background colour. When set, applied immediately
-    /// after window creation via the same path as
-    /// `__ks.window.setBackgroundColor`.
+    /// 선택적 초기 배경색.
+    /// 설정되면 `__ks.window.setBackgroundColor`와 같은 경로로 창 생성 직후 적용된다.
     public var backgroundColor: KSColorRGBA?
 
-    /// Suppress the small icon shown at the top-left of the title bar
-    /// (`WM_SETICON(ICON_SMALL, NULL)` on Windows). The window still
-    /// appears in the taskbar with the app icon.
+    /// 제목 표시줄 좌상단에 표시되는 작은 아이콘을 숨긴다
+    /// (Windows의 `WM_SETICON(ICON_SMALL, NULL)`).
+    /// 창은 여전히 앱 아이콘과 함께 작업 표시줄에 나타난다.
     public var disableWindowIcon: Bool
 
-    /// Exclude this window from screen capture / screenshots
-    /// (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` on Windows
-    /// ≥ 2004; falls through silently on older builds).
+    /// 이 창을 화면 캡처/스크린샷 대상에서 제외한다.
+    /// (Windows 2004 이상에서 `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)` 사용,
+    /// 구버전 빌드에서는 조용히 무시된다.)
     public var contentProtection: Bool
 
-    /// Optional WebView-level visual / runtime overrides. Applied at
-    /// startup, after the WebView2 controller is created. See
-    /// `KSWebViewOptions` for the field-level docs.
+    /// 선택적 WebView 수준 시각/런타임 재정의.
+    /// WebView2 컨트롤러 생성 후 시작 시 적용된다.
+    /// 필드별 설명은 `KSWebViewOptions`를 참고한다.
     public var webview: KSWebViewOptions?
 
-    /// When `true`, the window's last position / size / maximized state
-    /// is persisted across launches under `%APPDATA%\<identifier>\`
-    /// (Windows) or `~/Library/Application Support/<identifier>/`
-    /// (macOS) and restored on the next boot. Off by default to keep
-    /// the boot path deterministic for tests.
+    /// `true`이면 창의 마지막 위치/크기/최대화 상태를 실행 간에 보존하여
+    /// 다음 부팅 때 복원한다.
+    /// Windows에서는 `%APPDATA%\<identifier>\`, macOS에서는
+    /// `~/Library/Application Support/<identifier>/` 아래 저장된다.
+    /// 테스트의 부팅 경로를 결정적으로 유지하기 위해 기본값은 꺼져 있다.
     public var persistState: Bool
 
-    /// `Identifiable` conformance — same as `label`.
+    /// `Identifiable` 준수용 식별자. `label`과 동일하다.
     public var id: String { label }
 
     public init(

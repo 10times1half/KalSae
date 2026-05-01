@@ -2,7 +2,7 @@
 import Foundation
 import KalsaeCLICore
 
-/// `Kalsae dev` — build and run the project in development mode.
+/// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
 struct DevCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dev",

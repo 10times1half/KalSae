@@ -1,69 +1,76 @@
 import Foundation
 
-/// Security posture declared in `Kalsae.json`.
+/// `Kalsae.json`에 선언되는 보안 정책.
 ///
-/// Kalsae enforces these at runtime — the command allowlist in particular
-/// is the ONLY way JS code can reach Swift. There is no implicit opt-out.
+/// Kalsae는 이를 런타임에 강제한다. 특히 명령 허용 목록은
+/// JS 코드가 Swift에 도달할 수 있는 유일한 경로이며,
+/// 암묵적인 opt-out은 없다.
 public struct KSSecurityConfig: Codable, Sendable, Equatable {
-    /// Content Security Policy injected into the default HTTP response
-    /// headers served by the `ks://` scheme handler.
+    /// `ks://` 스킴 핸들러가 제공하는 기본 HTTP 응답 헤더에 주입되는
+    /// Content Security Policy.
     public var csp: String
 
-    /// Allowlist of `@KSCommand` identifiers callable from JS.
+    /// JS에서 호출 가능한 `@KSCommand` 식별자의 허용 목록.
     ///
-    /// When empty, no commands are reachable. When `nil`, the default
-    /// (registered & not marked `internal`) set is used.
+    /// 비어 있으면 어떤 명령도 도달할 수 없고,
+    /// `nil`이면 기본 집합(등록되었고 `internal`로 표시되지 않은 명령)을 사용한다.
     public var commandAllowlist: [String]?
 
-    /// Filesystem access policy for built-in `fs.*` commands.
+    /// 내장 `fs.*` 명령에 대한 파일시스템 접근 정책.
     public var fs: KSFSScope
 
-    /// Enable DevTools. Forced to `false` in release builds regardless of
-    /// this setting.
+    /// DevTools 활성화 여부.
+    /// 릴리스 빌드에서는 이 설정과 무관하게 강제로 `false`가 된다.
     public var devtools: Bool
 
-    /// Webview context-menu policy.
-    /// - `.default`: native context menu (browser-style: Cut/Copy/Paste/Inspect).
-    /// - `.disabled`: suppress the native menu entirely. The page may still
-    ///   render its own custom menu in JS.
+    /// WebView 컨텍스트 메뉴 정책.
+    /// - `.default`: 네이티브 컨텍스트 메뉴(브라우저 스타일: 잘라내기/복사/붙여넣기/검사).
+    /// - `.disabled`: 네이티브 메뉴를 완전히 숨긴다. 페이지는 여전히 JS로
+    ///   자체 커스텀 메뉴를 렌더링할 수 있다.
     public var contextMenu: ContextMenuPolicy
 
-    /// Whether to allow the user to drag-drop external files into the
-    /// webview. When `false` (default for Wails parity) the webview's
-    /// built-in drop is disabled and the host receives drop events via
-    /// the native drop target instead (`__ks.file.drop`).
+    /// 사용자가 외부 파일을 WebView에 드래그 앤 드롭할 수 있게 할지 여부.
+    /// `false`이면(Wails와 동일한 기본값) WebView의 내장 drop이 비활성화되고,
+    /// 호스트가 대신 네이티브 drop target을 통해 drop 이벤트(`__ks.file.drop`)를 받는다.
     public var allowExternalDrop: Bool
 
-    /// Shell-integration permission scope. Gates `__ks.shell.*` JS
-    /// commands (`openExternal`, `showItemInFolder`, `moveToTrash`).
+    /// 셸 통합 권한 범위.
+    /// `__ks.shell.*` JS 명령(`openExternal`, `showItemInFolder`, `moveToTrash`)을 제어한다.
     public var shell: KSShellScope
 
-    /// Notification permission scope. Gates `__ks.notification.*` JS
-    /// commands (`requestPermission`, `post`, `cancel`).
+    /// 알림 권한 범위.
+    /// `__ks.notification.*` JS 명령(`requestPermission`, `post`, `cancel`)을 제어한다.
     public var notifications: KSNotificationScope
 
-    /// HTTP-fetch permission scope. Gates `__ks.http.fetch`. Empty by
-    /// default — the JS side cannot reach the network until the host
-    /// app declares trusted origins.
+    /// HTTP fetch 권한 범위.
+    /// `__ks.http.fetch`를 제어하며, 기본값은 비어 있으므로 호스트 앱이
+    /// 신뢰할 오리진을 선언하기 전까지 JS 측은 네트워크에 접근할 수 없다.
     public var http: KSHTTPScope
 
-    /// WebView download policy. Disabled by default; when enabled,
-    /// the page may initiate downloads which the host process can
-    /// observe through the `__ks.webview.downloadStarting` event.
+    /// JS에서 초당 허용되는 IPC 명령 호출의 최대 수.
+    /// burst는 이 속도를 잠시 넘는 짧은 급증을 허용한다.
+    /// `nil`이면 속도 제한을 비활성화한다(하위 호환용 기본값).
+    ///
+    /// 권장 운영값은 `rate: 100, burst: 200`이다.
+    public var commandRateLimit: KSCommandRateLimit?
+
+    /// WebView 다운로드 정책.
+    /// 기본값은 비활성화이며, 활성화하면 페이지가 다운로드를 시작할 수 있고
+    /// 호스트 프로세스는 `__ks.webview.downloadStarting` 이벤트로 이를 관찰할 수 있다.
     public var downloads: KSDownloadScope
 
-    /// Top-level navigation allowlist enforced via WebView2's
-    /// `add_NavigationStarting` handler. An empty `allow` list means
-    /// "no restriction" (legacy behaviour). When non-empty, navigation
-    /// to URLs outside the list is cancelled and (optionally) opened
-    /// in the user's default browser.
+    /// WebView2의 `add_NavigationStarting` 핸들러로 강제되는
+    /// 최상위 네비게이션 허용 목록.
+    /// `allow` 목록이 비어 있으면 "제한 없음"(기존 동작)을 뜻한다.
+    /// 비어 있지 않으면 목록 밖 URL로의 이동은 취소되고,
+    /// 선택적으로 사용자의 기본 브라우저에서 열 수 있다.
     public var navigation: KSNavigationScope
 
-    /// Policy values for `contextMenu`. See the `contextMenu` field doc.
+    /// `contextMenu` 필드에 대한 정책 값.
     public enum ContextMenuPolicy: String, Codable, Sendable, Equatable {
-        /// Native browser-style context menu (Cut/Copy/Paste/Inspect).
+        /// 네이티브 브라우저 스타일 컨텍스트 메뉴(잘라내기/복사/붙여넣기/검사).
         case `default`
-        /// Suppress the native context menu entirely.
+        /// 네이티브 컨텍스트 메뉴를 완전히 숨긴다.
         case disabled
     }
 
@@ -78,7 +85,8 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         notifications: KSNotificationScope = .init(),
         http: KSHTTPScope = .init(),
         downloads: KSDownloadScope = .init(),
-        navigation: KSNavigationScope = .init()
+        navigation: KSNavigationScope = .init(),
+        commandRateLimit: KSCommandRateLimit? = nil
     ) {
         self.csp = csp
         self.commandAllowlist = commandAllowlist
@@ -91,11 +99,12 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.http = http
         self.downloads = downloads
         self.navigation = navigation
+        self.commandRateLimit = commandRateLimit
     }
 
     private enum CodingKeys: String, CodingKey {
         case csp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
-        case shell, notifications, http, downloads, navigation
+        case shell, notifications, http, downloads, navigation, commandRateLimit
     }
 
     public init(from decoder: any Decoder) throws {
@@ -111,6 +120,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.http = try c.decodeIfPresent(KSHTTPScope.self, forKey: .http) ?? .init()
         self.downloads = try c.decodeIfPresent(KSDownloadScope.self, forKey: .downloads) ?? .init()
         self.navigation = try c.decodeIfPresent(KSNavigationScope.self, forKey: .navigation) ?? .init()
+        self.commandRateLimit = try c.decodeIfPresent(KSCommandRateLimit.self, forKey: .commandRateLimit)
     }
 
     public static let defaultCSP =
@@ -119,12 +129,13 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     public static let `default` = KSSecurityConfig()
 }
 
-/// Tauri-style filesystem scope. Paths support `$APP`, `$HOME`, `$DOCS`,
-/// `$TEMP` placeholders resolved by the platform layer.
+/// Tauri 스타일 파일시스템 범위.
+/// 경로는 플랫폼 레이어가 해석하는 `$APP`, `$HOME`, `$DOCS`, `$TEMP`
+/// 플레이스홀더를 지원한다.
 public struct KSFSScope: Codable, Sendable, Equatable {
-    /// Glob-style allow patterns.
+    /// 글롭 스타일 허용 패턴.
     public var allow: [String]
-    /// Glob-style deny patterns, applied after `allow`.
+    /// 글롭 스타일 거부 패턴. `allow` 이후에 적용된다.
     public var deny: [String]
 
     public init(allow: [String] = [], deny: [String] = []) {
@@ -133,24 +144,24 @@ public struct KSFSScope: Codable, Sendable, Equatable {
     }
 }
 
-/// Permission scope for the `__ks.shell.*` command family. Each operation
-/// is gated independently so a JS frontend cannot, for example, escalate
-/// from "read clipboard" to "delete arbitrary files".
+/// `__ks.shell.*` 명령군에 대한 권한 범위.
+/// 각 동작은 독립적으로 제어되어, 예를 들어 JS 프론트엔드가
+/// "클립보드 읽기"에서 "임의 파일 삭제"로 권한을 확장하지 못하게 한다.
 ///
-/// Defaults match the Wails-style "safe by default" posture:
-///   * `openExternalSchemes` allows only `http`, `https`, `mailto`.
-///   * `showItemInFolder` allowed.
-///   * `moveToTrash` allowed (recoverable via Recycle Bin / Trash).
+/// 기본값은 Wails 스타일의 "기본적으로 안전" 정책을 따른다.
+/// `openExternalSchemes`는 `http`, `https`, `mailto`만 허용하고,
+/// `showItemInFolder`와 `moveToTrash`는 허용된다.
 public struct KSShellScope: Codable, Sendable, Equatable {
-    /// Allowed URL schemes for `openExternal`. `nil` means "no scheme
-    /// restriction" (any URL is permitted). An empty array means
-    /// `openExternal` is disabled. Scheme comparison is case-insensitive.
+    /// `openExternal`에 허용되는 URL 스킴.
+    /// `nil`은 "스킴 제한 없음"(모든 URL 허용)을 뜻하고,
+    /// 빈 배열은 `openExternal` 비활성화를 뜻한다.
+    /// 스킴 비교는 대소문자를 구분하지 않는다.
     public var openExternalSchemes: [String]?
 
-    /// Whether `showItemInFolder` is permitted at all.
+    /// `showItemInFolder` 자체를 허용할지 여부.
     public var showItemInFolder: Bool
 
-    /// Whether `moveToTrash` is permitted at all.
+    /// `moveToTrash` 자체를 허용할지 여부.
     public var moveToTrash: Bool
 
     public init(
@@ -183,8 +194,7 @@ public struct KSShellScope: Codable, Sendable, Equatable {
             Bool.self, forKey: .moveToTrash) ?? true
     }
 
-    /// Returns `true` when `scheme` (case-insensitive) is permitted by
-    /// `openExternalSchemes`.
+    /// `scheme`이(대소문자 무시) `openExternalSchemes`에 의해 허용되면 `true`를 반환한다.
     public func permitsScheme(_ scheme: String) -> Bool {
         guard let openExternalSchemes else { return true }
         let lower = scheme.lowercased()
@@ -192,23 +202,20 @@ public struct KSShellScope: Codable, Sendable, Equatable {
     }
 }
 
-/// Permission scope for the `__ks.notification.*` command family. Each
-/// operation is gated independently so a JS frontend cannot, for example,
-/// silently spam toasts after the user has opted out.
+/// `__ks.notification.*` 명령군에 대한 권한 범위.
+/// 각 동작은 독립적으로 제어되어, 예를 들어 사용자가 거부한 뒤에도
+/// JS 프론트엔드가 조용히 토스트를 남발하지 못하게 한다.
 ///
-/// Defaults match a "safe by default" posture:
-///   * `post` allowed.
-///   * `cancel` allowed.
-///   * `requestPermission` allowed (the call is a no-op on Windows but
-///     real on macOS).
+/// 기본값은 "기본적으로 안전" 정책을 따른다.
+/// `post`, `cancel`, `requestPermission`이 모두 허용된다.
 public struct KSNotificationScope: Codable, Sendable, Equatable {
-    /// Whether `__ks.notification.post` is permitted.
+    /// `__ks.notification.post` 허용 여부.
     public var post: Bool
 
-    /// Whether `__ks.notification.cancel` is permitted.
+    /// `__ks.notification.cancel` 허용 여부.
     public var cancel: Bool
 
-    /// Whether `__ks.notification.requestPermission` is permitted.
+    /// `__ks.notification.requestPermission` 허용 여부.
     public var requestPermission: Bool
 
     public init(

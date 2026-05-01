@@ -3,17 +3,17 @@ internal import Logging
 public import KalsaeCore
 public import Foundation
 
-/// Bridges a `WKWebViewHost` to the Kalsae IPC core.
+/// `WKWebViewHost`를 Kalsae IPC 코어에 연결하는 브리지.
 ///
-/// Thin wrapper over `KSIPCBridgeCore`: the heavy lifting (wire decode,
-/// dispatch, response encode, event emit) lives in KalsaeCore, identical
-/// across platforms. This type only owns the `WKWebViewHost` plumbing.
+/// `KSIPCBridgeCore`의 업은 래퍼: 실질적인 처리(와이어 디코드,
+/// 디스패치, 응답 인코드, 이벤트 이미트)는 KalsaeCore에 있어
+/// 플랫폼 간 동일하다. 이 타입은 `WKWebViewHost` 배관만 담당한다.
 @MainActor
 public final class WKBridge {
     private let host: WKWebViewHost
     private let core: KSIPCBridgeCore
 
-    /// Sink for `emit` messages from JS.
+    /// JS에서 수신하는 `emit` 메시지의 싱크.
     public var onEvent: (@MainActor (String, Data?) -> Void)? {
         get { core.onEvent }
         set { core.onEvent = newValue }
@@ -39,7 +39,7 @@ public final class WKBridge {
         }
     }
 
-    /// Emits an event to JS (`window.__KS_.listen(name, cb)`).
+    /// JS로 이벤트를 발행한다 (`window.__KS_.listen(name, cb)`).
     public func emit(event name: String,
                      payload: any Encodable) throws(KSError) {
         try core.emit(event: name, payload: payload)

@@ -16,97 +16,396 @@ extern "C" {
 
 typedef struct KSGtkHost KSGtkHost;
 
-/** Inbound message callback. `json` is a UTF-8 NUL-terminated string;
- *  its lifetime ends when the callback returns ??the Swift side must
- *  copy if it needs to retain.                                     */
+/** 수신 메시지 콜백. `json`은 UTF-8 NUL 종료 문자열이며;
+ *  콜백이 반환할 때 수명이 끝난다 — Swift 캣이 유지해야
+ *  한다면 직접 복사해야 한다.                                     */
 typedef void (*KSGtkMessageFn)(const char *json, void *ctx);
 
-/** Activation callback. Invoked on the main thread once the underlying
- *  GtkApplication has created the window and is ready to navigate.   */
+/** 활성화 콜백. 운영중인 GtkApplication이 윈도우를 만들고
+ *  탐색 준비가 된 후 메인 스레드에서 호출된다.   */
 typedef void (*KSGtkActivateFn)(void *ctx);
 
 /* 생명주기 -------------------------------------------------------- */
 
-/** Creates an uninitialized host. Does NOT construct the window yet ??
- *  that happens on GtkApplication's "activate" signal.             */
+/** 초기화되지 않은 호스트를 생성한다. 윈도우는
+ *  GtkApplication의 "activate" 시그널 시점에 생성된다.             */
 KSGtkHost *ks_gtk_host_new(const char *app_id,
                            const char *title,
                            int width,
                            int height);
 
-/** Destroys the host and releases its GObjects. Safe to call on a
- *  partially-initialized host.                                     */
+/** 호스트를 파괴하고 GObject를 해제한다. 부분 초기화된
+ *  호스트에도 안전하게 호출할 수 있다.                                     */
 void ks_gtk_host_free(KSGtkHost *host);
 
-/** Registers the script message handler. Must be called before
- *  `ks_gtk_host_run` so that the user content manager installs it
- *  before the first page load.                                     */
+/** 스크립트 메시지 핸들러를 등록한다. 첫 번째
+ *  로드 전에 사용자 콘텐츠 매니저가 설치할 수 있도록
+ *  `ks_gtk_host_run` 전에 호출해야 한다.                                     */
 void ks_gtk_host_set_message_handler(KSGtkHost *host,
                                      KSGtkMessageFn cb,
                                      void *ctx);
 
-/** Registers an activation callback invoked once the window + webview
- *  are constructed on the main thread. Swift uses this to schedule
- *  the initial navigation.                                         */
+/** 윈도우+웹뷰가 메인 스레드에서 생성된 후 한 번 호출되는
+ *  활성화 콜백을 등록한다. Swift는 이를 사용해 초기
+ *  탐색을 예약한다.                                         */
 void ks_gtk_host_set_on_activate(KSGtkHost *host,
                                  KSGtkActivateFn cb,
                                  void *ctx);
 
-/** Queues a user script for injection at document-start.           */
+/** document-start에 주입할 사용자 스크립트를 큐에 담는다.           */
 void ks_gtk_host_add_user_script(KSGtkHost *host, const char *source);
 
 /* 런타임 — 활성화 이후 호출 가능 ------------------------------- */
 
-/** Navigates the embedded WebKitWebView to `uri`. Both http(s) and
- *  file:// URIs are supported.                                     */
+/** `uri`로 내장된 WebKitWebView를 탐색한다. http(s) 및
+ *  file:// URI가 모두 지원된다.                                     */
 void ks_gtk_host_load_uri(KSGtkHost *host, const char *uri);
 
-/** Evaluates `script` in the webview's main frame. Fire-and-forget;
- *  errors are logged to stderr.                                    */
+/** 웹뷰의 메인 프레임에서 `script`를 실행한다. 실행 후 결과를
+ *  기다리지 않음; 오류는 stderr에 로그된다.                                    */
 void ks_gtk_host_eval_js(KSGtkHost *host, const char *script);
 
-/** Enables the Web Inspector ("Inspect Element" in context menu). */
+/** 웹 인스펙터를 활성화한다 (컨텍스트 메뉴의 "요소 조사"). */
 void ks_gtk_host_open_devtools(KSGtkHost *host);
+
+/** 윈도우 제목을 업데이트한다. 활성화 전에 호출하면 값을
+ *  저장하고 윈도우 생성 시 적용한다. */
+void ks_gtk_host_set_title(KSGtkHost *host, const char *title);
+
+/** 윈도우 기본 크기를 업데이트한다. 활성화 전에 호출하면 값을
+ *  저장하고 윈도우 생성 시 적용한다. */
+void ks_gtk_host_set_size(KSGtkHost *host, int width, int height);
+
+/** 윈도우를 표시/표시한다. 윈도우가 아직 생성되지 않은 경우 아무 조작도 안 한다. */
+void ks_gtk_host_show(KSGtkHost *host);
+
+/** 윈도우를 숨긴다. 윈도우가 아직 생성되지 않은 경우 아무 조작도 안 한다. */
+void ks_gtk_host_hide(KSGtkHost *host);
+
+/** 윈도우를 표시하여 포커스를 요청한다. */
+void ks_gtk_host_focus(KSGtkHost *host);
+
+/** 현재 로드된 페이지가 있으면 다시 로드한다. */
+void ks_gtk_host_reload(KSGtkHost *host);
+
+/** 윈도우를 최소화한다. */
+void ks_gtk_host_minimize(KSGtkHost *host);
+
+/** 윈도우를 최대화한다. */
+void ks_gtk_host_maximize(KSGtkHost *host);
+
+/** 윈도우를 최대화 상태에서 복원한다. */
+void ks_gtk_host_unmaximize(KSGtkHost *host);
+
+/** 최대화되어 있으면 1, 아니면 0을 반환한다. */
+int ks_gtk_host_is_maximized(KSGtkHost *host);
+
+/** 최소화/아이콘화되어 있으면 1, 아니면 0을 반환한다.
+ *  최소화 상태를 노출하지 않는 컴포지터에서는 0을 반환한다. */
+int ks_gtk_host_is_minimized(KSGtkHost *host);
+
+/** 전체화면 모드로 진입한다. */
+void ks_gtk_host_fullscreen(KSGtkHost *host);
+
+/** 전체화면 모드에서 빠져나온다. */
+void ks_gtk_host_unfullscreen(KSGtkHost *host);
+
+/** 전체화면이면 1, 아니면 0을 반환한다. */
+int ks_gtk_host_is_fullscreen(KSGtkHost *host);
+
+/** 현재 위젯 너비/높이를 out 파라미터에 쓴다.
+ *  성공 시 1, 사용 불가 시 0을 반환한다. */
+int ks_gtk_host_get_size(KSGtkHost *host, int *out_width, int *out_height);
+
+/* 클립보드 ----------------------------------------------------------- */
+
+/** 화면 클립보드에 UTF-8 텍스트를 쓴다. 활성화 후에
+ *  윈도우가 실체화된 다음에 호출해야 한다. */
+void ks_gtk_clipboard_write_text(KSGtkHost *host, const char *text);
+
+/** 화면 클립보드를 지운다. */
+void ks_gtk_clipboard_clear(KSGtkHost *host);
+
+/** UTF-8 텍스트를 비동기로 읽는다. GTK 메인 스레드에서
+ *  텍스트(비어 있거나 지원되지 않으면 NULL 가능)와 `ctx`를 인수로
+ *  `cb`를 호출한다.  */
+typedef void (*KSGtkClipboardTextFn)(const char *text, void *ctx);
+void ks_gtk_clipboard_read_text(KSGtkHost *host,
+                                KSGtkClipboardTextFn cb,
+                                void *ctx);
+
+/** 클립보드에 평문이 있으면 1, 아니면 0을 반환한다.    */
+int ks_gtk_clipboard_has_text(KSGtkHost *host);
+
+/* 클립보드 이미지 --------------------------------------------------- */
+
+/** 이미지 읽기 결과 콜백. `bytes`는 PNG 데이터 (`len` 바이트)를
+ *  담는다; 실패 시 둘 다 NULL/0일 수 있다. `bytes`의 수명은
+ *  콜백이 반환할 때까지 유효하며 필요하면 복사해야 한다.   */
+typedef void (*KSGtkClipboardImageFn)(const uint8_t *bytes,
+                                      size_t len,
+                                      void *ctx);
+
+/** 원시 PNG 바이트를 GdkTexture로서 화면 클립보드에 쓴다.
+ *  성공 시 1, 실패 시 0(PNG 오류 또는 윈도우 없음).  */
+int ks_gtk_clipboard_write_png(KSGtkHost *host,
+                                const uint8_t *png_bytes,
+                                size_t png_len);
+
+/** 클립보드 이미지를 PNG 바이트로 비동기로 읽는다.
+ *  GTK 메인 스레드에서 `cb`를 호출한다. 이미지가 없으면
+ *  `bytes`/`len`은 NULL/0이다.                                    */
+void ks_gtk_clipboard_read_png(KSGtkHost *host,
+                                KSGtkClipboardImageFn cb,
+                                void *ctx);
+
+/** 클립보드에 이미지(GdkTexture)가 있으면 1, 아니면 0을 반환한다. */
+int ks_gtk_clipboard_has_image(KSGtkHost *host);
+
+/* 다이얼로그 --------------------------------------------------------- */
+
+/** 다중 파일 결과 콜백. `paths`는 NULL 종료된 UTF-8 경로 문자열
+ *  배열이거나 취소 시 NULL이다.           */
+typedef void (*KSGtkFilesResultFn)(const char *const *paths, void *ctx);
+
+/** 단일 파일/폴더 결과 콜백. `path`는 UTF-8 경로 문자열이거나
+ *  취소 시 NULL이다.                           */
+typedef void (*KSGtkFileResultFn)(const char *path, void *ctx);
+
+/** 메시지 다이얼로그 결과 콜백.
+ *  result: 0 = 첫 번째 버튼 (OK/예), 1 = 두 번째 버튼 (취소/아니오),
+ *          2 = 세 번째 버튼 (yesNoCancel의 취소), -1 = 창이 닫힘. */
+typedef void (*KSGtkMsgResultFn)(int result, void *ctx);
+
+/** 네이티브 파일 선택기 다이얼로그를 연다(열기 모드).
+ *  filter_names / filter_globs는 filter_count 길이의 병렬 배열;
+ *  각 glob 엔트리는 패턴의 세미콜론 구분 목록이다 ("*.txt;*.md"). */
+void ks_gtk_dialog_open_files(KSGtkHost *host,
+                              const char *title,
+                              const char *default_dir,
+                              const char *const *filter_names,
+                              const char *const *filter_globs,
+                              int filter_count,
+                              int allow_multiple,
+                              KSGtkFilesResultFn cb, void *ctx);
+
+/** 네이티브 파일 선택기 다이얼로그를 연다(저장 모드). */
+void ks_gtk_dialog_save_file(KSGtkHost *host,
+                             const char *title,
+                             const char *default_dir,
+                             const char *default_name,
+                             const char *const *filter_names,
+                             const char *const *filter_globs,
+                             int filter_count,
+                             KSGtkFileResultFn cb, void *ctx);
+
+/** 네이티브 폴더 선택기 다이얼로그를 연다. */
+void ks_gtk_dialog_select_folder(KSGtkHost *host,
+                                 const char *title,
+                                 const char *default_dir,
+                                 KSGtkFileResultFn cb, void *ctx);
+
+/** 네이티브 메시지 다이얼로그를 표시한다.
+ *  kind:    0=정보  1=경고  2=오류  3=질문
+ *  buttons: 0=확인  1=확인/취소  2=예/아니오  3=예/아니오/취소               */
+void ks_gtk_dialog_message(KSGtkHost *host,
+                           int kind,
+                           const char *title,
+                           const char *message,
+                           const char *detail,
+                           int buttons,
+                           KSGtkMsgResultFn cb, void *ctx);
 
 /* 메인 루프 ---------------------------------------------------------- */
 
-/** Runs the GtkApplication until quit. Returns the application exit
- *  code. Blocks the calling thread.                                */
+/** GtkApplication을 종료될 때까지 실행한다. 응용프로그램 종료 코드를
+ *  반환한다. 호출 스레드를 블록한다.                                */
 int ks_gtk_host_run(KSGtkHost *host, int argc, char **argv);
 
-/** Requests GtkApplication quit on the main thread. Safe to call
- *  from any thread.                                                 */
+/** 메인 스레드에서 GtkApplication 종료를 요청한다.
+ *  어느 스레드에서도 안전하게 호출할 수 있다.                                 */
 void ks_gtk_host_quit(KSGtkHost *host);
 
-/** Schedules `fn(ctx)` to run on the main thread. Thread-safe;
- *  implemented with `g_idle_add`. Used by the Swift bridge to hop
- *  back to the UI thread after Task.detached completes.           */
+/** 메인 스레드에서 `fn(ctx)`를 실행하도록 예약한다. 스레드 안전;
+ *  `g_idle_add`로 구현. Task.detached 완료 후 UI 스레드로
+ *  돌아오는 데 Swift 브리지가 사용한다.           */
 void ks_gtk_post_main_thread(void (*fn)(void *ctx), void *ctx);
 
 /* -- 커스텀 `ks://` 스키마 핸들러 ----------------------------------- */
 
-/** Resolver callback. Must return 0 on success, non-zero on failure.
- *  On success the callee allocates `*out_data` (g_malloc'd, transfers
- *  ownership to the caller) with `*out_len` bytes, and optionally
- *  `*out_mime` (g_malloc'd, transfers ownership). On failure the C
- *  shim responds with a 404 to the web view.                      */
+/** 리졸버 콜백. 성공 시 0, 실패 시 비제로를 반환해야 한다.
+ *  성공 시 창주자는 `*out_data`(g_malloc으로 할당, 소유권 이전)를
+ *  `*out_len` 바이트로, 선택적으로 `*out_mime`(g_malloc, 소유권 이전)를
+ *  할당한다. 실패 시 C 심은 웹뷰에 404로 응답한다.                      */
 typedef int (*KSGtkSchemeResolverFn)(const char *path,
                                      void *ctx,
                                      char **out_data,
                                      size_t *out_len,
                                      char **out_mime);
 
-/** Registers a resolver for the `ks://` custom scheme. Must be called
- *  before `ks_gtk_host_run` so the scheme is registered on the web
- *  context before the first navigation.                          */
+/** `ks://` 커스텀 스키마에 대한 리졸버를 등록한다. 첫 번째
+ *  탐색 전에 스키마가 등록되도록 `ks_gtk_host_run` 전에
+ *  호출해야 한다.                          */
 void ks_gtk_host_set_scheme_resolver(KSGtkHost *host,
                                      KSGtkSchemeResolverFn cb,
                                      void *ctx);
 
-/** Sets the Content-Security-Policy sent with every `ks://` response.
- *  Pass NULL or an empty string to clear. The string is copied; the
- *  caller retains ownership of the argument buffer.              */
+/** 모든 `ks://` 응답에 선택할 Content-Security-Policy를 설정한다.
+ *  해제하려면 NULL이나 빈 문자열을 전달한다. 문자열은 복사되며
+ *  인수 버퍼의 소유권은 호출자가 유지한다.              */
 void ks_gtk_host_set_response_csp(KSGtkHost *host, const char *csp);
+
+/* 고급 WebView/윈도우 제어 ------------------------------------------ */
+
+/** WebKitWebView 줄 배율을 설정한다. 1.0 = 원본.             */
+void ks_gtk_host_set_zoom_level(KSGtkHost *host, double level);
+
+/** 현재 WebKitWebView 줄 배율을 반환한다. 사용 불가 시 1.0. */
+double ks_gtk_host_get_zoom_level(KSGtkHost *host);
+
+/** WebKitWebView 배경색을 설정한다.
+ *  r, g, b, a는 [0.0, 1.0] 범위에 있다.                        */
+void ks_gtk_host_set_background_color(KSGtkHost *host,
+                                      float r, float g,
+                                      float b, float a);
+
+/** GTK 응용프로그램 테마를 설정한다.
+ *  theme: 0 = 시스템 (기본값 복원), 1 = 라이트, 2 = 다크.     */
+void ks_gtk_host_set_theme(KSGtkHost *host, int theme);
+
+/** gtk_widget_set_size_request로 윈도우의 최소 크기를 설정한다.
+ *  제약이 없는 차원에는 0을 전달한다.         */
+void ks_gtk_host_set_min_size(KSGtkHost *host, int width, int height);
+
+/** 윈도우의 최대 크기를 설정한다. X11에서는 크기 힌트로 적용;
+ *  대부분의 Wayland 컴포지터는 임묵 무시한다.  */
+void ks_gtk_host_set_max_size(KSGtkHost *host, int width, int height);
+
+/** 윈도우를 화면 좌표 (x, y)로 이동한다. X11에서는 적용;
+ *  Wayland 컴포지터는 윈도우 위치를 제어하므로 무시한다. */
+void ks_gtk_host_set_position(KSGtkHost *host, int x, int y);
+
+/** 현재 윈도우 위치를 (*out_x, *out_y)에 읽어 담는다.
+ *  성공 시 1, 사용 불가 시 0(Wayland 등)을 반환한다.      */
+int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y);
+
+/** 기본 모니터의 작업 영역 가운데에 윈도우를 배치한다.         */
+void ks_gtk_host_center(KSGtkHost *host);
+
+/** close-request 인터셉터를 활성화/비활성화한다.
+ *  활성화 시 OS 닫기 동작이 `__ks.window.beforeClose`를
+ *  JS에 전달하고 기본 닫기를 억제한다. enabled: 1=켜짐, 0=꺼짐.  */
+void ks_gtk_host_set_close_interceptor(KSGtkHost *host, int enabled);
+
+/** 네이티브 close-request 핸들러. 사용자가 윈도우를 닫으려 할 때
+ *  (제목표시줄 X, Alt+F4 등) 메인 스레드에서 동기적으로 호출된다.
+ *  닫기를 막으려면 1, 허용하려면 0을 반환한다. */
+typedef int (*KSGtkCloseHandlerFn)(void *ctx);
+
+/** 네이티브 close-request 핸들러를 등록한다. 이전 등록을 대체한다.
+ *  cb와 ctx를 모두 NULL로 전달하면 해제된다. */
+void ks_gtk_host_set_close_handler(KSGtkHost *host,
+                                    KSGtkCloseHandlerFn cb,
+                                    void *ctx);
+
+/** enabled=1일 때 다른 모든 윈도우 위에 유지하고
+ *  enabled=0이면 일반 스태킹으로 복원한다.
+ *  Wayland 컴포지터는 이 요청을 임묵 무시할 수 있다.         */
+void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled);
+
+/* ----------------------------------------------------------------
+ * D-Bus logind power monitoring (suspend / resume)
+ * ---------------------------------------------------------------- */
+
+/** 전원 이벤트 콜백. 메인 스레드에서 호출된다.             */
+typedef void (*KSGtkPowerFn)(void *ctx);
+
+/** 일시 중단 콜백을 등록한다.  아직 설치되지 않았다면
+ *  `ks_gtk_host_install_power_monitor`를 자동으로 호출한다.  */
+void ks_gtk_host_set_on_suspend(KSGtkHost *host,
+                                 KSGtkPowerFn cb,
+                                 void *ctx);
+
+/** 재개 콜백을 등록한다.  아직 설치되지 않았다면
+ *  `ks_gtk_host_install_power_monitor`를 자동으로 호출한다.  */
+void ks_gtk_host_set_on_resume(KSGtkHost *host,
+                                KSGtkPowerFn cb,
+                                void *ctx);
+
+/** D-Bus 시스템 버스의 `org.freedesktop.login1.Manager.PrepareForSleep`
+ *  시그널을 구독한다. 이미 구독 중이거나 두 콜백이 모두 NULL이면
+ *  아무 조작도 안 한다. 시스템 버스가 없는 환경(컨테이너 등)에서는
+ *  임묵 건너뛴다.     */
+void ks_gtk_host_install_power_monitor(KSGtkHost *host);
+
+/** PrepareForSleep 시그널 구독을 해제하고 D-Bus 커넥션을 해제한다.
+ *  `ks_gtk_host_free`에서 자동으로 호출된다. */
+void ks_gtk_host_remove_power_monitor(KSGtkHost *host);
+
+/** 내장된 WebView의 플랫폼 인쇄 UI를 연다.
+ *  system_dialog: 1 = OS 인쇄 다이얼로그, 0 = 조용한/기본 인쇄.  */
+void ks_gtk_host_show_print_ui(KSGtkHost *host, int system_dialog);
+
+/** 현재 WebView 콘텐츠를 PNG 바이트로 캡처한다.
+ *  메인 스레드에서 원시 PNG 바이트와 의 길이를
+ *  인수로 `cb`를 호출한다. 실패 시 `bytes`는 NULL일 수 있다. `ctx`는
+ *  변경 없이 전달된다. 수신측은 `bytes`를 해제하면 안 된다 — 수명은
+ *  콜백이 반환할 때 끝난다.
+ *  format: 0 = PNG (유일 지원 포맷; JPEG는 PNG를 반환).     */
+typedef void (*KSGtkSnapshotResultFn)(const uint8_t *bytes,
+                                      size_t len,
+                                      void *ctx);
+void ks_gtk_host_capture_preview(KSGtkHost *host,
+                                 int format,
+                                 KSGtkSnapshotResultFn cb,
+                                 void *ctx);
+
+/* ================================================================
+ * 메뉴 (GMenuModel + GtkPopoverMenuBar / GtkPopoverMenu)
+ *
+ * 메뉴 항목은 push/pop 토큰으로 트리를 인코딩하는
+ * `KSMenuEntry` 값의 FLAT ARRAY로 전달된다:
+ *
+ *   kind 0  액션        (label + action_id 필수)
+ *   kind 1  구분선     (label / action_id 무시)
+ *   kind 2  서브메뉴 시작 (label = 서브메뉴 제목)
+ *   kind 3  서브메뉴 끝
+ *   kind 4  섹션 시작   (label = 선택적 섹션 제목)
+ *   kind 5  섹션 끝
+ *
+ * 모든 문자열 포인터는 UTF-8 NUL 종료이며 `ks_gtk_host_install_menu` /
+ * `ks_gtk_host_show_context_menu` 호출 동안만 유효하면 된다.
+ * ================================================================ */
+
+typedef struct KSMenuEntry {
+    int         kind;        /* 0..5 위와 동일 */
+    const char *label;       /* NUL 종료, NULL 가능 */
+    const char *action_id;   /* NUL 종료, NULL 가능 */
+    int         enabled;     /* 1 = 활성화 */
+    int         checked;     /* 1 = 체크마크 있음 */
+} KSMenuEntry;
+
+/** 액션 활성화 콜백. `action_id`는 엔트리에 제공된 id와 일치하며;
+ *  `ctx`는 변경 없이 전달된다.                        */
+typedef void (*KSGtkMenuActivateFn)(const char *action_id, void *ctx);
+
+/** 윈도우에 메뉴 바를 설치한다. 이전 메뉴 바를 대체한다.
+ *  `entries`는 호출 반환 후 유지되지 않으며 읽기 전용이다.     */
+void ks_gtk_host_install_menu(KSGtkHost *host,
+                               const KSMenuEntry *entries,
+                               int entry_count,
+                               KSGtkMenuActivateFn cb,
+                               void *ctx);
+
+/** 위젯 로컬 좌표 `(x, y)`에 일시성 팝오버 컨텍스트 메뉴를 표시한다.
+ *  `entries`는 호출 반환 후 유지되지 않으며 읽기 전용이다.  */
+void ks_gtk_host_show_context_menu(KSGtkHost *host,
+                                    const KSMenuEntry *entries,
+                                    int entry_count,
+                                    int x, int y,
+                                    KSGtkMenuActivateFn cb,
+                                    void *ctx);
+
 
 #ifdef __cplusplus
 }

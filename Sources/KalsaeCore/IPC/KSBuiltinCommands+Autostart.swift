@@ -5,11 +5,11 @@ extension KSBuiltinCommands {
         let enabled: Bool
     }
 
-    /// Registers `__ks.autostart.enable`, `__ks.autostart.disable`, and
-    /// `__ks.autostart.isEnabled`. Each command delegates to `backend`.
-    /// On platforms without an implementation, the host should pass
-    /// `nil` and the commands will not be installed (callers receive
-    /// `commandNotRegistered`, which the JS bridge maps to a rejection).
+    /// `__ks.autostart.enable`, `__ks.autostart.disable`,
+    /// `__ks.autostart.isEnabled`를 등록한다. 각 명령은 `backend`에 위임된다.
+    /// 구현이 없는 플랫폼에서는 호스트가 `nil`을 전달하면 해당 명령이
+    /// 설치되지 않는다(호출자는 `commandNotRegistered`를 받으며,
+    /// JS 브리지가 이를 거부(rejection)로 매핑한다).
     static func registerAutostartCommands(
         into registry: KSCommandRegistry,
         backend: any KSAutostartBackend

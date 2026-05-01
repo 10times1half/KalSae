@@ -1,0 +1,120 @@
+#if os(iOS)
+internal import UIKit
+public import KalsaeCore
+public import Foundation
+
+/// iOS 플랫폼에서 사용하는 단일 윈도우 호스트. `KSApp`이 부팅
+/// 로직을 공유할 수 있도록 `KSMacDemoHost`와 유사하게 설계된다.
+///
+/// 라이프사이클:
+/// 1. `KSApp.boot(...)`이 `init(windowConfig:registry:)`를 호출해
+///    윈도우가 나타나기 전에 스크립트/에셋루트를 첨부할 수 있도록 `WKWebView`를 즉시 생성한다.
+/// 2. `KSApp`이 `addDocumentCreatedScript`, `setAssetRoot`, `start`를 호출한다.
+///    `start`에서 받은 URL은 `_pendingURL`로 저장된다.
+/// 3. `KSApp.run()` → `runMessageLoop()`이 `KSiOSRuntime`에 `self`를 저장하고
+///    `UIApplicationMain`에 제어를 넘기다.
+/// 4. `KSiOSAppDelegate.didFinishLaunching`이 런타임에서 호스트를 불러와
+///    `UIWindow` + `KSiOSWebViewController`를 생성하고 `onWindowReady`를 호출해
+///    탐색을 트리거한다.
+@MainActor
+public final class KSiOSDemoHost {
+    public let registry: KSCommandRegistry
+
+    let windowConfig: KSWindowConfig          // 패키지 내부 — KSiOSAppDelegate가 읽음
+    let webViewHost: KSiOSWebViewHost         // 패키지 내부 — KSiOSAppDelegate가 읽음
+    private let bridge: KSiOSBridge
+
+    private var _mainHandle: KSWindowHandle
+    private var _pendingURL: String?
+    private var _pendingDevtools: Bool = false
+
+    public init(windowConfig: KSWindowConfig,
+                registry: KSCommandRegistry) throws(KSError) {
+        self.registry = registry
+        self.windowConfig = windowConfig
+        self._mainHandle = KSWindowHandle(
+            label: windowConfig.label,
+            rawValue: UInt64.random(in: 1...UInt64.max))
+        self.webViewHost = KSiOSWebViewHost(label: windowConfig.label)
+        self.bridge = KSiOSBridge(host: webViewHost, registry: registry)
+        try self.bridge.install()
+    }
+
+    public var mainHandle: KSWindowHandle { _mainHandle }
+
+    public func addDocumentCreatedScript(_ script: String) throws(KSError) {
+        try webViewHost.addDocumentCreatedScript(script)
+    }
+
+    public func setAssetRoot(_ root: URL) throws(KSError) {
+        try webViewHost.setAssetRoot(root)
+    }
+
+    /// URL을 저장한다; 실제 탐색은 `UIWindow`이 존재하면
+    /// `onWindowReady`에서 실행된다.
+    public func start(url: String, devtools: Bool) throws(KSError) {
+        _pendingURL = url
+        _pendingDevtools = devtools
+    }
+
+    /// `KSiOSAppDelegate`가 `UIWindow`이 화면에 표시된 후 호출한다.
+    func onWindowReady(viewController: KSiOSWebViewController) {
+        _ = viewController
+        // KSiOSWindowBackend.webView(for:)가 해석할 수 있도록 웹뷰 호스트를 등록한다.
+        KSiOSHandleRegistry.shared.registerWebView(webViewHost, for: windowConfig.label)
+        if let url = _pendingURL {
+            do {
+                try webViewHost.navigate(url: url)
+            } catch {
+                KSLog.logger("platform.ios.demohost")
+                    .error("navigate failed: \(error)")
+            }
+        }
+        if _pendingDevtools {
+            try? webViewHost.openDevTools()
+        }
+    }
+
+    public func emit(_ event: String, payload: any Encodable) throws(KSError) {
+        try bridge.emit(event: event, payload: payload)
+    }
+
+    /// `self`를 `KSiOSRuntime`에 저장하고 `UIApplicationMain`을 통해
+    /// UIKit 이벤트 루프를 시작한다. 이 함수는 돌아오지 않는다.
+    public func runMessageLoop() -> Int32 {
+        KSiOSRuntime.shared.pendingDemoHost = self
+        UIApplicationMain(
+            CommandLine.argc,
+            CommandLine.unsafeArgv,
+            nil,
+            NSStringFromClass(KSiOSAppDelegate.self))
+        return 0
+    }
+
+    nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
+        Task { @MainActor in block() }
+    }
+
+    /// iOS는 프로그래맰력 종료를 위한 공개 API가 없다.
+    nonisolated public func requestQuit() {}
+
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
+        // iOS에는 윈도우 닫기 개념이 없다.
+        _ = cb
+    }
+
+    public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
+        KSiOSLifecycleRelay.shared.onSuspend = cb
+    }
+
+    public func setOnResume(_ cb: (@MainActor () -> Void)?) {
+        KSiOSLifecycleRelay.shared.onResume = cb
+    }
+
+    public func setWindowStateSaveSink(
+        _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
+    ) {
+        _ = sink
+    }
+}
+#endif

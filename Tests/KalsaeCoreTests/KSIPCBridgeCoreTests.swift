@@ -128,6 +128,46 @@ struct KSIPCBridgeCoreTests {
         #expect(frame.contains(#""payload":{"v":3}"#))
     }
 
+    // MARK: - Security: payload size guard
+
+    @Test("Oversized inbound frame is dropped without posting a response")
+    func oversizedFrameDropped() async throws {
+        let registry = KSCommandRegistry()
+        let recorder = Recorder()
+        let bridge = makeBridge(registry: registry, recorder: recorder)
+
+        // Build a frame that exceeds maxFrameBytes (16 MB).
+        let bigValue = String(repeating: "a", count: KSIPCBridgeCore.maxFrameBytes + 1)
+        let frame = #"{"kind":"invoke","id":"1","name":"echo","payload":""# + bigValue + #"""}"#
+        bridge.handleInbound(frame)
+
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(recorder.posts.isEmpty, "Oversized frame must be silently dropped")
+    }
+
+    // MARK: - Security: XSS-safe escaping
+
+    @Test("encodeForJS escapes </script> in name field")
+    func encodeEscapesScriptTag() throws {
+        let msg = KSIPCMessage(kind: .event, name: "</script><script>alert(1)//")
+        let json = try KSIPCBridgeCore.encodeForJS(msg)
+        #expect(!json.contains("</script>"), "Raw </script> must not appear in encoded frame")
+        #expect(json.contains("<\\/script>"), "Forward-slash must be escaped as \\/")
+    }
+
+    @Test("encodeForJS escapes U+2028 and U+2029 in payload")
+    func encodeEscapesLineTerminators() throws {
+        // Build a payload that contains U+2028 (LINE SEPARATOR) inside a JSON string.
+        let dangerousString = "line\u{2028}sep\u{2029}end"
+        let payloadData = (try? JSONEncoder().encode(dangerousString)) ?? Data()
+        let msg = KSIPCMessage(kind: .event, name: "test", payload: payloadData)
+        let json = try KSIPCBridgeCore.encodeForJS(msg)
+        #expect(!json.contains("\u{2028}"), "U+2028 must be escaped")
+        #expect(!json.contains("\u{2029}"), "U+2029 must be escaped")
+        #expect(json.contains("\\u2028"))
+        #expect(json.contains("\\u2029"))
+    }
+
     // MARK: - helpers
 
     /// Polls `predicate` up to ~1s with 5ms ticks. Used because the

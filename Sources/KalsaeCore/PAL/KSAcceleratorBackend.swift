@@ -1,30 +1,25 @@
-public import Foundation
-
-/// Global keyboard accelerator (hot-key) registration.
+/// 전역 키보드 가속기(핫키) 등록.
 ///
-/// On Windows this maps to `RegisterHotKey` / `WM_HOTKEY` (system-wide
-/// shortcuts that fire even when the application is unfocused).
-/// macOS / Linux implementations land in later phases.
+/// Windows에서는 `RegisterHotKey` / `WM_HOTKEY`에 매핑된다(앱이
+/// 포커스를 잃어도 발동하는 시스템 전역 단축키).
+/// macOS / Linux 구현은 이후 단계에서 추가된다.
 ///
-/// Accelerator strings use the same cross-platform notation as
-/// `KSMenuItem.accelerator`, e.g.:
-/// - `"CmdOrCtrl+Shift+N"` → `Ctrl+Shift+N` on Windows/Linux
+/// 가속기 문자열은 `KSMenuItem.accelerator`와 동일한 크로스플랫폼 표기를 사용한다:
+/// - `"CmdOrCtrl+Shift+N"` → Windows/Linux에서 `Ctrl+Shift+N`
 /// - `"Alt+F4"`, `"Ctrl+Space"`, `"F11"`, `"Ctrl+Plus"`
 public protocol KSAcceleratorBackend: Sendable {
-    /// Registers `accelerator` and binds it to `handler`. The same `id`
-    /// can be re-registered (the prior binding is replaced first).
-    /// - Throws: `KSError` with code `.invalidArgument` for unparseable
-    ///   accelerators, `.platformInitFailed` if the OS rejects the
-    ///   registration (e.g. another process already owns the hot-key).
+    /// `accelerator`를 등록하고 `handler`에 바인딩한다. 동일한 `id`로
+    /// 재등록할 수 있다(기존 바인딩이 먼저 교체된다).
+    /// - Throws: 파싱 불가능한 가속기는 `.invalidArgument`, OS가 등록을
+    ///   거부하면(예: 다른 프로세스가 이미 해당 핫키 소유) `.platformInitFailed`.
     func register(id: String,
                   accelerator: String,
                   _ handler: @Sendable @escaping () -> Void) async throws(KSError)
 
-    /// Unregisters the binding previously installed for `id`. No-op if
-    /// `id` is unknown.
+    /// `id`에 대해 설치된 바인딩을 등록 해제한다. `id`가 없으면 no-op.
     func unregister(id: String) async throws(KSError)
 
-    /// Removes every registration owned by this backend.
+    /// 이 백엔드가 소유한 모든 등록을 제거한다.
     func unregisterAll() async throws(KSError)
 }
 

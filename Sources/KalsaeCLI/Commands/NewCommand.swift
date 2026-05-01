@@ -2,7 +2,7 @@
 import Foundation
 import KalsaeCLICore
 
-/// `Kalsae new <name>` — scaffold a new Kalsae application.
+/// `Kalsae new <name>` — 새 Kalsae 앱을 스케폴딩한다.
 struct NewCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "new",

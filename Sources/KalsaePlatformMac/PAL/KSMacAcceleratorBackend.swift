@@ -2,7 +2,7 @@
 internal import AppKit
 public import KalsaeCore
 
-/// macOS implementation of `KSAcceleratorBackend` using NSEvent monitors.
+/// NSEvent 모니터를 사용하는 `KSAcceleratorBackend`의 macOS 구현체.
 @MainActor
 public final class KSMacAcceleratorBackend: KSAcceleratorBackend {
     private struct Entry {
@@ -41,7 +41,7 @@ public final class KSMacAcceleratorBackend: KSAcceleratorBackend {
         entries.removeAll()
     }
 
-    // MARK: - Monitor management
+    // MARK: - 모니터 관리
 
     private func installMonitorsIfNeeded() {
         guard localMonitor == nil else { return }
@@ -68,16 +68,16 @@ public final class KSMacAcceleratorBackend: KSAcceleratorBackend {
         }
         for entry in entries.values {
             if entry.flags == flags && (entry.keyEquivalent == chars || entry.keyEquivalent == "") {
-                // Check for function keys
+                // 기능 키 확인
                 if entry.keyEquivalent.isEmpty { continue }
                 entry.handler()
-                return nil // consume the event
+                return nil // 이벤트를 소비한다
             }
         }
         return event
     }
 
-    // MARK: - Parser
+    // MARK: - 파서
 
     private struct ParsedAccel {
         let flags: NSEvent.ModifierFlags

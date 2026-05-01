@@ -139,8 +139,8 @@ extern "C" int32_t KSWV2_ShowToast(
     return (int32_t)hr;
 }
 
-/// Sets the AppUserModelID for the current process. Required for toast
-/// notifications to bind to the correct shortcut/identity.
+/// 현재 프로세스의 AppUserModelID를 설정한다.
+/// 토스트 알림이 올바른 바로 가기/ID에 바인딩되려면 필요하다.
 extern "C" int32_t KSWV2_SetAppUserModelID(const wchar_t *aumid) {
     if (!aumid || !aumid[0]) return E_INVALIDARG;
     return (int32_t)SetCurrentProcessExplicitAppUserModelID(aumid);

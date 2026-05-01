@@ -14,6 +14,7 @@
 #include <webkit/webkit.h>
 #include <libsoup/soup.h>
 #include <glib.h>
+#include <gio/gio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -46,6 +47,28 @@ struct KSGtkHost {
 
     /* 모든 ks:// 응답에 붙여 보낼 Content-Security-Policy. */
     char                 *response_csp;
+
+    /* close-request 인터셉터 플래그: 1=활성, 0=비활성. */
+    int                   close_interceptor;
+
+    /* Swift-side close handler (우선순위: close_interceptor보다 높음). */
+    KSGtkCloseHandlerFn  close_handler;
+    void                *close_handler_ctx;
+
+    /* D-Bus logind power callbacks (suspend / resume). */
+    KSGtkPowerFn  on_suspend;
+    void         *on_suspend_ctx;
+    KSGtkPowerFn  on_resume;
+    void         *on_resume_ctx;
+    guint         dbus_signal_id;   /* g_dbus_connection_signal_subscribe handle */
+    GDBusConnection *dbus_conn;     /* system bus connection (weak, unowned) */
+
+    /* Menu state. */
+    KSGtkMenuActivateFn  menu_activate_cb;
+    void                *menu_activate_ctx;
+    GSimpleActionGroup  *menu_actions;   /* owned; installed on window */
+    GtkWidget           *menu_bar;       /* GtkPopoverMenuBar child, or NULL */
+    GtkWidget           *menu_vbox;      /* vertical GtkBox wrapping menu+webview, or NULL */
 };
 
 /* -- 헬퍼 -------------------------------------------------------- */
@@ -62,9 +85,39 @@ static void clear_string(char **slot)
 
 /* -- 시그널 핸들러 ------------------------------------------------- */
 
-/* 아래 on_app_activate를 위한 전방 선언. */
+/* -- 전방 선언 ---------------------------------------------------- */
 static void on_kb_scheme_request(WebKitURISchemeRequest *req,
                                  gpointer user_data);
+/* close-request 핸들러 전방 선언 */
+
+/* close-request 핸들러: 인터셉터가 켜진 경우 창을 닫지 않고
+ * JS beforeClose 이벤트를 발사한다. */
+static gboolean on_close_request(GtkWindow *win, gpointer user_data)
+{
+    (void) win;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host) return FALSE;
+
+    /* Swift-side native 핸들러가 우선. 핸들러가 1을 돌려주면
+     * JS beforeClose를 발사하고 닫기를 억제한다. */
+    if (host->close_handler) {
+        int prevent = host->close_handler(host->close_handler_ctx);
+        if (prevent) {
+            ks_gtk_host_eval_js(host,
+                "if(window.__KS_)window.__KS_.emit('__ks.window.beforeClose',null);");
+            return TRUE;
+        }
+        return FALSE;
+    }
+
+    /* 기존 JS-only 인터셉터. */
+    if (host->close_interceptor) {
+        ks_gtk_host_eval_js(host,
+            "if(window.__KS_)window.__KS_.emit('__ks.window.beforeClose',null);");
+        return TRUE;  /* 기본 닫기 억제 */
+    }
+    return FALSE;     /* 기본 닫기 허용 */
+}
 
 /* WebKit 6.0: "script-message-received::<name>"은 JSCValue를 전달한다. */
 static void on_script_message(WebKitUserContentManager *ucm,
@@ -139,6 +192,10 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
             wctx, "ks", on_kb_scheme_request, host, NULL);
     }
 
+    /* close-request 시그널을 1회 연결해 인터셉터 플래그로 제어한다. */
+    g_signal_connect(win, "close-request",
+                     G_CALLBACK(on_close_request), host);
+
     if (host->on_activate) {
         host->on_activate(host->on_activate_ctx);
     }
@@ -167,6 +224,14 @@ KSGtkHost *ks_gtk_host_new(const char *app_id,
 void ks_gtk_host_free(KSGtkHost *host)
 {
     if (!host) return;
+    /* Clean up D-Bus power monitor if installed. */
+    if (host->dbus_signal_id != 0 && host->dbus_conn) {
+        g_dbus_connection_signal_unsubscribe(host->dbus_conn,
+                                              host->dbus_signal_id);
+        g_object_unref(host->dbus_conn);
+        host->dbus_conn = NULL;
+        host->dbus_signal_id = 0;
+    }
     if (host->app) g_object_unref(host->app);
     if (host->pending_scripts) g_ptr_array_free(host->pending_scripts, TRUE);
     clear_string(&host->app_id);
@@ -238,6 +303,118 @@ void ks_gtk_host_open_devtools(KSGtkHost *host)
     if (!host || !host->web_view) return;
     WebKitSettings *s = webkit_web_view_get_settings(host->web_view);
     webkit_settings_set_enable_developer_extras(s, TRUE);
+}
+
+void ks_gtk_host_set_title(KSGtkHost *host, const char *title)
+{
+    if (!host) return;
+    clear_string(&host->title);
+    host->title = dup_string(title ? title : "Kalsae");
+    if (host->window) {
+        gtk_window_set_title(host->window, host->title);
+    }
+}
+
+void ks_gtk_host_set_size(KSGtkHost *host, int width, int height)
+{
+    if (!host) return;
+    host->width = width > 0 ? width : host->width;
+    host->height = height > 0 ? height : host->height;
+    if (host->window) {
+        gtk_window_set_default_size(host->window, host->width, host->height);
+    }
+}
+
+void ks_gtk_host_show(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_widget_set_visible(GTK_WIDGET(host->window), TRUE);
+    gtk_window_present(host->window);
+}
+
+void ks_gtk_host_hide(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_widget_set_visible(GTK_WIDGET(host->window), FALSE);
+}
+
+void ks_gtk_host_focus(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_present(host->window);
+}
+
+void ks_gtk_host_reload(KSGtkHost *host)
+{
+    if (!host || !host->web_view) return;
+    webkit_web_view_reload(host->web_view);
+}
+
+void ks_gtk_host_minimize(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_minimize(host->window);
+}
+
+void ks_gtk_host_maximize(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_maximize(host->window);
+}
+
+void ks_gtk_host_unmaximize(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_unmaximize(host->window);
+}
+
+int ks_gtk_host_is_maximized(KSGtkHost *host)
+{
+    if (!host || !host->window) return 0;
+    return gtk_window_is_maximized(host->window) ? 1 : 0;
+}
+
+int ks_gtk_host_is_minimized(KSGtkHost *host)
+{
+    if (!host || !host->window) return 0;
+
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(host->window));
+    if (!surface || !GDK_IS_TOPLEVEL(surface)) return 0;
+
+    GdkToplevelState state = gdk_toplevel_get_state(GDK_TOPLEVEL(surface));
+    return (state & GDK_TOPLEVEL_STATE_MINIMIZED) ? 1 : 0;
+}
+
+void ks_gtk_host_fullscreen(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_fullscreen(host->window);
+}
+
+void ks_gtk_host_unfullscreen(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    gtk_window_unfullscreen(host->window);
+}
+
+int ks_gtk_host_is_fullscreen(KSGtkHost *host)
+{
+    if (!host || !host->window) return 0;
+    return gtk_window_is_fullscreen(host->window) ? 1 : 0;
+}
+
+int ks_gtk_host_get_size(KSGtkHost *host, int *out_width, int *out_height)
+{
+    if (!host || !host->window || !out_width || !out_height) return 0;
+    GtkWidget *widget = GTK_WIDGET(host->window);
+    int width = gtk_widget_get_width(widget);
+    int height = gtk_widget_get_height(widget);
+    if (width <= 0 || height <= 0) {
+        return 0;
+    }
+    *out_width = width;
+    *out_height = height;
+    return 1;
 }
 
 int ks_gtk_host_run(KSGtkHost *host, int argc, char **argv)
@@ -351,11 +528,27 @@ static void on_kb_scheme_request(WebKitURISchemeRequest *req,
     webkit_uri_scheme_response_set_content_type(
         resp, mime ? mime : "application/octet-stream");
     webkit_uri_scheme_response_set_status(resp, 200, NULL);
-    if (host->response_csp && host->response_csp[0] != '\0') {
+    {
         SoupMessageHeaders *hdrs = soup_message_headers_new(
             SOUP_MESSAGE_HEADERS_RESPONSE);
+        if (host->response_csp && host->response_csp[0] != '\0') {
+            soup_message_headers_append(
+                hdrs, "Content-Security-Policy", host->response_csp);
+        }
         soup_message_headers_append(
-            hdrs, "Content-Security-Policy", host->response_csp);
+            hdrs, "X-Content-Type-Options", "nosniff");
+        soup_message_headers_append(
+            hdrs, "Referrer-Policy", "no-referrer");
+        webkit_uri_scheme_response_set_http_headers(resp, hdrs);
+        /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
+        soup_message_headers_unref(hdrs);
+    }
+    webkit_uri_scheme_request_finish_with_response(req, resp);
+    g_object_unref(resp);
+    g_object_unref(stream);
+    if (mime) g_free(mime);
+}
+
         webkit_uri_scheme_response_set_http_headers(resp, hdrs);
         /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
         soup_message_headers_unref(hdrs);
@@ -374,3 +567,984 @@ void ks_gtk_host_set_response_csp(KSGtkHost *host, const char *csp)
         host->response_csp = g_strdup(csp);
     }
 }
+
+/* ================================================================
+ * 클립보드
+ * ================================================================ */
+
+static GdkClipboard *get_clipboard(KSGtkHost *host)
+{
+    if (!host || !host->window) return NULL;
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(host->window));
+    if (!display) return NULL;
+    return gdk_display_get_clipboard(display);
+}
+
+void ks_gtk_clipboard_write_text(KSGtkHost *host, const char *text)
+{
+    GdkClipboard *cb = get_clipboard(host);
+    if (!cb || !text) return;
+    gdk_clipboard_set_text(cb, text);
+}
+
+void ks_gtk_clipboard_clear(KSGtkHost *host)
+{
+    GdkClipboard *cb = get_clipboard(host);
+    if (!cb) return;
+    /* GDK4에는 전용 clear API가 없으므로 빈 텍스트로 대체한다. */
+    gdk_clipboard_set_text(cb, "");
+}
+
+typedef struct {
+    KSGtkClipboardTextFn cb;
+    void                *ctx;
+} ClipReadCtx;
+
+static void on_clipboard_read_finish(GObject *source,
+                                     GAsyncResult *result,
+                                     gpointer user_data)
+{
+    ClipReadCtx *rd  = (ClipReadCtx *) user_data;
+    GError      *err = NULL;
+    char        *text = gdk_clipboard_read_text_finish(
+        GDK_CLIPBOARD(source), result, &err);
+    rd->cb(text, rd->ctx);
+    if (text) g_free(text);
+    if (err)  g_error_free(err);
+    g_free(rd);
+}
+
+void ks_gtk_clipboard_read_text(KSGtkHost *host,
+                                KSGtkClipboardTextFn cb,
+                                void *ctx)
+{
+    GdkClipboard *clipboard = get_clipboard(host);
+    if (!clipboard) { cb(NULL, ctx); return; }
+    ClipReadCtx *rd = g_new0(ClipReadCtx, 1);
+    rd->cb  = cb;
+    rd->ctx = ctx;
+    gdk_clipboard_read_text_async(clipboard, NULL,
+                                  on_clipboard_read_finish, rd);
+}
+
+int ks_gtk_clipboard_has_text(KSGtkHost *host)
+{
+    GdkClipboard *clipboard = get_clipboard(host);
+    if (!clipboard) return 0;
+    GdkContentFormats *formats = gdk_clipboard_get_formats(clipboard);
+    return gdk_content_formats_contain_gtype(formats, G_TYPE_STRING) ? 1 : 0;
+}
+
+/* ================================================================
+ * 클립보드 이미지 (GdkTexture PNG)
+ * ================================================================ */
+
+int ks_gtk_clipboard_write_png(KSGtkHost *host,
+                                const uint8_t *png_bytes,
+                                size_t png_len)
+{
+    GdkClipboard *clipboard = get_clipboard(host);
+    if (!clipboard || !png_bytes || png_len == 0) return 0;
+
+    GBytes *bytes = g_bytes_new(png_bytes, png_len);
+    GdkTexture *tex = gdk_texture_new_from_bytes(bytes, NULL);
+    g_bytes_unref(bytes);
+    if (!tex) return 0;
+
+    gdk_clipboard_set_texture(clipboard, tex);
+    g_object_unref(tex);
+    return 1;
+}
+
+typedef struct {
+    KSGtkClipboardImageFn cb;
+    void                 *ctx;
+} ClipImageReadCtx;
+
+static void on_read_texture_finish(GObject *source,
+                                    GAsyncResult *result,
+                                    gpointer user_data)
+{
+    ClipImageReadCtx *rd  = (ClipImageReadCtx *) user_data;
+    GError           *err = NULL;
+    GdkTexture *tex = gdk_clipboard_read_texture_finish(
+        GDK_CLIPBOARD(source), result, &err);
+
+    if (!tex) {
+        if (err) g_error_free(err);
+        rd->cb(NULL, 0, rd->ctx);
+        g_free(rd);
+        return;
+    }
+
+    GBytes *bytes = gdk_texture_save_to_png_bytes(tex);
+    g_object_unref(tex);
+
+    if (!bytes) {
+        rd->cb(NULL, 0, rd->ctx);
+        g_free(rd);
+        return;
+    }
+
+    gsize len = 0;
+    const guint8 *data = (const guint8 *) g_bytes_get_data(bytes, &len);
+    rd->cb(data, (size_t) len, rd->ctx);
+    g_bytes_unref(bytes);
+    g_free(rd);
+}
+
+void ks_gtk_clipboard_read_png(KSGtkHost *host,
+                                KSGtkClipboardImageFn cb,
+                                void *ctx)
+{
+    GdkClipboard *clipboard = get_clipboard(host);
+    if (!clipboard) { cb(NULL, 0, ctx); return; }
+
+    ClipImageReadCtx *rd = g_new0(ClipImageReadCtx, 1);
+    rd->cb  = cb;
+    rd->ctx = ctx;
+    gdk_clipboard_read_texture_async(clipboard, NULL,
+                                      on_read_texture_finish, rd);
+}
+
+int ks_gtk_clipboard_has_image(KSGtkHost *host)
+{
+    GdkClipboard *clipboard = get_clipboard(host);
+    if (!clipboard) return 0;
+    GdkContentFormats *formats = gdk_clipboard_get_formats(clipboard);
+    return gdk_content_formats_contain_gtype(formats, GDK_TYPE_TEXTURE) ? 1 : 0;
+}
+
+/* ================================================================
+ * 다이얼로그 헬퍼
+ * ================================================================ */
+
+/* 필터 배열을 GtkFileChooser에 추가한다. */
+static void apply_filters(GtkFileChooser *chooser,
+                          const char *const *names,
+                          const char *const *globs,
+                          int count)
+{
+    for (int i = 0; i < count; i++) {
+        GtkFileFilter *f = gtk_file_filter_new();
+        if (names && names[i] && names[i][0])
+            gtk_file_filter_set_name(f, names[i]);
+        if (globs && globs[i]) {
+            /* 세미콜론으로 분리된 glob 목록을 파싱한다. */
+            char *copy = g_strdup(globs[i]);
+            char *tok  = strtok(copy, ";");
+            while (tok) {
+                gtk_file_filter_add_pattern(f, tok);
+                tok = strtok(NULL, ";");
+            }
+            g_free(copy);
+        }
+        gtk_file_chooser_add_filter(chooser, f);
+    }
+}
+
+/* ================================================================
+ * 파일 열기 다이얼로그
+ * ================================================================ */
+
+typedef struct {
+    KSGtkFilesResultFn cb;
+    void              *ctx;
+} OpenFilesCtx;
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
+static void on_open_files_response(GtkNativeDialog *dlg,
+                                   gint             response,
+                                   gpointer         user_data)
+{
+    OpenFilesCtx *oc = (OpenFilesCtx *) user_data;
+    if (response == GTK_RESPONSE_ACCEPT) {
+        GListModel *files =
+            gtk_file_chooser_get_files(GTK_FILE_CHOOSER(dlg));
+        guint n = g_list_model_get_n_items(files);
+        const char **paths = g_new0(const char *, n + 1);
+        for (guint i = 0; i < n; i++) {
+            GFile *f = G_FILE(g_list_model_get_item(files, i));
+            paths[i] = g_file_get_path(f);
+            g_object_unref(f);
+        }
+        paths[n] = NULL;
+        oc->cb(paths, oc->ctx);
+        for (guint i = 0; i < n; i++) g_free((gpointer) paths[i]);
+        g_free(paths);
+        g_object_unref(files);
+    } else {
+        oc->cb(NULL, oc->ctx);
+    }
+    g_object_unref(dlg);
+    g_free(oc);
+}
+
+void ks_gtk_dialog_open_files(KSGtkHost *host,
+                              const char *title,
+                              const char *default_dir,
+                              const char *const *filter_names,
+                              const char *const *filter_globs,
+                              int filter_count,
+                              int allow_multiple,
+                              KSGtkFilesResultFn cb, void *ctx)
+{
+    GtkFileChooserNative *dlg = gtk_file_chooser_native_new(
+        title ? title : "Open",
+        host ? GTK_WINDOW(host->window) : NULL,
+        GTK_FILE_CHOOSER_ACTION_OPEN,
+        "_Open", "_Cancel");
+    gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(dlg),
+                                         allow_multiple ? TRUE : FALSE);
+    if (default_dir && default_dir[0]) {
+        GFile *dir = g_file_new_for_path(default_dir);
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dlg),
+                                            dir, NULL);
+        g_object_unref(dir);
+    }
+    apply_filters(GTK_FILE_CHOOSER(dlg),
+                  filter_names, filter_globs, filter_count);
+
+    OpenFilesCtx *oc = g_new0(OpenFilesCtx, 1);
+    oc->cb  = cb;
+    oc->ctx = ctx;
+    g_signal_connect(dlg, "response",
+                     G_CALLBACK(on_open_files_response), oc);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dlg));
+}
+
+/* ================================================================
+ * 파일 저장 다이얼로그
+ * ================================================================ */
+
+typedef struct {
+    KSGtkFileResultFn cb;
+    void             *ctx;
+} SaveFileCtx;
+
+static void on_save_file_response(GtkNativeDialog *dlg,
+                                  gint             response,
+                                  gpointer         user_data)
+{
+    SaveFileCtx *sc = (SaveFileCtx *) user_data;
+    if (response == GTK_RESPONSE_ACCEPT) {
+        GFile *f    = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dlg));
+        char  *path = f ? g_file_get_path(f) : NULL;
+        sc->cb(path, sc->ctx);
+        if (path) g_free(path);
+        if (f)    g_object_unref(f);
+    } else {
+        sc->cb(NULL, sc->ctx);
+    }
+    g_object_unref(dlg);
+    g_free(sc);
+}
+
+void ks_gtk_dialog_save_file(KSGtkHost *host,
+                             const char *title,
+                             const char *default_dir,
+                             const char *default_name,
+                             const char *const *filter_names,
+                             const char *const *filter_globs,
+                             int filter_count,
+                             KSGtkFileResultFn cb, void *ctx)
+{
+    GtkFileChooserNative *dlg = gtk_file_chooser_native_new(
+        title ? title : "Save",
+        host ? GTK_WINDOW(host->window) : NULL,
+        GTK_FILE_CHOOSER_ACTION_SAVE,
+        "_Save", "_Cancel");
+    if (default_dir && default_dir[0]) {
+        GFile *dir = g_file_new_for_path(default_dir);
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dlg),
+                                            dir, NULL);
+        g_object_unref(dir);
+    }
+    if (default_name && default_name[0])
+        gtk_file_chooser_set_current_name(GTK_FILE_CHOOSER(dlg),
+                                          default_name);
+    apply_filters(GTK_FILE_CHOOSER(dlg),
+                  filter_names, filter_globs, filter_count);
+
+    SaveFileCtx *sc = g_new0(SaveFileCtx, 1);
+    sc->cb  = cb;
+    sc->ctx = ctx;
+    g_signal_connect(dlg, "response",
+                     G_CALLBACK(on_save_file_response), sc);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dlg));
+}
+
+/* ================================================================
+ * 폴더 선택 다이얼로그
+ * ================================================================ */
+
+static void on_select_folder_response(GtkNativeDialog *dlg,
+                                      gint             response,
+                                      gpointer         user_data)
+{
+    SaveFileCtx *sc = (SaveFileCtx *) user_data;
+    if (response == GTK_RESPONSE_ACCEPT) {
+        GFile *f    = gtk_file_chooser_get_file(GTK_FILE_CHOOSER(dlg));
+        char  *path = f ? g_file_get_path(f) : NULL;
+        sc->cb(path, sc->ctx);
+        if (path) g_free(path);
+        if (f)    g_object_unref(f);
+    } else {
+        sc->cb(NULL, sc->ctx);
+    }
+    g_object_unref(dlg);
+    g_free(sc);
+}
+
+void ks_gtk_dialog_select_folder(KSGtkHost *host,
+                                 const char *title,
+                                 const char *default_dir,
+                                 KSGtkFileResultFn cb, void *ctx)
+{
+    GtkFileChooserNative *dlg = gtk_file_chooser_native_new(
+        title ? title : "Select Folder",
+        host ? GTK_WINDOW(host->window) : NULL,
+        GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER,
+        "_Open", "_Cancel");
+    if (default_dir && default_dir[0]) {
+        GFile *dir = g_file_new_for_path(default_dir);
+        gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dlg),
+                                            dir, NULL);
+        g_object_unref(dir);
+    }
+
+    SaveFileCtx *sc = g_new0(SaveFileCtx, 1);
+    sc->cb  = cb;
+    sc->ctx = ctx;
+    g_signal_connect(dlg, "response",
+                     G_CALLBACK(on_select_folder_response), sc);
+    gtk_native_dialog_show(GTK_NATIVE_DIALOG(dlg));
+}
+
+/* ================================================================
+ * 메시지 다이얼로그
+ * ================================================================ */
+
+typedef struct {
+    KSGtkMsgResultFn cb;
+    void            *ctx;
+    int              buttons; /* 0=ok 1=okCancel 2=yesNo 3=yesNoCancel */
+} MsgCtx;
+
+static void on_msg_response(GtkDialog *dlg,
+                            gint       response,
+                            gpointer   user_data)
+{
+    MsgCtx *mc = (MsgCtx *) user_data;
+    int result;
+    switch (response) {
+    case GTK_RESPONSE_OK:
+    case GTK_RESPONSE_YES:
+        result = 0;
+        break;
+    case GTK_RESPONSE_CANCEL:
+    case GTK_RESPONSE_NO:
+        result = (mc->buttons == 2 /* yesNo */) ? 1 : 1;
+        break;
+    case GTK_RESPONSE_DELETE_EVENT:
+        result = -1;
+        break;
+    default:
+        result = -1;
+        break;
+    }
+    mc->cb(result, mc->ctx);
+    gtk_window_destroy(GTK_WINDOW(dlg));
+    g_free(mc);
+}
+
+void ks_gtk_dialog_message(KSGtkHost *host,
+                           int kind,
+                           const char *title,
+                           const char *message,
+                           const char *detail,
+                           int buttons,
+                           KSGtkMsgResultFn cb, void *ctx)
+{
+    GtkMessageType msg_type;
+    switch (kind) {
+    case 1:  msg_type = GTK_MESSAGE_WARNING; break;
+    case 2:  msg_type = GTK_MESSAGE_ERROR;   break;
+    case 3:  msg_type = GTK_MESSAGE_QUESTION; break;
+    default: msg_type = GTK_MESSAGE_INFO;    break;
+    }
+
+    GtkButtonsType btn_type;
+    switch (buttons) {
+    case 1:  btn_type = GTK_BUTTONS_OK_CANCEL; break;
+    case 2:  btn_type = GTK_BUTTONS_YES_NO;    break;
+    case 3:  btn_type = GTK_BUTTONS_NONE;      break; /* 수동 추가 */
+    default: btn_type = GTK_BUTTONS_OK;        break;
+    }
+
+    GtkWidget *dlg = gtk_message_dialog_new(
+        host ? GTK_WINDOW(host->window) : NULL,
+        GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT,
+        msg_type,
+        btn_type,
+        "%s", message ? message : "");
+
+    if (title && title[0])
+        gtk_window_set_title(GTK_WINDOW(dlg), title);
+
+    if (detail && detail[0])
+        gtk_message_dialog_format_secondary_text(
+            GTK_MESSAGE_DIALOG(dlg), "%s", detail);
+
+    if (buttons == 3) {
+        gtk_dialog_add_button(GTK_DIALOG(dlg), "_Yes",    GTK_RESPONSE_YES);
+        gtk_dialog_add_button(GTK_DIALOG(dlg), "_No",     GTK_RESPONSE_NO);
+        gtk_dialog_add_button(GTK_DIALOG(dlg), "_Cancel", GTK_RESPONSE_CANCEL);
+    }
+
+    MsgCtx *mc = g_new0(MsgCtx, 1);
+    mc->cb      = cb;
+    mc->ctx     = ctx;
+    mc->buttons = buttons;
+    g_signal_connect(dlg, "response", G_CALLBACK(on_msg_response), mc);
+    gtk_widget_show(dlg);
+}
+
+#pragma GCC diagnostic pop
+
+/* ================================================================
+ * 고급 WebView / 윈도우 제어 (Phase 4)
+ * ================================================================ */
+
+void ks_gtk_host_set_zoom_level(KSGtkHost *host, double level)
+{
+    if (!host || !host->web_view) return;
+    webkit_web_view_set_zoom_level(host->web_view, level);
+}
+
+double ks_gtk_host_get_zoom_level(KSGtkHost *host)
+{
+    if (!host || !host->web_view) return 1.0;
+    return webkit_web_view_get_zoom_level(host->web_view);
+}
+
+void ks_gtk_host_set_background_color(KSGtkHost *host,
+                                      float r, float g_ch,
+                                      float b, float a)
+{
+    if (!host || !host->web_view) return;
+    GdkRGBA rgba = { r, g_ch, b, a };
+    webkit_web_view_set_background_color(host->web_view, &rgba);
+}
+
+void ks_gtk_host_set_theme(KSGtkHost *host, int theme)
+{
+    (void) host;
+    /* theme: 0=system/default, 1=light, 2=dark */
+    GtkSettings *settings = gtk_settings_get_default();
+    if (!settings) return;
+    /* dark=2 → prefer-dark-theme TRUE; light/system → FALSE.
+     * A full system-aware implementation would query GdkMonitor's
+     * color-scheme property; this covers the common use-case. */
+    gboolean dark = (theme == 2) ? TRUE : FALSE;
+    g_object_set(settings, "gtk-application-prefer-dark-theme", dark, NULL);
+}
+
+void ks_gtk_host_set_min_size(KSGtkHost *host, int width, int height)
+{
+    if (!host || !host->window) return;
+    gtk_widget_set_size_request(GTK_WIDGET(host->window), width, height);
+}
+
+void ks_gtk_host_set_max_size(KSGtkHost *host, int width, int height)
+{
+    if (!host || !host->window) return;
+    /* GtkWindow does not have a built-in max-size API.
+     * We use geometry hints via gdk_toplevel_set_size_hints (GTK4).
+     * Fallback: store values and refuse resize events >= threshold. */
+    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    if (!surface) return;
+    GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
+    GdkToplevelSize hints;
+    (void) hints;   /* GdkToplevelSize is stack-allocated by the signal */
+    /* GTK4 does not have a synchronous max-size API — we post a size
+     * constraint via gtk_widget_set_size_request (used as upper bound
+     * by the compositor on tiling-friendly WMs only). */
+    (void) toplevel;
+    /* Best-effort: override_redirect windows on X11 honor max-size
+     * from gtk_window_set_geometry_hints (deprecated in GTK4). On
+     * Wayland the compositor controls sizing; we record the intent. */
+    host->width  = width  > 0 ? width  : host->width;
+    host->height = height > 0 ? height : host->height;
+    if (GDK_IS_X11_SURFACE(surface)) {
+        /* X11 path: use size hints */
+        GdkGeometry geo = {0};
+        geo.max_width  = width  > 0 ? width  : G_MAXINT;
+        geo.max_height = height > 0 ? height : G_MAXINT;
+        gdk_toplevel_set_size_hints(toplevel, &geo, GDK_HINT_MAX_SIZE);
+    }
+}
+
+void ks_gtk_host_set_position(KSGtkHost *host, int x, int y)
+{
+    if (!host || !host->window) return;
+    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    if (!surface) return;
+    /* X11: move_to is supported. Wayland: compositor controls position;
+     * the call is silently ignored there. */
+    if (GDK_IS_X11_SURFACE(surface)) {
+        gdk_x11_window_move_to_position(surface, x, y);
+    }
+}
+
+int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y)
+{
+    if (!host || !host->window || !out_x || !out_y) return 0;
+    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    if (!surface) return 0;
+    if (GDK_IS_X11_SURFACE(surface)) {
+        *out_x = gdk_x11_surface_get_x(surface);
+        *out_y = gdk_x11_surface_get_y(surface);
+        return 1;
+    }
+    return 0;
+}
+
+void ks_gtk_host_center(KSGtkHost *host)
+{
+    if (!host || !host->window) return;
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(host->window));
+    if (!display) return;
+    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    if (!surface) return;
+    /* Use primary monitor geometry if available. */
+    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    if (!monitor) {
+        /* Fall back to the monitor nearest the current window. */
+        GListModel *monitors = gdk_display_get_monitors(display);
+        if (monitors && g_list_model_get_n_items(monitors) > 0)
+            monitor = GDK_MONITOR(g_list_model_get_item(monitors, 0));
+    }
+    if (!monitor) return;
+    GdkRectangle work_area;
+    gdk_monitor_get_geometry(monitor, &work_area);
+    GtkWidget *widget = GTK_WIDGET(host->window);
+    int win_w = gtk_widget_get_width(widget);
+    int win_h = gtk_widget_get_height(widget);
+    if (win_w <= 0) win_w = host->width;
+    if (win_h <= 0) win_h = host->height;
+    int cx = work_area.x + (work_area.width  - win_w) / 2;
+    int cy = work_area.y + (work_area.height - win_h) / 2;
+    ks_gtk_host_set_position(host, cx, cy);
+}
+
+void ks_gtk_host_set_close_interceptor(KSGtkHost *host, int enabled)
+{
+    if (!host) return;
+    host->close_interceptor = enabled ? 1 : 0;
+}
+
+void ks_gtk_host_set_close_handler(KSGtkHost *host,
+                                    KSGtkCloseHandlerFn cb,
+                                    void *ctx)
+{
+    if (!host) return;
+    host->close_handler     = cb;
+    host->close_handler_ctx = ctx;
+}
+
+void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled)
+{
+    if (!host || !host->window) return;
+    gtk_window_set_keep_above(host->window, enabled ? TRUE : FALSE);
+}
+
+/* ----------------------------------------------------------------
+ * D-Bus logind PrepareForSleep (suspend / resume)
+ * ----------------------------------------------------------------
+ * Signal signature: PrepareForSleep(b going_to_sleep)
+ *   going_to_sleep = TRUE  → system is about to suspend
+ *   going_to_sleep = FALSE → system resumed from suspend
+ */
+
+static void on_prepare_for_sleep(GDBusConnection *conn,
+                                  const gchar     *sender_name,
+                                  const gchar     *object_path,
+                                  const gchar     *interface_name,
+                                  const gchar     *signal_name,
+                                  GVariant        *parameters,
+                                  gpointer         user_data)
+{
+    (void) conn; (void) sender_name; (void) object_path;
+    (void) interface_name; (void) signal_name;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host) return;
+
+    gboolean going_to_sleep = FALSE;
+    g_variant_get(parameters, "(b)", &going_to_sleep);
+
+    if (going_to_sleep) {
+        if (host->on_suspend) host->on_suspend(host->on_suspend_ctx);
+    } else {
+        if (host->on_resume)  host->on_resume(host->on_resume_ctx);
+    }
+}
+
+void ks_gtk_host_set_on_suspend(KSGtkHost *host,
+                                 KSGtkPowerFn cb,
+                                 void *ctx)
+{
+    if (!host) return;
+    host->on_suspend     = cb;
+    host->on_suspend_ctx = ctx;
+    ks_gtk_host_install_power_monitor(host);
+}
+
+void ks_gtk_host_set_on_resume(KSGtkHost *host,
+                                KSGtkPowerFn cb,
+                                void *ctx)
+{
+    if (!host) return;
+    host->on_resume     = cb;
+    host->on_resume_ctx = ctx;
+    ks_gtk_host_install_power_monitor(host);
+}
+
+void ks_gtk_host_install_power_monitor(KSGtkHost *host)
+{
+    if (!host) return;
+    if (host->dbus_signal_id != 0) return;  /* already installed */
+    if (!host->on_suspend && !host->on_resume) return;
+
+    GError *err = NULL;
+    GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+    if (!conn) {
+        if (err) {
+            fprintf(stderr, "[kalsae] D-Bus system bus unavailable: %s\n",
+                    err->message);
+            g_error_free(err);
+        }
+        return;
+    }
+    host->dbus_conn = conn;
+    host->dbus_signal_id = g_dbus_connection_signal_subscribe(
+        conn,
+        "org.freedesktop.login1",
+        "org.freedesktop.login1.Manager",
+        "PrepareForSleep",
+        "/org/freedesktop/login1",
+        NULL,               /* arg0 match */
+        G_DBUS_SIGNAL_FLAGS_NONE,
+        on_prepare_for_sleep,
+        host,
+        NULL);
+}
+
+void ks_gtk_host_remove_power_monitor(KSGtkHost *host)
+{
+    if (!host || host->dbus_signal_id == 0) return;
+    if (host->dbus_conn) {
+        g_dbus_connection_signal_unsubscribe(host->dbus_conn,
+                                              host->dbus_signal_id);
+        g_object_unref(host->dbus_conn);
+        host->dbus_conn = NULL;
+    }
+    host->dbus_signal_id = 0;
+}
+
+/* ----------------------------------------------------------------
+ * Print UI
+ * ---------------------------------------------------------------- */
+
+void ks_gtk_host_show_print_ui(KSGtkHost *host, int system_dialog)
+{
+    if (!host || !host->web_view) return;
+    WebKitPrintOperation *op = webkit_print_operation_new(host->web_view);
+    if (system_dialog) {
+        webkit_print_operation_run_dialog(
+            op, host->window ? GTK_WINDOW(host->window) : NULL);
+    } else {
+        webkit_print_operation_print(op);
+    }
+    g_object_unref(op);
+}
+
+/* ----------------------------------------------------------------
+ * Capture / Snapshot
+ * ---------------------------------------------------------------- */
+
+typedef struct {
+    KSGtkSnapshotResultFn cb;
+    void                 *ctx;
+} KSGtkSnapshotCtx;
+
+static void on_snapshot_done(GObject *source, GAsyncResult *res,
+                             gpointer user_data)
+{
+    KSGtkSnapshotCtx *sc = (KSGtkSnapshotCtx *) user_data;
+    GError *err = NULL;
+
+    GdkTexture *tex = webkit_web_view_snapshot_finish(
+        WEBKIT_WEB_VIEW(source), res, &err);
+
+    if (err || !tex) {
+        if (err) g_error_free(err);
+        sc->cb(NULL, 0, sc->ctx);
+        g_free(sc);
+        return;
+    }
+
+    /* GdkTexture → PNG bytes */
+    GBytes *bytes = gdk_texture_save_to_png_bytes(tex);
+    g_object_unref(tex);
+
+    if (!bytes) {
+        sc->cb(NULL, 0, sc->ctx);
+        g_free(sc);
+        return;
+    }
+
+    gsize len = 0;
+    const guint8 *data = (const guint8 *) g_bytes_get_data(bytes, &len);
+    sc->cb(data, (size_t) len, sc->ctx);
+
+    g_bytes_unref(bytes);
+    g_free(sc);
+}
+
+void ks_gtk_host_capture_preview(KSGtkHost *host,
+                                 int format,
+                                 KSGtkSnapshotResultFn cb,
+                                 void *ctx)
+{
+    (void) format; /* JPEG is not yet supported; always produces PNG */
+    if (!host || !host->web_view) {
+        cb(NULL, 0, ctx);
+        return;
+    }
+    KSGtkSnapshotCtx *sc = g_new0(KSGtkSnapshotCtx, 1);
+    sc->cb  = cb;
+    sc->ctx = ctx;
+    webkit_web_view_snapshot(
+        host->web_view,
+        WEBKIT_SNAPSHOT_REGION_FULL_DOCUMENT,
+        WEBKIT_SNAPSHOT_OPTIONS_NONE,
+        NULL,              /* cancellable */
+        on_snapshot_done,
+        sc);
+}
+
+/* ================================================================
+ * \uba54\ub274 (GMenuModel + GtkPopoverMenuBar / GtkPopoverMenu)
+ * ================================================================ */
+
+/* Per-action context, freed by GObject when the GSimpleAction is unref'd. */
+typedef struct {
+    KSGtkMenuActivateFn cb;
+    void               *ctx;
+    char               *action_id;
+} MenuActionCtx;
+
+static void on_menu_action_activate(GSimpleAction *action,
+                                     GVariant      *parameter,
+                                     gpointer       user_data)
+{
+    (void) action; (void) parameter;
+    MenuActionCtx *mac = (MenuActionCtx *) user_data;
+    if (mac && mac->cb) mac->cb(mac->action_id, mac->ctx);
+}
+
+static void free_menu_action_ctx(gpointer data)
+{
+    MenuActionCtx *mac = (MenuActionCtx *) data;
+    if (mac) { g_free(mac->action_id); g_free(mac); }
+}
+
+/* ----------------------------------------------------------------
+ * Flat-stream GMenu builder.
+ *
+ * Stack-based recursive descent over the KSMenuEntry flat array:
+ *   kind 0  action
+ *   kind 1  separator (appended as section with empty model)
+ *   kind 2  submenu_start
+ *   kind 3  submenu_end
+ *   kind 4  section_start
+ *   kind 5  section_end
+ *
+ * Returns the number of entries consumed (recursive calls consume
+ * their own entries from `*pos`).
+ * ---------------------------------------------------------------- */
+static void build_gmenu(GMenu              *parent,
+                         GSimpleActionGroup *group,
+                         const char         *prefix,   /* "menu" or "ctx" */
+                         const KSMenuEntry  *entries,
+                         int                 count,
+                         int                *pos,
+                         KSGtkMenuActivateFn cb,
+                         void               *cb_ctx)
+{
+    while (*pos < count) {
+        const KSMenuEntry *e = &entries[*pos];
+        (*pos)++;
+
+        switch (e->kind) {
+        case 0: { /* action */
+            const char *raw_id = e->action_id ? e->action_id : "";
+            /* Build a GAction-safe name by replacing bad chars. */
+            char *safe = g_strdup(raw_id);
+            for (char *p = safe; *p; p++) {
+                if (!g_ascii_isalnum(*p) && *p != '-' && *p != '.') *p = '_';
+            }
+            /* Avoid duplicate registration. */
+            if (!g_action_map_lookup_action(G_ACTION_MAP(group), safe)) {
+                GSimpleAction *act = g_simple_action_new(safe, NULL);
+                g_simple_action_set_enabled(act,
+                    e->enabled ? TRUE : FALSE);
+                MenuActionCtx *mac = g_new0(MenuActionCtx, 1);
+                mac->cb        = cb;
+                mac->ctx       = cb_ctx;
+                mac->action_id = g_strdup(raw_id);
+                g_signal_connect_data(act, "activate",
+                    G_CALLBACK(on_menu_action_activate),
+                    mac, (GClosureNotify) free_menu_action_ctx,
+                    G_CONNECT_DEFAULT);
+                g_action_map_add_action(G_ACTION_MAP(group), G_ACTION(act));
+                g_object_unref(act);
+            }
+            char *full = g_strdup_printf("%s.%s", prefix, safe);
+            g_menu_append(parent, e->label ? e->label : "", full);
+            g_free(full);
+            g_free(safe);
+            break;
+        }
+        case 1: { /* separator — append as an empty section */
+            GMenu *sep = g_menu_new();
+            g_menu_append_section(parent, NULL, G_MENU_MODEL(sep));
+            g_object_unref(sep);
+            break;
+        }
+        case 2: { /* submenu_start */
+            GMenu *sub = g_menu_new();
+            build_gmenu(sub, group, prefix, entries, count, pos, cb, cb_ctx);
+            g_menu_append_submenu(parent,
+                e->label ? e->label : "", G_MENU_MODEL(sub));
+            g_object_unref(sub);
+            break;
+        }
+        case 3: /* submenu_end — return to caller */
+            return;
+        case 4: { /* section_start */
+            GMenu *sec = g_menu_new();
+            build_gmenu(sec, group, prefix, entries, count, pos, cb, cb_ctx);
+            g_menu_append_section(parent,
+                (e->label && e->label[0]) ? e->label : NULL,
+                G_MENU_MODEL(sec));
+            g_object_unref(sec);
+            break;
+        }
+        case 5: /* section_end — return to caller */
+            return;
+        default:
+            break;
+        }
+    }
+}
+
+void ks_gtk_host_install_menu(KSGtkHost *host,
+                               const KSMenuEntry *entries,
+                               int entry_count,
+                               KSGtkMenuActivateFn cb,
+                               void *ctx)
+{
+    if (!host || !host->window) return;
+
+    host->menu_activate_cb  = cb;
+    host->menu_activate_ctx = ctx;
+
+    /* Remove existing menu bar + wrapping box if present. */
+    if (host->menu_bar) {
+        /* The vbox owns menu_bar and the webview widget.
+         * We need to detach the webview, destroy the vbox, then
+         * re-create the structure. */
+        GtkWidget *wv = GTK_WIDGET(host->web_view);
+        if (wv) g_object_ref(wv);
+        if (host->menu_vbox) {
+            gtk_window_set_child(host->window, NULL);
+            host->menu_bar  = NULL;
+            host->menu_vbox = NULL;
+        }
+        if (host->menu_actions) {
+            gtk_widget_remove_action_group(GTK_WIDGET(host->window), "menu");
+            g_object_unref(host->menu_actions);
+            host->menu_actions = NULL;
+        }
+        if (wv) g_object_unref(wv);
+    } else if (host->menu_actions) {
+        gtk_widget_remove_action_group(GTK_WIDGET(host->window), "menu");
+        g_object_unref(host->menu_actions);
+        host->menu_actions = NULL;
+    }
+
+    /* Build new GSimpleActionGroup + GMenu. */
+    GSimpleActionGroup *group = g_simple_action_group_new();
+    GMenu *model = g_menu_new();
+    int pos = 0;
+    build_gmenu(model, group, "menu", entries, entry_count, &pos, cb, ctx);
+
+    gtk_widget_insert_action_group(GTK_WIDGET(host->window), "menu",
+                                    G_ACTION_GROUP(group));
+    host->menu_actions = group; /* transfer ownership */
+
+    /* Create the menu bar widget. */
+    GtkWidget *bar = gtk_popover_menu_bar_new_from_model(
+        G_MENU_MODEL(model));
+    g_object_unref(model);
+
+    /* Wrap existing window child + bar in a vertical box. */
+    GtkWidget *current_child = gtk_window_get_child(host->window);
+    if (current_child) g_object_ref(current_child);
+    gtk_window_set_child(host->window, NULL);
+
+    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_append(GTK_BOX(vbox), bar);
+    if (current_child) {
+        gtk_widget_set_vexpand(current_child, TRUE);
+        gtk_box_append(GTK_BOX(vbox), current_child);
+        g_object_unref(current_child);
+    }
+    gtk_window_set_child(host->window, vbox);
+    host->menu_bar  = bar;
+    host->menu_vbox = vbox;
+}
+
+void ks_gtk_host_show_context_menu(KSGtkHost *host,
+                                    const KSMenuEntry *entries,
+                                    int entry_count,
+                                    int x, int y,
+                                    KSGtkMenuActivateFn cb,
+                                    void *ctx)
+{
+    if (!host || !host->window) return;
+
+    GSimpleActionGroup *group = g_simple_action_group_new();
+    GMenu *model = g_menu_new();
+    int pos = 0;
+    build_gmenu(model, group, "ctx", entries, entry_count, &pos, cb, ctx);
+
+    GtkWidget *parent = GTK_WIDGET(host->web_view
+                                    ? host->web_view
+                                    : host->window);
+    gtk_widget_insert_action_group(parent, "ctx", G_ACTION_GROUP(group));
+    g_object_unref(group);
+
+    GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(model));
+    g_object_unref(model);
+    gtk_widget_set_parent(popover, parent);
+    GdkRectangle rect = { x, y, 1, 1 };
+    gtk_popover_set_pointing_to(GTK_POPOVER(popover), &rect);
+    gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
+    gtk_popover_popup(GTK_POPOVER(popover));
+}
+

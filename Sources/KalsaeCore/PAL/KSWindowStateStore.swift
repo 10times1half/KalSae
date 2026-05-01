@@ -1,26 +1,26 @@
 public import Foundation
 
-/// Persistent record of a window's geometry between launches.
+/// 론치 간 윈돈우 기하학의 영속 레코드.
 ///
-/// Files live under `%APPDATA%\<identifier>\window-state.json` (Windows)
-/// or `~/Library/Application Support/<identifier>/window-state.json`
-/// (macOS) / `~/.config/<identifier>/window-state.json` (Linux).
+/// 파일 위치: Windows는 `%APPDATA%\<identifier>\window-state.json`,
+/// macOS는 `~/Library/Application Support/<identifier>/window-state.json`,
+/// Linux는 `~/.config/<identifier>/window-state.json`.
 ///
-/// The file holds a dictionary keyed by window label so multi-window
-/// apps can persist each window independently.
+/// 파일은 윈돈우 레이블로 키징된 사전을 보유하여
+/// 멀티 윈돈우 앱이 각 윈돈우를 독립적으로 저장할 수 있다.
 public struct KSPersistedWindowState: Codable, Sendable, Equatable {
-    /// Window left edge, in screen pixels (DPI-aware coordinates).
+    /// 윈돈우 왼쪽 가장자리, 화면 픽셀(공백 인식 춨표).
     public var x: Int
-    /// Window top edge, in screen pixels.
+    /// 윈돈우 위쪽 가장자리, 화면 픽셀.
     public var y: Int
-    /// Window width, in screen pixels.
+    /// 윈돈우 너비, 화면 픽셀.
     public var width: Int
-    /// Window height, in screen pixels.
+    /// 윈돈우 높이, 화면 픽셀.
     public var height: Int
-    /// `true` when the window was maximized at the time of save.
+    /// `true`이면 저장 시점에 윈돈우가 최대화되어 있었다.
     public var maximized: Bool
-    /// `true` when the window was full-screen at the time of save.
-    /// Restored apps re-enter full-screen post-show.
+    /// `true`이면 저장 시점에 윈돈우가 전체 화면이었다.
+    /// 복원된 앱은 표시 후 전체 화면으로 재진입한다.
     public var fullscreen: Bool
 
     public init(
@@ -36,23 +36,21 @@ public struct KSPersistedWindowState: Codable, Sendable, Equatable {
     }
 }
 
-/// File-backed store for `KSPersistedWindowState` entries. Atomic on
-/// writes, best-effort on reads (a corrupted or missing file simply
-/// yields `nil` for the requested label so the caller falls back to
-/// config defaults).
+/// `KSPersistedWindowState` 항목의 파일 기반 저장소. 쓰기는 원자적,
+/// 읽기는 최선 노력(파일이 손상되었거나 없는 경우 요청된 레이블에
+/// 대해 `nil`을 반환하여 호출자가 config 기본값으로 폴백하도록 한다).
 public struct KSWindowStateStore: Sendable {
-    /// Absolute path of the JSON file backing this store.
+    /// 이 저장소를 뒷받침하는 JSON 파일의 절대 경로.
     public let url: URL
 
     public init(url: URL) {
         self.url = url
     }
 
-    /// Convenience constructor: builds the canonical
-    /// `<appSupport>/<identifier>/window-state.json` URL and creates
-    /// the parent directory if missing. Errors fall back to a no-op
-    /// store rooted at the temp directory so the caller never crashes
-    /// on first launch.
+    /// 편의 생성자: 캐노니컹 `<appSupport>/<identifier>/window-state.json` URL을
+    /// 구성하고 없으면 상위 디렉토리를 생성한다. 오류 발생 시는 입시
+    /// 디렉토리에 루팅된 no-op 저장소로 폴백하여 첫 실행 시
+    /// 호출자가 크래시되지 않도록 한다.
     public static func standard(forIdentifier identifier: String) -> KSWindowStateStore {
         let fm = FileManager.default
         let base: URL
@@ -73,9 +71,8 @@ public struct KSWindowStateStore: Sendable {
             url: dir.appendingPathComponent("window-state.json"))
     }
 
-    /// Returns the persisted state for `label`, or `nil` when the file
-    /// does not exist, the JSON is malformed, or the label has no
-    /// matching entry.
+    /// `label`에 해당하는 저장된 상태를 반환하여, 파일이 없거나
+    /// JSON이 손상되었거나 해당 레이블에 대한 항목이 없으면 `nil`을 반환한다.
     public func load(label: String) -> KSPersistedWindowState? {
         guard let data = try? Data(contentsOf: url),
               let dict = try? JSONDecoder()
@@ -84,10 +81,9 @@ public struct KSWindowStateStore: Sendable {
         return dict[label]
     }
 
-    /// Persists `state` for `label`, merging into the existing dict.
-    /// Failures surface via the returned `Bool` — the host should not
-    /// crash if the disk is full or the directory has been deleted
-    /// between launches.
+    /// `label`에 대한 `state`를 기존 딕셔너리에 병합하여 저장한다.
+    /// 반환된 `Bool`로 실패 여부를 알 수 있다 — 디스크가 꽉 찼거나
+    /// 디렉토리가 실행 중 삭제된 경우에도 호스트는 크래시하지 않아야 한다.
     @discardableResult
     public func save(label: String, state: KSPersistedWindowState) -> Bool {
         var dict: [String: KSPersistedWindowState] = [:]

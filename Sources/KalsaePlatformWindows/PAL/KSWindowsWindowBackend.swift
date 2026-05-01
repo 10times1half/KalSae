@@ -16,7 +16,11 @@ public import Foundation
 /// initialization (each window owning its own `WebView2Host` and bridge)
 /// is the next milestone. All other operations are functional today.
 public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
-    public init() {}
+    private let registry: KSCommandRegistry
+
+    public init(registry: KSCommandRegistry = KSCommandRegistry()) {
+        self.registry = registry
+    }
 
     // MARK: - Resolution helpers
 
@@ -43,11 +47,48 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
     // MARK: - Lifecycle
 
     public func create(_ config: KSWindowConfig) async throws(KSError) -> KSWindowHandle {
-        // 멀티 윈도우 Win32 + WebView2는 다음 마일스톤. 지금은 단일
-        // "main" 윈도우만 `KSWindowsDemoHost`를 통해 생성한다.
-        throw KSError(
-            code: .unsupportedPlatform,
-            message: "KSWindowsWindowBackend.create lands together with multi-window WebView2 wiring. Use KSWindowsDemoHost to create the primary window in this release.")
+        let result: Result<KSWindowHandle, KSError> = await MainActor.run {
+            do {
+                try Win32App.shared.ensureCOMInitialized()
+
+                let window = try Win32Window(config: config)
+                guard let hwnd = window.hwnd else {
+                    throw KSError(code: .windowCreationFailed,
+                                  message: "Window has no HWND")
+                }
+
+                let webview = WebView2Host(label: config.label)
+                let bridge = WebView2Bridge(host: webview, registry: registry)
+                let bridgeRef = bridge
+                window.eventSink = { name, payload in
+                    try? bridgeRef.emit(event: name, payload: payload)
+                }
+
+                do {
+                    try webview.initialize(
+                        hwnd: hwnd,
+                        devtools: false,
+                        userDataFolderOverride: config.webview?.userDataPath)
+                    window.attach(host: webview)
+                    try bridge.install()
+                    applyVisualOptions(window: window, webview: webview, options: config.webview)
+                } catch {
+                    webview.dispose()
+                    window.close()
+                    throw error
+                }
+
+                guard let handle = handle(of: window) else {
+                    throw KSError(code: .windowCreationFailed,
+                                  message: "Failed to resolve handle for '\(config.label)'")
+                }
+                return .success(handle)
+            } catch {
+                return .failure(error as? KSError
+                    ?? KSError(code: .internal, message: "\(error)"))
+            }
+        }
+        return try result.unwrap()
     }
 
     public func close(_ handle: KSWindowHandle) async throws(KSError) {
@@ -88,11 +129,12 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
     }
 
     public func webView(for handle: KSWindowHandle) async throws(KSError) -> any KSWebViewBackend {
-        // 윈도우별 WebView 접근자는 멀티 윈도우 마일스톤에서 함께 구현된다
-        // — 위 `create(_:)` 참조.
-        throw KSError(
-            code: .unsupportedPlatform,
-            message: "KSWindowsWindowBackend.webView(for:) lands with multi-window WebView2 wiring.")
+        let host: WebView2Host? = try await queryMain(handle) { $0.webviewHost }
+        guard let host else {
+            throw KSError(code: .webviewInitFailed,
+                          message: "WebView not initialised for window '\(handle.label)'")
+        }
+        return host
     }
 
     public func all() async -> [KSWindowHandle] {
@@ -221,6 +263,27 @@ public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
     }
 
     // MARK: - Internals
+
+    @MainActor
+    private func applyVisualOptions(
+        window: Win32Window,
+        webview: WebView2Host,
+        options: KSWebViewOptions?
+    ) {
+        if let backdrop = options?.backdropType {
+            window.setSystemBackdrop(backdrop)
+        }
+        guard let options else { return }
+        if options.transparent {
+            webview.setDefaultBackgroundColor(KSColorRGBA(r: 0, g: 0, b: 0, a: 0))
+        }
+        if options.disablePinchZoom {
+            webview.setPinchZoomEnabled(false)
+        }
+        if let z = options.zoomFactor {
+            webview.setZoomFactor(z)
+        }
+    }
 
     private func runMain(
         _ handle: KSWindowHandle,

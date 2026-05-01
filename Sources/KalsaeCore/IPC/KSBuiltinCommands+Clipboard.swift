@@ -1,9 +1,9 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.clipboard.*` handlers — `readText`, `writeText`,
-    /// `clear`, `hasFormat`. (Image read/write is not yet wired through
-    /// JSON IPC; it's available via the Swift API only.)
+    /// `__ks.clipboard.*` 핸들러를 등록한다 — `readText`, `writeText`,
+    /// `clear`, `hasFormat`. (이미지 읽기/쓰기는 아직 JSON IPC에 연결되지
+    /// 않았으며, Swift API를 통해서만 사용 가능하다.)
     static func registerClipboardCommands(
         into registry: KSCommandRegistry,
         clipboard: any KSClipboardBackend

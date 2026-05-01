@@ -90,8 +90,8 @@ extern "C" int32_t KSWV2_SetDefaultContextMenusEnabled(
     return static_cast<int32_t>(hr);
 }
 
-/// WebView-level external-drop flag is a no-op stub kept for ABI compat;
-/// the real toggle lives on the controller (`ICoreWebView2Controller4`).
+/// WebView 레벨 외부 드롭 플래그는 ABI 호환성을 위한 빈 스텁이다;
+/// 실제 토글은 컨트롤러(`ICoreWebView2Controller4`)에 있다.
 extern "C" int32_t KSWV2_SetAllowExternalDrop(
     KSWV2WebView webview, int32_t allow)
 {

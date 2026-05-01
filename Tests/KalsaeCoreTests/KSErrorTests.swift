@@ -42,7 +42,7 @@ struct KSErrorTests {
         let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         #expect(obj?["sourceLocation"] == nil)
         #expect(obj?["file"] == nil)
-        // Round-trip drops sourceLocation but preserves code/message/data.
+        // 원래대로 직렬화/역직렬화해도 sourceLocation은 돈다, code/message/data는 보존된다.
         let decoded = try JSONDecoder().decode(KSError.self, from: data)
         #expect(decoded.code == err.code)
         #expect(decoded.message == err.message)

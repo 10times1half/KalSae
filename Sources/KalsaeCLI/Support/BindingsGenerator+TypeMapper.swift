@@ -1,12 +1,12 @@
 import Foundation
 
 extension KSBindingsGenerator {
-    /// Maps a Swift type spelling (e.g. `"[String: Int?]"`) to its
-    /// TypeScript equivalent (`"Record<string, number | null>"`).
+    /// Swift 타입 철자 (e.g. `"[String: Int?]"`)  를
+    /// TypeScript 등가물 (`"Record<string, number | null>"`)  로 매핑한다.
     ///
-    /// Unknown identifiers are passed through verbatim under the
-    /// assumption they are user types emitted in the same bindings file
-    /// or imported elsewhere by the consumer.
+    /// 알 수 없는 식별자는 동일 바인딩 파일에 발행되거나
+    /// 소비자가 다른 곳에서 임포트하는 사용자 타입이라고
+    /// 가정하고 같은 철자를 그대로 통과시킨다.
     static func mapType(_ swift: String) -> String {
         let t = swift.trimmingCharacters(in: .whitespaces)
         // 옵션널 설탕 표기: T?
@@ -80,7 +80,7 @@ extension KSBindingsGenerator {
         return s
     }
 
-    /// Splits `s` at the first top-level comma (depth 0 w.r.t. `<>`).
+    /// `<>` 기준으로 따진이 0인 첫 번째 최상위 콤마에서 `s`를 분할한다.
     static func topLevelSplit(_ s: String, on sep: Character) -> String.Index? {
         var depth = 0
         for i in s.indices {

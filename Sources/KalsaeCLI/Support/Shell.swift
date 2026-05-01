@@ -1,6 +1,6 @@
 public import Foundation
 
-// MARK: - Errors
+// MARK: - 오류
 
 public enum ShellError: Error, CustomStringConvertible {
     case commandNotFound(String)
@@ -14,9 +14,9 @@ public enum ShellError: Error, CustomStringConvertible {
     }
 }
 
-// MARK: - PATH lookup
+// MARK: - PATH 조회
 
-/// Returns the full URL of `name` found in the system PATH, or `nil`.
+/// 시스템 PATH에서 `name`의 전체 URL을 반환하거나, 없으면 `nil`을 반환한다.
 public func findExecutable(named name: String) -> URL? {
     let env  = ProcessInfo.processInfo.environment
     // Windows는 `Path`, 그 외 플랫폼은 `PATH`를 사용한다.
@@ -39,10 +39,10 @@ public func findExecutable(named name: String) -> URL? {
     return nil
 }
 
-// MARK: - Runner
+// MARK: - 실행기
 
-/// Runs `command` with `arguments`, inheriting stdio.  Waits for exit.
-/// Throws `ShellError` on missing executable or non-zero exit code.
+/// `command`를 `arguments`와 함께 실행하며 stdio를 상속받는다. 종료를 기다린다.
+/// 실행파일이 없거나 리턴 코드가 0이 아닐 때 `ShellError`를 던진다.
 @discardableResult
 public func shell(command: String, arguments: [String] = [], in directory: String? = nil) throws -> Int32 {
     guard let url = findExecutable(named: command) else {

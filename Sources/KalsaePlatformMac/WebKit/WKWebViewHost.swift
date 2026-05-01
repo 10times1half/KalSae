@@ -103,7 +103,7 @@ public final class WKWebViewHost: KSWebViewBackend {
         }
     }
 
-    // MARK: - Legacy bridge surface
+    // MARK: - 레거시 브리지 인터페이스
 
     public func onMessage(_ handler: @escaping @MainActor (String) -> Void) throws(KSError) {
         self.inbound = handler
@@ -139,7 +139,7 @@ public final class WKWebViewHost: KSWebViewBackend {
         userContentController.addUserScript(us)
     }
 
-    // MARK: - Extended PAL surface
+    // MARK: - 확장 PAL 인터페이스
 
     public func setBackgroundColor(_ color: NSColor) {
         webView.setValue(false, forKey: "drawsBackground")
@@ -208,7 +208,7 @@ public final class WKWebViewHost: KSWebViewBackend {
     }
 }
 
-// MARK: - ks:// scheme handler
+// MARK: - ks:// 스킴 핸들러
 
 @MainActor
 internal final class KSMacSchemeHandler: NSObject, WKURLSchemeHandler {
@@ -232,6 +232,8 @@ internal final class KSMacSchemeHandler: NSObject, WKURLSchemeHandler {
                 "Content-Type": asset.mimeType,
                 "Content-Length": String(asset.data.count),
                 "Content-Security-Policy": csp,
+                "X-Content-Type-Options": "nosniff",
+                "Referrer-Policy": "no-referrer",
             ]
             guard let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers) else {
                 task.didFailWithError(NSError(domain: "Kalsae", code: 500))

@@ -1,9 +1,9 @@
 import SwiftDiagnostics
 import SwiftSyntax
 
-/// Diagnostic categories emitted by `@KSCommand`. Surface as compiler
-/// errors with structured IDs so callers can suppress individually if
-/// needed and IDEs can route them to specific quick-fix providers.
+/// `@KSCommand`이 발행하는 진단 카테고리. 정구조화된 ID로
+/// 컴파일러 오류로 표면되어 필요시 개별적으로 억제할 수 있고
+/// IDE가 특정 빠른 수정 제공자로 라우팅할 수 있다.
 enum KSCommandDiagnostic: String, DiagnosticMessage {
     case notAFunction          = "ksmacro.not_a_function"
     case emptyName             = "ksmacro.empty_name"
@@ -39,7 +39,7 @@ enum KSCommandDiagnostic: String, DiagnosticMessage {
     }
 }
 
-/// Fix-its emitted by `@KSCommand`.
+/// `@KSCommand`이 발행하는 Fix-it.
 enum KSCommandFixIt: FixItMessage {
     case removeArgument
     case replaceVariadicWithArray

@@ -6,19 +6,19 @@ import FoundationNetworking
 extension KSBuiltinCommands {
     // MARK: - HTTP arg / result types
 
-    /// Tauri-compatible `__ks.http.fetch` argument shape.
+    /// Tauri 호환 `__ks.http.fetch` 인자 형태.
     struct HTTPFetchArg: Codable, Sendable {
         let url: String
         let method: String?
         let headers: [String: String]?
-        /// Either a UTF-8 string body (`bodyText`) or a base64-encoded
-        /// payload (`bodyBytes`). `bodyBytes` wins if both are set.
+        /// UTF-8 문자열 바디(`bodyText`) 또는 base64 인코딩된 페이로드
+        /// (`bodyBytes`) 중 하나. 둘 다 설정된 경우 `bodyBytes`가 우선한다.
         let bodyText: String?
         let bodyBytes: String?
-        /// Timeout in seconds. 0/nil → URLSession default (60s).
+        /// 타임아웃(초 단위). 0/nil → URLSession 기본값(60초).
         let timeoutSeconds: Double?
-        /// `"text"` (default), `"binary"` or `"json"`. Determines how
-        /// the response payload is encoded back to JS.
+        /// `"text"`(기본값), `"binary"`, `"json"` 중 하나. JS로 응답 페이로드를
+        /// 인코딩하는 방식을 결정한다.
         let responseType: String?
     }
 
@@ -26,23 +26,22 @@ extension KSBuiltinCommands {
         let status: Int
         let statusText: String
         let headers: [String: String]
-        /// Encoded according to `responseType`:
-        ///   * `"text"`   — UTF-8 string (lossy if response was binary).
-        ///   * `"binary"` — base64-encoded bytes.
-        ///   * `"json"`   — UTF-8 string (caller parses).
+        /// `responseType`에 따라 인코딩된다:
+        ///   * `"text"`   — UTF-8 문자열 (응답이 바이너리일 경우 손실 가능).
+        ///   * `"binary"` — base64 인코딩 바이트.
+        ///   * `"json"`   — UTF-8 문자열 (호출자가 파싱).
         let body: String
         let url: String
     }
 
-    /// Registers the `__ks.http.*` commands. The single `fetch` command
-    /// is the Tauri-compatible network primitive: every call goes
-    /// through `URLSession.shared` and is gated by `scope`.
+    /// `__ks.http.*` 명령을 등록한다. 단일 `fetch` 명령은 Tauri 호환
+    /// 네트워크 기본 요소로, 모든 호출은 `URLSession.shared`를 통해
+    /// `scope`에 의해 게이팅된다.
     ///
-    /// `scope` is **deny-by-default** (empty `allow` list rejects every
-    /// URL). The host app must add origins or URL prefixes it trusts.
-    /// Method gating uses `scope.permits(method:)`; default headers
-    /// declared in `scope.defaultHeaders` are merged into every request
-    /// (caller-supplied headers override).
+    /// `scope`는 **기본 거부** 방식이다(빈 `allow` 목록은 모든 URL을 거부).
+    /// 호스트 앱은 신뢰할 오리진 또는 URL 프리픽스를 추가해야 한다.
+    /// 메서드 게이팅은 `scope.permits(method:)`를 사용하고, `scope.defaultHeaders`에
+    /// 선언된 기본 헤더는 모든 요청에 병합된다(호출자 헤더가 우선).
     static func registerHTTPCommands(
         into registry: KSCommandRegistry,
         scope: KSHTTPScope,

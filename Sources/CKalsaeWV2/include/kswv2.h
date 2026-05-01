@@ -55,15 +55,15 @@ int32_t KSWV2_CreateEnvironment(
 
 void KSWV2_Env_Release(KSWV2Env env);
 
-/// Wraps `GetAvailableCoreWebView2BrowserVersionString`. The caller owns
-/// the returned `*version_out` and must release it with `CoTaskMemFree`.
-/// `version_out` may be NULL when only the success/failure HRESULT is
-/// needed. Returns 0 on success or a Win32 HRESULT on failure.
+/// `GetAvailableCoreWebView2BrowserVersionString`를 래픡한다.
+/// 반환된 `*version_out`은 호출자가 소유하며 `CoTaskMemFree`로
+/// 해제해야 한다. 성공/실패 HRESULT만 필요할 때는
+/// `version_out`을 NULL로 줌수 있다. 성공 시 0, 실패 시 Win32 HRESULT.
 int32_t KSWV2_GetAvailableBrowserVersion(
     const wchar_t *browser_executable_folder,   // NULL 가능
     wchar_t **version_out);                     // NULL 가능
 
-// MARK: - Controller / WebView
+// MARK: - 컨트롤러 / WebView
 
 int32_t KSWV2_CreateController(
     KSWV2Env env,
@@ -79,12 +79,12 @@ int32_t      KSWV2_Controller_SetVisible(
     KSWV2Controller controller, int32_t visible);
 int32_t      KSWV2_Controller_Close(KSWV2Controller controller);
 
-// MARK: - WebView operations
+// MARK: - WebView 작업
 
 int32_t KSWV2_Navigate(KSWV2WebView webview, const wchar_t *url);
 
-/// Installs a single message handler. Subsequent calls replace the previous
-/// handler. Returns S_OK (0) or an HRESULT on failure.
+/// 단일 메시지 핸들러를 설치한다. 이후 호출은 이전 핸들러를 대체한다.
+/// S_OK(0) 또는 실패 시 HRESULT를 반환한다.
 int32_t KSWV2_AddMessageHandler(
     KSWV2WebView webview, void *user, KSWV2MessageCB cb);
 
@@ -96,52 +96,51 @@ int32_t KSWV2_ExecuteScript(
 
 int32_t KSWV2_OpenDevTools(KSWV2WebView webview);
 
-/// Disables or enables DevTools and default context menu. Called before the
-/// first navigation to affect the initial document.
+/// DevTools와 기본 컨텍스트 메뉴를 비활성화하거나 활성화한다.
+/// 첫 번째 탐색 전에 호출해야 초기 문서에 적용된다.
 int32_t KSWV2_SetDevToolsEnabled(KSWV2WebView webview, int32_t enabled);
 
-/// Toggles the WebView2 default (browser-style) context menu. Independent
-/// from DevTools; setting `enabled = 0` only suppresses the menu and lets
-/// the page render its own. Returns 0 on success.
+/// WebView2 기본 (브라우저 스타일) 컨텍스트 메뉴를 토글한다.
+/// DevTools와 독립적; `enabled = 0`은 메뉴만 억제하고 페이지가
+/// 자체 메뉴를 렌더링할 수 있도록 한다. 성공 시 0을 반환한다.
 int32_t KSWV2_SetDefaultContextMenusEnabled(KSWV2WebView webview, int32_t enabled);
 
-/// Toggles the controller's `AllowExternalDrop` flag (Runtime 1.0.992+).
-/// When `allow == 0` the webview rejects file drops from outside the
-/// process, allowing the host's `IDropTarget` to receive them instead.
+/// 컨트롤러의 `AllowExternalDrop` 플래그를 토글한다 (Runtime 1.0.992+).
+/// `allow == 0`이면 웹뷰는 프로세스 외부 파일 드롭을 거부하고
+/// 호스트의 `IDropTarget`이 대신 수신할 수 있게 한다.
 int32_t KSWV2_Controller_SetAllowExternalDrop(KSWV2Controller controller, int32_t allow);
 
-// MARK: - Visual / runtime tuning (Phase C2)
+// MARK: - 비주얼 / 런타임 튜닝 (Phase C2)
 //
 // 모두 controller / settings가 이미 생성된 다음에 호출해야 한다.
 // 일치하는 인터페이스(`ICoreWebView2Controller2`,
 // `ICoreWebView2Settings5`)를 지원하지 않는 런타임 버전에서는
 // `E_NOINTERFACE`를 그대로 돌려준다 — 호출자는 무시할 수 있다.
 
-/// Sets the controller's default background colour. ARGB byte order:
-/// `a` is the alpha channel, `r/g/b` the colour channels (each 0..255).
-/// Pass `a = 0` plus an `KSWindowConfig.transparent` window to make the
-/// WebView itself transparent. Requires `ICoreWebView2Controller2`.
+/// 컨트롤러의 기본 배경 색을 설정한다. ARGB 바이트 순서:
+/// `a`는 알파 쳬널, `r/g/b`는 색상 쳬널 (각 0..255).
+/// `a = 0` + `KSWindowConfig.transparent` 윈도우를 조합하면
+/// WebView 자체를 투명하게 만들 수 있다. `ICoreWebView2Controller2`이 필요하다.
 int32_t KSWV2_Controller_SetDefaultBackgroundColor(
     KSWV2Controller controller,
     uint8_t a, uint8_t r, uint8_t g, uint8_t b);
 
-/// Sets the controller-level zoom factor. `1.0` is identity; the legal
-/// range mirrors the WebView2 SDK (≈ 0.25..5.0).
+/// 컨트롤러 레벨 즐 배율을 설정한다. `1.0`은 원본; 허용
+/// 범위는 WebView2 SDK를 따른다 (≈ 0.25..5.0).
 int32_t KSWV2_Controller_SetZoomFactor(
     KSWV2Controller controller, double factor);
 
-/// Reads the current controller zoom factor. On success returns 0 and
-/// writes the factor into `*out_factor`. Returns `E_POINTER` if either
-/// argument is NULL.
+/// 현재 컨트롤러 술 배율을 읽는다. 성공 시 0을 반환하고
+/// 배율을 `*out_factor`에 쓴다. 두 인수 중 하나라도 NULL이면
+/// `E_POINTER`를 반환한다.
 int32_t KSWV2_Controller_GetZoomFactor(
     KSWV2Controller controller, double *out_factor);
 
-/// Toggles `IsPinchZoomEnabled` on the WebView2 settings. Requires
-/// `ICoreWebView2Settings5`. Returns 0 on success or `E_NOINTERFACE`
-/// on older runtimes.
+/// WebView2 설정에서 `IsPinchZoomEnabled`를 토글한다.
+/// `ICoreWebView2Settings5`가 필요하다. 성공 시 0, 이전 런타임에서는 `E_NOINTERFACE`.
 int32_t KSWV2_SetPinchZoomEnabled(KSWV2WebView webview, int32_t enabled);
 
-// MARK: - Print (Phase D1)
+// MARK: - 인쇄 (Phase D1)
 //
 // `kind`: 0 = browser-style print preview (COREWEBVIEW2_PRINT_DIALOG_KIND_BROWSER),
 //         1 = OS system print dialog (COREWEBVIEW2_PRINT_DIALOG_KIND_SYSTEM).
@@ -149,7 +148,7 @@ int32_t KSWV2_SetPinchZoomEnabled(KSWV2WebView webview, int32_t enabled);
 // 않으면 E_NOINTERFACE를 돌려준다.
 int32_t KSWV2_ShowPrintUI(KSWV2WebView webview, int32_t kind);
 
-// MARK: - Capture preview (Phase D3)
+// MARK: - 캐펠첫 프리븷 (Phase D3)
 //
 // `format`: 0 = PNG, 1 = JPEG.
 // 콜백은 UI 스레드에서 1회 발생한다. `data`/`len`은 콜백 동안만 유효하며
@@ -173,20 +172,20 @@ int32_t KSWV2_CapturePreview(
 // 스레딩: 콜백은 UI 스레드에서 발생한다(OLE 드롭 매니저가 일반 메시지
 // 큐를 통해 디스패치). `paths`와 내부 문자열의 수명은 콜백 동안만 유효하다.
 
-/// Drop event kinds reported by `KSWV2DropCB`.
+/// `KSWV2DropCB`가 보고하는 드롭 이벤트 종류.
 typedef enum {
     KSWV2_DropEvent_Enter = 0,   // 드롭 가능한 데이터가 HWND에 진입
     KSWV2_DropEvent_Leave = 1,   // 드래그 취소 또는 이탈
     KSWV2_DropEvent_Drop  = 2,   // 사용자가 놓음 — paths는 드롭 내용을 내제
 } KSWV2DropEventKind;
 
-/// Drop callback. `paths` is an array of `paths_count` UTF-16 strings.
-/// On `KSWV2_DropEvent_Leave` the array is NULL and the count is zero.
-/// `screen_x` / `screen_y` are screen coordinates (POINTL).
+/// 드롭 콜백. `paths`는 `paths_count` 개의 UTF-16 문자열 배열이다.
+/// `KSWV2_DropEvent_Leave`시 배열은 NULL이고 개수는 0이다.
+/// `screen_x` / `screen_y`는 화면 좌표(POINTL)이다.
 ///
-/// Return 0 to ACCEPT (DROPEFFECT_COPY), non-zero to REJECT
-/// (DROPEFFECT_NONE). The accept/reject decision made on `Enter` is
-/// remembered for subsequent `DragOver` ticks.
+/// 0을 반환하면 수락 (DROPEFFECT_COPY), 비제로이면 거부
+/// (DROPEFFECT_NONE)다. `Enter`에서 내린 수락/거부 결정은
+/// 이후 `DragOver` 틱에도 유지된다.
 typedef int32_t (*KSWV2DropCB)(
     void *user,
     int32_t event_kind,
@@ -195,18 +194,16 @@ typedef int32_t (*KSWV2DropCB)(
     const wchar_t **paths,
     int32_t paths_count);
 
-/// Calls `OleInitialize` for the calling thread (idempotent). Required
-/// before `RegisterDragDrop`. Returns 0 on S_OK / S_FALSE, otherwise the
-/// HRESULT from `OleInitialize`.
+/// 호출 스레드에 `OleInitialize`를 호출한다 (멱등성). `RegisterDragDrop` 전에
+/// 필요하다. S_OK / S_FALSE 시 0, 그 외에는 `OleInitialize`의 HRESULT.
 int32_t KSWV2_OleInitializeOnce(void);
 
-/// Installs an `IDropTarget` on `hwnd`. Replaces any drop target
-/// previously installed via this function. Returns 0 (S_OK) on success.
+/// `hwnd`에 `IDropTarget`을 설치한다. 이전에 이 함수로 설치된
+/// 드롭 타겟을 대체한다. 성공 시 0 (S_OK)을 반환한다.
 int32_t KSWV2_RegisterDropTarget(
     void *hwnd, void *user, KSWV2DropCB cb);
 
-/// Revokes the drop target on `hwnd`. Safe to call on an HWND with no
-/// registered target.
+/// `hwnd`의 드롭 타겟을 해제한다. 등록된 타겟이 없는 HWND에도 안전하게 호출할 수 있다.
 void KSWV2_RevokeDropTarget(void *hwnd);
 
 int32_t KSWV2_AddScriptToExecuteOnDocumentCreated(

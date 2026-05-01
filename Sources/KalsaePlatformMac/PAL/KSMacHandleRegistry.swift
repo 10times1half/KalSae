@@ -2,11 +2,10 @@
 internal import AppKit
 public import KalsaeCore
 
-/// Resolves a `KSWindowHandle` to a macOS `NSWindow`.
+/// `KSWindowHandle`을 macOS `NSWindow`로 변환한다.
 ///
-/// Used by every PAL backend (dialogs, menus, tray, shell) to find the
-/// parent window that anchors a modal call. Mirrors `KSWin32HandleRegistry`
-/// on the Windows side.
+/// 다이얼로그, 메뉴, 트레이, 셸 등 모든 PAL 백엔드가 모달 호출의
+/// 부모 윈도우를 찾는 데 사용한다. Windows 측의 `KSWin32HandleRegistry`와 대응한다.
 @MainActor
 internal final class KSMacHandleRegistry {
     static let shared = KSMacHandleRegistry()

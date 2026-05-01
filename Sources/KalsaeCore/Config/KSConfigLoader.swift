@@ -1,8 +1,8 @@
 ﻿public import Foundation
 
-/// Loads and validates `kalsae.json`.
+/// `kalsae.json`을 로드하고 검증한다.
 public enum KSConfigLoader {
-    /// Loads the config from the given URL.
+    /// 주어진 URL에서 설정을 로드한다.
     public static func load(from url: URL) throws(KSError) -> KSConfig {
         let data: Data
         do {
@@ -13,13 +13,13 @@ public enum KSConfigLoader {
         return try decode(data)
     }
 
-    /// Loads the config from `kalsae.json` inside `projectRoot`.
+    /// `projectRoot` 내부의 `kalsae.json`에서 설정을 로드한다.
     public static func load(projectRoot: URL) throws(KSError) -> KSConfig {
         let url = projectRoot.appendingPathComponent("kalsae.json")
         return try load(from: url)
     }
 
-    /// Decodes raw JSON bytes.
+    /// 원시 JSON 바이트를 디코딩한다.
     public static func decode(_ data: Data) throws(KSError) -> KSConfig {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .useDefaultKeys
@@ -28,7 +28,7 @@ public enum KSConfigLoader {
             try validate(config)
             return config
         } catch let error as KSError {
-            // `validate(_:)`가 던진 KSError는 코드/페이로드 보존을 위해 그대로 전달.
+            // 혼합 throw 사이트 (JSONDecoder + validate(KSError)) — AGENTS §4 참조
             throw error
         } catch let DecodingError.keyNotFound(key, ctx) {
             throw KSError.configInvalid(
@@ -46,7 +46,7 @@ public enum KSConfigLoader {
         }
     }
 
-    /// Semantic validation beyond what Codable enforces.
+    /// Codable이 강제하는 것 이상의 의미론적 검증.
     public static func validate(_ config: KSConfig) throws(KSError) {
         guard !config.app.name.isEmpty else {
             throw KSError.configInvalid("app.name must not be empty")

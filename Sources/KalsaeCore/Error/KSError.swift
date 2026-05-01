@@ -1,21 +1,21 @@
 ﻿import Foundation
 internal import Logging
 
-/// Unified, Codable error type used throughout Kalsae.
+/// Kalsae 전체에서 사용되는 통합 Codable 오류 타입.
 ///
-/// Every `@KSCommand` function is declared as `async throws(KSError)` so that
-/// errors can be serialized verbatim to the JS frontend as
-/// `{ code, message, data? }`.
+/// 모든 `@KSCommand` 함수는 `async throws(KSError)`로 선언되어
+/// 오류가 `{ code, message, data? }`로 JS 프론트엔드에 그대로
+/// 직렬화될 수 있다.
 public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConvertible {
-    /// Stable, machine-readable identifier. Frontend code may switch on this.
+    /// 안정적인 기계 판독 가능 식별자. 프론트엔드 코드가 이를 기준으로 분기할 수 있다.
     public let code: Code
-    /// Human-readable description, safe to surface to end users in dev builds.
+    /// 사람이 읽을 수 있는 설명, 개발 빌드에서 최종 사용자에게 표시해도 안전하다.
     public let message: String
-    /// Optional structured payload (e.g. path, underlying OS error code).
+    /// 선택적 구조화된 페이로드 (예: 경로, 기본 OS 오류 코드).
     public let data: Payload?
-    /// Optional source-location capture. Populated by convenience
-    /// constructors that take `#file/#line/#function`. Excluded from
-    /// JSON wire output so it never leaks into release telemetry.
+    /// 선택적 소스 위치 캡처. `#file/#line/#function`을 받는 편의
+    /// 생성자에서 채워진다. JSON 와이어 출력에서 제외되어 릴리스
+    /// 텔레메트리로 누출되지 않는다.
     public let sourceLocation: SourceLocation?
 
     public init(code: Code,
@@ -35,7 +35,7 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         return "KSError(\(code.rawValue)): \(message)"
     }
 
-    // MARK: - Wire codable
+    // MARK: - 와이어 코딩 가능
 
     private enum CodingKeys: String, CodingKey {
         case code, message, data
@@ -57,10 +57,10 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         // sourceLocation은 재현성 일관성과 안전을 위해 압축하지 않는다.
     }
 
-    // MARK: - Source location
+    // MARK: - 소스 위치
 
-    /// Capture of where a `KSError` was constructed. Useful for logs and
-    /// debugging; never serialized over the wire.
+    /// `KSError`이 생성된 위치의 캡처. 로그 및 디버깅에 유용;
+    /// 와이어를 통해 직렬화되지 않는다.
     public struct SourceLocation: Sendable, Equatable, CustomStringConvertible {
         public let file: String
         public let line: Int
@@ -77,7 +77,7 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         public var description: String { "\(file):\(line) (\(function))" }
     }
 
-    // MARK: - Code
+    // MARK: - 오류 코드
 
     public enum Code: String, Codable, Sendable, CaseIterable {
         // 구성 / 부트스트랩
@@ -97,6 +97,7 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         case commandDecodeFailed
         case commandEncodeFailed
         case commandExecutionFailed
+        case rateLimited
 
         // 파일 시스템 / 보안
         case fsScopeDenied
@@ -114,9 +115,9 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         case `internal`
     }
 
-    // MARK: - Payload
+    // MARK: - 페이로드
 
-    /// A small, JSON-friendly value used for `data`.
+    /// `data`에 사용되는 작은 JSON 친화적 값.
     public enum Payload: Codable, Sendable, Equatable {
         case string(String)
         case int(Int)
@@ -161,7 +162,7 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
     }
 }
 
-// MARK: - Convenience constructors
+// MARK: - 편의 생성자
 
 extension KSError {
     public static func configNotFound(_ path: String) -> KSError {
@@ -188,6 +189,12 @@ extension KSError {
                 data: .string(name))
     }
 
+    public static func rateLimited(_ name: String) -> KSError {
+        KSError(code: .rateLimited,
+                message: "Command '\(name)' rate-limit exceeded.",
+                data: .string(name))
+    }
+
     public static func commandNotFound(_ name: String) -> KSError {
         KSError(code: .commandNotFound,
                 message: "Command '\(name)' is not registered.",
@@ -203,7 +210,7 @@ extension KSError {
                     file: file, line: line, function: function))
     }
 
-    /// Source-located convenience for clipboard decode failures.
+    /// 클립보드 디코딩 실패를 위한 소스 위치 편의 생성자.
     public static func clipboardDecodeFailed(_ reason: String,
                                              file: String = #fileID,
                                              line: Int = #line,
@@ -214,7 +221,7 @@ extension KSError {
                     file: file, line: line, function: function))
     }
 
-    /// Source-located convenience for shell-out failures (CLI Packager etc.).
+    /// 셸 실행 실패(CLI Packager 등)를 위한 소스 위치 편의 생성자.
     public static func shellInvocationFailed(
         command: String,
         exitCode: Int32,

@@ -1,6 +1,6 @@
 public import Foundation
 
-/// Native dialogs. All calls are modal relative to `parent` when provided.
+/// 네이티브 다이얼로그. `parent`가 제공되면 모든 호출은 해당 창에 대해 모달이다.
 public protocol KSDialogBackend: Sendable {
     func openFile(options: KSOpenFileOptions,
                   parent: KSWindowHandle?) async throws(KSError) -> [URL]

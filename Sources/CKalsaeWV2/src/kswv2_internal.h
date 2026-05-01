@@ -21,8 +21,8 @@
 #include <WebView2.h>
 #include "kswv2.h"
 
-// Opaque-handle reinterpret casts. Centralised so a single TU change
-// (e.g. switching the typedef) doesn't require touching every site.
+// 불투명 핸들 reinterpret_cast. typedef 변경 등 한 곳만 수정하면
+// 모든 사용 위치를 바꿀 필요가 없도록 여기에 집중 관리한다.
 
 static inline ICoreWebView2Environment *KSWV2_AsEnv(KSWV2Env p) {
     return reinterpret_cast<ICoreWebView2Environment *>(p);

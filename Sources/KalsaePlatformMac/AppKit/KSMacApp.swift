@@ -3,9 +3,9 @@ internal import AppKit
 internal import Logging
 internal import KalsaeCore
 
-/// Wraps the process-global `NSApplication` so that the rest of the mac
-/// backend doesn't have to know about its lifecycle. Mirrors
-/// `Win32App` on the Windows side.
+/// 프로세스 전역 `NSApplication`을 감싸 mac 백엔드의 나머지 부분이
+/// 라이프사이클을 알 필요가 없도록 한다. Windows 측
+/// `Win32App`과 대응한다.
 @MainActor
 internal final class KSMacApp {
     static let shared = KSMacApp()
@@ -15,8 +15,7 @@ internal final class KSMacApp {
 
     private init() {}
 
-    /// Must be called on the main thread before any window / webview is
-    /// created. Idempotent.
+    /// 윈도우/웹뷰 생성 전에 메인 스레드에서 반드시 한 번 호출해야 한다. 멱등성 보장.
     func ensureInitialized() {
         guard !initialized else { return }
         // `NSApplication.shared`를 참조하면 공유 앱이 지연 생성된다.
@@ -29,8 +28,8 @@ internal final class KSMacApp {
         log.info("NSApplication initialized with activation policy .regular")
     }
 
-    /// Blocks the calling thread running the AppKit event loop until
-    /// `NSApplication.terminate(_:)` is invoked.
+    /// `NSApplication.terminate(_:)`가 호출될 때까지 AppKit 이벤트 루프를
+    /// 실행하며 호출 스레드를 블록한다.
     func runMessageLoop() -> Int32 {
         let app = NSApplication.shared
         app.activate(ignoringOtherApps: true)

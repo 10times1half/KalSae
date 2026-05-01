@@ -2,9 +2,9 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
 
-/// Implementation of `@KSCommand`. Attaches to a function declaration and
-/// emits a peer function that registers the original into a
-/// `KSCommandRegistry`, handling JSON encode/decode and error translation.
+/// `@KSCommand` 구현체. 함수 선언에 첨부되어 JSON 인코딩/디코딩 및
+/// 오류 변환을 처리하면서 원본을 `KSCommandRegistry`에
+/// 등록하는 피어 함수를 발행한다.
 public struct KSCommandMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -199,7 +199,7 @@ public struct KSCommandMacro: PeerMacro {
         ]
     }
 
-    /// Pulls a string-literal argument out of `@KSCommand("foo")`.
+    /// `@KSCommand("foo")`에서 문자열 리터럴 인자를 추출한다.
     private static func registryName(from node: AttributeSyntax) -> String? {
         guard case let .argumentList(args) = node.arguments else { return nil }
         guard let first = args.first else { return nil }
@@ -219,12 +219,11 @@ public struct KSCommandMacro: PeerMacro {
         return s
     }
 
-    // MARK: - Validation helpers
+    // MARK: - 검증 헬퍼
 
-    /// Inspects the function signature and reports any constructs that
-    /// would either prevent expansion or trip up the type checker once
-    /// the macro has emitted its peer. Returns `false` when an error
-    /// was emitted, in which case the macro should bail out.
+    /// 함수 시그니처를 검사하여 확장을 방해하거나 매크로가 피어를 발행한 이후
+    /// 타입 체커를 곤란하게 만드는 구조를 리포트한다.
+    /// 오류가 발행된 경우 `false`를 반환하며, 매크로는 중단해야 한다.
     private static func validateParameters(
         fn: FunctionDeclSyntax,
         in context: some MacroExpansionContext
@@ -262,9 +261,9 @@ public struct KSCommandMacro: PeerMacro {
         return ok
     }
 
-    /// Validates the `@KSCommand(...)` attribute argument list. The
-    /// attribute accepts either no arguments or a single string-literal
-    /// name; anything else is rejected with a fix-it.
+    /// `@KSCommand(...)` 속성 인수 목록을 검증한다.
+    /// 속성은 인수없거나 단일 문자열 리터럴 이름만 허용하며,
+    /// 그 외는 fix-it과 함께 거부된다.
     private static func validateAttributeArguments(
         node: AttributeSyntax,
         in context: some MacroExpansionContext

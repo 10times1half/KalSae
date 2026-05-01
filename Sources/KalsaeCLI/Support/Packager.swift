@@ -1,10 +1,9 @@
 public import Foundation
 
-/// Builds a redistributable application bundle by combining the SwiftPM
-/// build product with frontend assets, configuration, an external
-/// manifest, and (depending on the WebView2 policy) the WebView2
-/// Evergreen bootstrapper or the fixed-version runtime under
-/// `Vendor/WebView2/runtimes/`.
+/// SwiftPM 빌드 결과물, 프론트엔드 에셋, 설정, 외부
+/// 매니페스트를 합쳐 재배포 가능한 앱 번들을 빌드한다.
+/// WebView2 정쇝에 따라 WebView2 Evergreen 부트스트래퍼 또는
+/// `Vendor/WebView2/runtimes/` 하위의 고정 버전 런타임을 포함한다.
 public enum KSPackager {
     public enum WebView2Policy: String, Sendable, CaseIterable {
         case evergreen
@@ -87,8 +86,8 @@ public enum KSPackager {
         }
     }
 
-    /// Performs the package build. Mostly file copying, manifest
-    /// generation, and (optionally) zip creation. Throws on I/O failures.
+    /// 패키지 빌드를 실행한다. 주로 파일 복사, 매니페스트 생성,
+    /// 및 (선택적) zip 생성으로 구성된다. I/O 실패 시 에러를 던진다.
     public static func run(_ opts: Options) throws -> Report {
         let fm = FileManager.default
         var warnings: [String] = []
@@ -225,8 +224,8 @@ public enum KSPackager {
         """
     }
 
-    /// Coerces semver-ish strings to the strict 4-part `a.b.c.d` form
-    /// required by Win32 `assemblyIdentity` / VERSIONINFO.
+    /// Win32 `assemblyIdentity` / VERSIONINFO에 필요한
+    /// 엄격한 4-파트 `a.b.c.d` 형식으로 semver식 문자열을 정규화한다.
     private static func normalizedVersion(_ raw: String) -> String {
         // 앞도 점 구분 숫자 접두만 취하고 프리릴리즈 접미사는 제거한다.
         let head = raw.split(separator: "-", maxSplits: 1,
@@ -236,7 +235,7 @@ public enum KSPackager {
         return parts.prefix(4).map(String.init).joined(separator: ".")
     }
 
-    // MARK: - WebView2 payload helpers
+    // MARK: - WebView2 페이로드 헬퍼
 
     private static func copyBootstrapper(opts: Options,
                                          warnings: inout [String]) throws {
@@ -270,7 +269,7 @@ public enum KSPackager {
         runtime["browserExecutableFolder"] = "webview2-runtime"
     }
 
-    // MARK: - File-system helpers
+    // MARK: - 파일시스템 헬퍼
 
     private static func copyTree(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
@@ -282,18 +281,17 @@ public enum KSPackager {
         try fm.copyItem(at: src, to: dst)
     }
 
-    /// Creates a `.zip` archive of `dir`. Uses PowerShell’s built-in
-    /// `[System.IO.Compression.ZipFile]` (universally available on
-    /// Windows 10+) so we don’t need a third-party zip dependency.
+    /// `dir`의 `.zip` 아카이브를 생성한다. Windows 10+에서 기본 제공되는
+    /// PowerShell의 `[System.IO.Compression.ZipFile]`을 사용하므로
+    /// 서드파티 zip 의존성이 필요 없다.
     ///
-    /// **Security:** Source and destination paths are passed via
-    /// environment variables (never string-interpolated into the
-    /// PowerShell command) so that paths containing single quotes,
-    /// backticks, dollar signs, or other PowerShell meta-characters
-    /// cannot break the script or inject commands.
+    /// **보안:** 소스와 대상 경로는 환경 변수를 통해 전달되며
+    /// (PowerShell 명령에 문자열 보간으로 삽입되지 않음)
+    /// 담은 따옴표, 백틱, 달러, 기타 PowerShell 메타 문자가 포함된
+    /// 경로가 스크립트를 깨거나 명령을 주입할 수 없다.
     ///
-    /// Internal so tests can target it directly without going through
-    /// the full `run(_:)` packaging pipeline.
+    /// 테스트가 전체 `run(_:)` 파이프라인 없이 직접 타겟할 수 있도록
+    /// internal로 유지한다.
     internal static func createZip(from dir: URL, to archive: URL) throws {
         let p = Self.makeZipProcess(from: dir, to: archive)
         try p.run()

@@ -3,7 +3,7 @@ internal import AppKit
 public import KalsaeCore
 public import Foundation
 
-/// macOS implementation of `KSClipboardBackend` using NSPasteboard.
+/// NSPasteboard를 사용하는 `KSClipboardBackend`의 macOS 구현체.
 public struct KSMacClipboardBackend: KSClipboardBackend, Sendable {
     public init() {}
 

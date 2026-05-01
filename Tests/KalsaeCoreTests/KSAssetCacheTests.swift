@@ -102,12 +102,12 @@ struct KSAssetCacheTests {
         _ = try r.resolve(path: "r1.txt")  // [r1, r0]
         _ = try r.resolve(path: "r0.txt")  // [r0, r1] (r0 promoted)
         _ = try r.resolve(path: "r2.txt")  // [r2, r0] — r1 evicted
-        // r0 still hits, r1 is gone.
+        // r0은 여전히 적중, r1은 추출됨.
         _ = try r.resolve(path: "r0.txt")
         _ = try r.resolve(path: "r1.txt")
         let s = cache.stats()
         #expect(s.entries == 2)
-        // misses: r0(1) + r1(1) + r2(1) + r1-after-evict(1) = 4
+        // misses: r0(1) + r1(1) + r2(1) + r1-추출후(1) = 4
         #expect(s.misses == 4)
     }
 

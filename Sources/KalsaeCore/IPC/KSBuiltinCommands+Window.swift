@@ -1,8 +1,8 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.window.*` handlers — minimize, maximize, restore,
-    /// fullscreen, position/size queries and mutations, theme, etc.
+    /// `__ks.window.*` 핸들러를 등록한다 — minimize, maximize, restore,
+    /// fullscreen, 위치/크기 조회 및 변경, 테마 등.
     static func registerWindowCommands(
         into registry: KSCommandRegistry,
         windows: any KSWindowBackend,

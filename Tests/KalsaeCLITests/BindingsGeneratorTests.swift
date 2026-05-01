@@ -43,7 +43,7 @@ struct BindingsTypeMapperTests {
     func dictionarySugar() {
         #expect(KSBindingsGenerator.mapType("[String: Int]") == "Record<string, number>")
         #expect(KSBindingsGenerator.mapType("[String: Bool?]") == "Record<string, boolean | null>")
-        // Non-String keys preserved as comment for visibility
+        // 가시성을 위한 주석으로 비-String 키 보존
         let mapped = KSBindingsGenerator.mapType("[Int: String]")
         #expect(mapped.hasPrefix("Record<string, string>"))
         #expect(mapped.contains("keys: Int"))

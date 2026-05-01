@@ -1,30 +1,27 @@
 public import Foundation
 
-/// Operating-system shell integration: opening URLs in the user's default
-/// browser, revealing files in the OS file manager, moving items to the
-/// trash, etc.
+/// 운영체제 셸 통합: 기본 브라우저에서 URL 열기, OS 파일 관리자에서
+/// 파일 표시, 휴지통으로 이동 등.
 ///
-/// Methods on this protocol carry side effects on the user's machine and
-/// should be gated by the application's `security.shell` allowlist (added
-/// in a follow-up phase). All implementations are expected to run any
-/// native UI work on the platform UI thread.
+/// 이 프로토콜의 메서드는 사용자 머신에 부작용을 수반하므로
+/// 애플리케이션의 `security.shell` 허용 목록으로 게이팅해야 한다.
+/// 모든 구현은 네이티브 UI 작업을 플랫폼 UI 스레드에서 실행해야 한다.
 public protocol KSShellBackend: Sendable {
-    /// Opens `url` with the system's registered default handler.
-    /// Equivalent to Wails' `BrowserOpenURL`.
+    /// `url`을 시스템에 등록된 기본 핸들러로 연다.
+    /// Wails의 `BrowserOpenURL`에 해당한다.
     func openExternal(_ url: URL) async throws(KSError)
 
-    /// Reveals `url` (a file or folder) in the platform's file manager
-    /// (Explorer / Finder / Files), selecting the item when possible.
+    /// `url`(파일 또는 폴더)을 플랫폼 파일 관리자(Explorer / Finder / Files)에서
+    /// 표시하고 가능한 경우 항목을 선택한다.
     func showItemInFolder(_ url: URL) async throws(KSError)
 
-    /// Moves `url` to the platform Recycle Bin / Trash. The file system
-    /// entry is not permanently deleted.
+    /// `url`을 플랫폼의 휴지통으로 이동한다. 파일 시스템 항목은 영구
+    /// 삭제되지 않는다.
     func moveToTrash(_ url: URL) async throws(KSError)
 }
 
-/// Default no-op implementations: every method throws
-/// `unsupportedPlatform`. Platforms opt in by overriding individual
-/// methods.
+/// 기본 no-op 구현: 모든 메서드는 `unsupportedPlatform`을 던진다.
+/// 플랫폼은 개별 메서드를 재정의하여 기능을 추가한다.
 extension KSShellBackend {
     @inline(__always)
     private func _unsupportedThrow(_ op: String) throws(KSError) -> Never {

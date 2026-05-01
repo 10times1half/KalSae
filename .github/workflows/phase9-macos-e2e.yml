@@ -19,14 +19,17 @@ jobs:
       - name: Show Swift Version
         run: swift --version
 
+      - name: Lint Code Format
+        run: swift format lint --strict --recursive Sources Tests 2>&1 ; if [ $? -ne 0 ]; then exit 1; fi
+
       - name: Resolve Dependencies
         run: swift package resolve
 
       - name: Build Demo Product
-        run: swift build --product kalsae-demo
+        run: swift build --product kalsae-demo -Xswiftc -warnings-as-errors
 
       - name: Run Unit Tests
-        run: swift test
+        run: swift test -Xswiftc -warnings-as-errors
 
       - name: CLI Smoke Test
         run: swift run kalsae --help

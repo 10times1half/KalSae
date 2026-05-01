@@ -1,24 +1,25 @@
 ﻿public import Foundation
 
-/// Generates the file tree for a freshly scaffolded Kalsae project.
+/// 새로 스케폴딩된 Kalsae 프로젝트의 파일 트리를 생성한다.
 ///
-/// Templates live as resource files under `Support/Templates/*.tmpl` so
-/// non-Swift authors (e.g. translators, designers) can edit them
-/// without recompiling, and the source files round-trip cleanly through
-/// editors that would otherwise mangle escaped strings.
+/// 템플릿은 `Support/Templates/*.tmpl` 리소스 파일로 저장되어
+/// Swift가 아닌 저자 (e.g. 번역가, 디자이너)들이
+/// 재컴파일 없이 편집할 수 있으며, 소스 파일이 이스케이프된 문자열을
+/// 왜곡시킬 수 있는 편집기를 통해서도 정상적으로 라운드트립한다.
 public struct ProjectTemplate {
     public let name: String
 
     public init(name: String) { self.name = name }
 
-    /// Reverse-DNS bundle identifier derived from the project name.
+    /// 프로젝트 이름에서 유도된 역 DNS 번들 식별자.
     private var identifier: String {
         let slug = name.lowercased().filter { $0.isLetter || $0.isNumber || $0 == "-" }
         return "dev.kalsae.\(slug)"
     }
 
-    /// Errors specific to template materialisation. Surface as the
-    /// caller's `Error` (typically `ValidationError` once boxed).
+    /// 템플릿 구체화에 특하는 오류.
+    /// 호출자의 `Error` (일반적으로 상자에 담기면 `ValidationError`)로
+    /// 표면된다.
     public enum TemplateError: Error, CustomStringConvertible {
         case missingResource(String)
 
@@ -31,7 +32,7 @@ public struct ProjectTemplate {
         }
     }
 
-    // MARK: - Write
+    // MARK: - 쓰기
 
     public func write(to directory: URL) throws {
         let fm = FileManager.default
@@ -63,22 +64,21 @@ public struct ProjectTemplate {
         }
     }
 
-    // MARK: - Substitution
+    // MARK: - 치환
 
-    /// Replaces `{{NAME}}` and `{{IDENTIFIER}}` placeholders. New
-    /// placeholders should be added here and documented alongside the
-    /// template files — this is the only place the CLI substitutes.
+    /// `{{NAME}}`와 `{{IDENTIFIER}}` 플레이스홀더를 안췀 문자열로 대체한다.
+    /// 새 플레이스홀더는 템플릿 파일과 함께 여기에 문서화해야 한다 —
+    /// CLI가 치환하는 유일한 장소다.
     func substitute(_ raw: String) -> String {
         raw
             .replacingOccurrences(of: "{{NAME}}", with: name)
             .replacingOccurrences(of: "{{IDENTIFIER}}", with: identifier)
     }
 
-    // MARK: - Resource loading
+    // MARK: - 리소스 로딩
 
-    /// Loads `<resource>.<ext>` from this module's resource bundle.
-    /// `internal` so unit tests can exercise the same lookup path
-    /// the runtime uses.
+    /// 이 모듈의 리소스 번들에서 `<resource>.<ext>`를 로드한다.
+    /// 런타임이 사용하는 동일한 름업 경로를 단위 테스트가 확인할 수 있도록 `internal`로 유지한다.
     static func loadTemplate(resource: String, ext: String) throws -> String {
         guard let url = Bundle.module.url(
             forResource: resource, withExtension: ext, subdirectory: "Templates")

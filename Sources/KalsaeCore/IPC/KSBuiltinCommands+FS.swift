@@ -13,12 +13,12 @@ extension KSBuiltinCommands {
     }
     struct FSWriteBytesArg: Codable, Sendable {
         let path: String
-        /// Base64-encoded payload.
+        /// Base64 인코딩된 페이로드.
         let contents: String
         let append: Bool?
     }
     struct FSReadBytesResult: Codable, Sendable {
-        /// Base64-encoded payload.
+        /// Base64 인코딩된 페이로드.
         let contents: String
         let length: Int
     }
@@ -66,23 +66,22 @@ extension KSBuiltinCommands {
         let overwrite: Bool?
     }
 
-    /// Registers the `__ks.fs.*` command family. Every command validates
-    /// its target path against `scope` after `$APP` / `$HOME` / `$DOCS` /
-    /// `$TEMP` placeholder expansion. Operations on paths that fall
-    /// outside the allow list throw `.fsScopeDenied`.
+    /// `__ks.fs.*` 명령 패밀리를 등록한다. 모든 명령은 `$APP` / `$HOME` /
+    /// `$DOCS` / `$TEMP` 플레이스홀더 확장 후 `scope`에 대해 대상 경로를
+    /// 검증한다. 허용 목록 외부의 경로에 대한 작업은 `.fsScopeDenied`를 던진다.
     ///
-    /// The handler set is intentionally Tauri-compatible:
-    ///   * `__ks.fs.readTextFile`   — UTF-8 text
-    ///   * `__ks.fs.readFile`       — base64 bytes
-    ///   * `__ks.fs.writeTextFile`  — UTF-8 text (append optional)
-    ///   * `__ks.fs.writeFile`      — base64 bytes (append optional)
-    ///   * `__ks.fs.exists`         — file-or-dir existence check
-    ///   * `__ks.fs.metadata`       — size, mtime, ctime, kind
-    ///   * `__ks.fs.readDir`        — directory listing (optional recursive)
+    /// 핸들러 집합은 의도적으로 Tauri 호환으로 설계되었다:
+    ///   * `__ks.fs.readTextFile`   — UTF-8 텍스트 읽기
+    ///   * `__ks.fs.readFile`       — base64 바이트 읽기
+    ///   * `__ks.fs.writeTextFile`  — UTF-8 텍스트 쓰기 (추가 선택)
+    ///   * `__ks.fs.writeFile`      — base64 바이트 쓰기 (추가 선택)
+    ///   * `__ks.fs.exists`         — 파일/디렉토리 존재 확인
+    ///   * `__ks.fs.metadata`       — 크기, 수정 시간, 생성 시간, 종류
+    ///   * `__ks.fs.readDir`        — 디렉토리 목록 (재귀 선택)
     ///   * `__ks.fs.createDir`      — mkdir / mkdir -p
-    ///   * `__ks.fs.remove`         — file or dir (recursive optional)
-    ///   * `__ks.fs.rename`         — atomic move within filesystem
-    ///   * `__ks.fs.copyFile`       — file copy with optional overwrite
+    ///   * `__ks.fs.remove`         — 파일 또는 디렉토리 삭제 (재귀 선택)
+    ///   * `__ks.fs.rename`         — 파일 시스템 내 원자적 이동
+    ///   * `__ks.fs.copyFile`       — 덮어쓰기 선택 가능한 파일 복사
     static func registerFSCommands(
         into registry: KSCommandRegistry,
         scope: KSFSScope,

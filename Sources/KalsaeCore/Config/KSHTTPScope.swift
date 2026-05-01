@@ -1,31 +1,28 @@
 import Foundation
 
-/// Permission scope for the `__ks.http.*` command family. Tauri-style.
+/// `__ks.http.*` 명령군에 대한 권한 범위. Tauri 스타일.
 ///
-/// Network access is **deny-by-default**: when the scope is left at its
-/// initial empty value, `__ks.http.fetch` rejects every request with
-/// `KSError(.commandNotAllowed)`. Apps must explicitly add origins or
-/// URL prefixes they trust.
+/// 네트워크 접근은 **기본 거부**다. 범위를 초기의 빈 값으로 두면
+/// `__ks.http.fetch`는 모든 요청을 `KSError(.commandNotAllowed)`로 거부한다.
+/// 앱은 신뢰하는 오리진 또는 URL 접두사를 명시적으로 추가해야 한다.
 ///
-/// Allow / deny entries support the following match shapes (case-insensitive,
-/// applied in order: `deny` first, `allow` second):
-///   * Exact origin: `"https://api.example.com"` — host + scheme + port match.
-///   * Origin wildcard: `"https://*.example.com"` — any sub-host of `example.com`.
-///   * Full URL prefix: `"https://api.example.com/v1/"` — only requests whose
-///     URL starts with this prefix are admitted.
-///   * Scheme-only: `"https://*"` — any URL using the given scheme.
+/// 허용/거부 항목은 다음 매칭 형태를 지원한다(대소문자 무시,
+/// 적용 순서는 `deny` 먼저, `allow` 나중).
+///   * 정확한 오리진: `"https://api.example.com"` — 호스트 + 스킴 + 포트가 모두 일치.
+///   * 오리진 와일드카드: `"https://*.example.com"` — `example.com`의 모든 서브호스트.
+///   * 전체 URL 접두사: `"https://api.example.com/v1/"` — URL이 이 접두사로 시작할 때만 허용.
+///   * 스킴 전용: `"https://*"` — 해당 스킴을 사용하는 모든 URL.
 public struct KSHTTPScope: Codable, Sendable, Equatable {
-    /// Origin / URL prefix patterns that are allowed.
+    /// 허용되는 오리진/URL 접두사 패턴.
     public var allow: [String]
-    /// Patterns that are denied. Evaluated **before** `allow`.
+    /// 거부되는 패턴. `allow`보다 **먼저** 평가된다.
     public var deny: [String]
-    /// HTTP methods permitted. Empty array means "no methods", `nil`
-    /// means "no method restriction beyond `allow`/`deny`". Comparison
-    /// is case-insensitive.
+    /// 허용되는 HTTP 메서드.
+    /// 빈 배열은 "메서드 허용 없음", `nil`은 "`allow`/`deny` 외 추가 메서드 제한 없음"을 뜻한다.
+    /// 비교는 대소문자를 구분하지 않는다.
     public var methods: [String]?
-    /// Headers automatically attached to every request issued through
-    /// `__ks.http.fetch`. Useful for an `Authorization` header backed by
-    /// an OS keychain that the JS side should not see.
+    /// `__ks.http.fetch`를 통해 나가는 모든 요청에 자동으로 붙는 헤더.
+    /// JS 측이 보면 안 되는 OS 키체인 기반 `Authorization` 헤더 등에 유용하다.
     public var defaultHeaders: [String: String]
 
     public init(
@@ -53,9 +50,9 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
             [String: String].self, forKey: .defaultHeaders) ?? [:]
     }
 
-    /// Returns `true` when `urlString` is admitted by this scope.
-    /// Matching is case-insensitive on scheme and host but case-sensitive
-    /// on path. An invalid URL never matches.
+    /// `urlString`이 이 범위에 의해 허용되면 `true`를 반환한다.
+    /// 스킴과 호스트는 대소문자를 구분하지 않지만, 경로는 대소문자를 구분한다.
+    /// 잘못된 URL은 절대 매칭되지 않는다.
     public func permits(urlString: String) -> Bool {
         guard let url = URL(string: urlString) else { return false }
         let normalized = Self.normalize(url: url)
@@ -72,17 +69,17 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
         return false
     }
 
-    /// Returns `true` when `method` is permitted (case-insensitive).
+    /// `method`가 허용되면 `true`를 반환한다(대소문자 무시).
     public func permits(method: String) -> Bool {
         guard let methods else { return true }
         let lower = method.lowercased()
         return methods.contains { $0.lowercased() == lower }
     }
 
-    // MARK: - Internal matching
+    // MARK: - 내부 매칭
 
-    /// Lowercases the scheme + host components and rebuilds a comparable
-    /// string. Path stays case-sensitive.
+    /// 스킴과 호스트를 소문자로 정규화한 뒤 비교 가능한 문자열을 다시 만든다.
+    /// 경로는 대소문자를 유지한다.
     private static func normalize(url: URL) -> String {
         var s = ""
         if let scheme = url.scheme { s += scheme.lowercased() + "://" }
@@ -127,8 +124,8 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
         return ("/" + inputPath).hasPrefix("/" + patternPath)
     }
 
-    /// Splits `"host[:port]/path"` (or `"host[:port]"`) into `(host, path)`.
-    /// `path` excludes the leading slash.
+    /// `"host[:port]/path"`(또는 `"host[:port]"`)를 `(host, path)`로 분리한다.
+    /// `path`에는 선행 슬래시가 포함되지 않는다.
     private static func splitHostPath(_ s: String) -> (host: String, path: String) {
         guard let slash = s.firstIndex(of: "/") else { return (s, "") }
         let host = String(s[..<slash])
@@ -136,9 +133,8 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
         return (host, path)
     }
 
-    /// Matches a host pattern against an input host. Supports the
-    /// shapes documented in the type doc: exact, `*`, `*.foo.com`,
-    /// `host:port`.
+    /// 호스트 패턴을 입력 호스트와 비교한다.
+    /// 타입 문서에 설명한 exact, `*`, `*.foo.com`, `host:port` 형태를 지원한다.
     private static func hostMatches(pattern: String, input: String) -> Bool {
         if pattern == "*" { return true }
         if pattern.hasPrefix("*.") {
@@ -155,22 +151,19 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
     }
 }
 
-/// Permission scope for WebView download events
-/// (`ICoreWebView2.add_DownloadStarting`).
+/// WebView 다운로드 이벤트(`ICoreWebView2.add_DownloadStarting`)에 대한 권한 범위.
 ///
-/// When `enabled` is `false` (default — deny-by-default), all download
-/// attempts initiated by the page are cancelled. When `true`, downloads
-/// are admitted; the WebView2 default download UI handles them unless
-/// the host registers its own progress sink.
+/// `enabled`가 `false`이면(기본값, 즉 기본 거부) 페이지가 시작한 모든 다운로드를 취소한다.
+/// `true`이면 다운로드를 허용하며, 호스트가 별도 진행 상황 싱크를 등록하지 않는 한
+/// WebView2 기본 다운로드 UI가 이를 처리한다.
 public struct KSDownloadScope: Codable, Sendable, Equatable {
-    /// Whether downloads are permitted at all.
+    /// 다운로드 자체를 허용할지 여부.
     public var enabled: Bool
-    /// Optional default directory (absolute path or `$HOME` / `$DOCS`
-    /// / `$APP` / `$TEMP` placeholder). When set, the runtime suggests
-    /// this directory to the WebView2 download UI.
+    /// 선택적 기본 디렉터리(절대 경로 또는 `$HOME` / `$DOCS` / `$APP` / `$TEMP` 플레이스홀더).
+    /// 설정되면 런타임이 이 디렉터리를 WebView2 다운로드 UI에 제안한다.
     public var defaultDirectory: String?
-    /// When `true`, the OS-native "save as" dialog is shown for every
-    /// download. When `false`, the WebView2 default UI is used.
+    /// `true`이면 모든 다운로드마다 OS 네이티브 "다른 이름으로 저장" 대화상자를 띄운다.
+    /// `false`이면 WebView2 기본 UI를 사용한다.
     public var promptUser: Bool
 
     public init(
@@ -195,23 +188,21 @@ public struct KSDownloadScope: Codable, Sendable, Equatable {
     }
 }
 
-/// Origin allowlist enforced on every WebView navigation
-/// (`ICoreWebView2.add_NavigationStarting`).
+/// 모든 WebView 네비게이션(`ICoreWebView2.add_NavigationStarting`)에 강제되는
+/// 오리진 허용 목록.
 ///
-/// When the allow list is empty, navigation is unrestricted (legacy
-/// behaviour — does not break existing apps). When at least one entry
-/// is declared, navigation to URLs outside the list is cancelled and
-/// re-routed through `KSShellBackend.openExternal` if the scheme is
-/// permitted, otherwise dropped.
+/// 허용 목록이 비어 있으면 네비게이션은 제한되지 않는다(기존 앱을 깨지 않는 레거시 동작).
+/// 하나 이상 선언되면 목록 밖 URL로의 이동은 취소되고,
+/// 스킴이 허용된 경우 `KSShellBackend.openExternal`로 우회하며,
+/// 그렇지 않으면 버린다.
 ///
-/// Patterns use the same shapes as `KSHTTPScope`.
+/// 패턴 형태는 `KSHTTPScope`와 동일하다.
 public struct KSNavigationScope: Codable, Sendable, Equatable {
-    /// Origin / URL prefix patterns admitted for in-window navigation.
+    /// 창 내부 네비게이션에 허용되는 오리진/URL 접두사 패턴.
     public var allow: [String]
-    /// When `true` (default), URLs that fail the `allow` test but use a
-    /// scheme permitted by `KSShellScope.openExternalSchemes` are opened
-    /// via the OS default handler. When `false`, the navigation is
-    /// silently dropped.
+    /// `true`이면(기본값) `allow` 검사를 통과하지 못했지만
+    /// `KSShellScope.openExternalSchemes`에서 허용된 스킴을 쓰는 URL은
+    /// OS 기본 핸들러로 연다. `false`이면 네비게이션을 조용히 버린다.
     public var openExternallyOnReject: Bool
 
     public init(allow: [String] = [], openExternallyOnReject: Bool = true) {
@@ -230,9 +221,9 @@ public struct KSNavigationScope: Codable, Sendable, Equatable {
             Bool.self, forKey: .openExternallyOnReject) ?? true
     }
 
-    /// Returns `true` when navigation to `urlString` should be admitted
-    /// inside the window. An empty `allow` list returns `true` (no
-    /// restriction). Reuses `KSHTTPScope`'s match logic.
+    /// `urlString`로의 네비게이션이 창 내부에서 허용되어야 하면 `true`를 반환한다.
+    /// `allow` 목록이 비어 있으면 `true`를 반환한다(제한 없음).
+    /// `KSHTTPScope`의 매칭 로직을 재사용한다.
     public func permits(urlString: String) -> Bool {
         if allow.isEmpty { return true }
         let stub = KSHTTPScope(allow: allow)

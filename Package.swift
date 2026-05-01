@@ -1,5 +1,5 @@
 // swift-tools-version:6.0
-// Kalsae - Swift Backend + Web Frontend = Beautiful Desktop Apps
+// Kalsae — Swift 백엔드 + 웹 프론트엔드 = 아름다운 데스크톱 앱
 // License: MIT
 import PackageDescription
 import CompilerPluginSupport
@@ -7,9 +7,10 @@ import CompilerPluginSupport
 let package = Package(
     name: "Kalsae",
     platforms: [
-        .macOS(.v14)
-        // Windows 10 1809+ and Linux (GTK4 + WebKitGTK 6.0) are implicit;
-        // SwiftPM`s `platforms:` only declares Apple platform minimums.
+        .macOS(.v14),
+        .iOS(.v16)
+        // Windows 10 1809+ 및 Linux (GTK4 + WebKitGTK 6.0)는 암시적;
+        // SwiftPM의 `platforms:`는 Apple 플랫폼 최소 버전만 선언한다.
     ],
     products: [
         .library(name: "Kalsae", targets: ["Kalsae"]),
@@ -21,7 +22,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", from: "1.6.0"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git",
-                 from: "600.0.0"),
+                 from: "603.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git",
                  from: "1.3.0"),
     ],
@@ -122,12 +123,28 @@ let package = Package(
             swiftSettings: commonSwiftSettings
         ),
         .target(
+            name: "KalsaePlatformIOS",
+            dependencies: ["KalsaeCore"],
+            path: "Sources/KalsaePlatformIOS",
+            swiftSettings: commonSwiftSettings
+        ),
+        .target(
+            name: "KalsaePlatformAndroid",
+            dependencies: ["KalsaeCore"],
+            path: "Sources/KalsaePlatformAndroid",
+            swiftSettings: commonSwiftSettings
+        ),
+        .target(
             name: "Kalsae",
             dependencies: [
                 "KalsaeCore",
                 "KalsaeMacros",
                 .target(name: "KalsaePlatformMac",
                         condition: .when(platforms: [.macOS])),
+            .target(name: "KalsaePlatformIOS",
+                condition: .when(platforms: [.iOS])),
+            .target(name: "KalsaePlatformAndroid",
+                condition: .when(platforms: [.android])),
                 .target(name: "KalsaePlatformWindows",
                         condition: .when(platforms: [.windows])),
                 .target(name: "KalsaePlatformLinux",
@@ -212,6 +229,59 @@ let package = Package(
                          package: "swift-syntax"),
             ],
             path: "Tests/KalsaeMacrosTests"
+        ),
+        .testTarget(
+            name: "KalsaePlatformWindowsTests",
+            dependencies: [
+                "KalsaePlatformWindows",
+                "KalsaeCore",
+            ],
+            path: "Tests/KalsaePlatformWindowsTests",
+            swiftSettings: commonSwiftSettings,
+            linkerSettings: [
+                .linkedLibrary("user32", .when(platforms: [.windows])),
+                .linkedLibrary("gdi32", .when(platforms: [.windows])),
+                .linkedLibrary("ole32", .when(platforms: [.windows])),
+                .linkedLibrary("comctl32", .when(platforms: [.windows])),
+                .linkedLibrary("dwmapi", .when(platforms: [.windows])),
+            ]
+        ),
+        .testTarget(
+            name: "KalsaePlatformMacTests",
+            dependencies: [
+                "KalsaePlatformMac",
+                "KalsaeCore",
+            ],
+            path: "Tests/KalsaePlatformMacTests",
+            swiftSettings: commonSwiftSettings
+        ),
+        .testTarget(
+            name: "KalsaePlatformLinuxTests",
+            dependencies: [
+                "KalsaePlatformLinux",
+                "KalsaeCore",
+            ],
+            path: "Tests/KalsaePlatformLinuxTests",
+            swiftSettings: commonSwiftSettings
+        ),
+        .testTarget(
+            name: "KalsaePlatformIOSTests",
+            dependencies: [
+                "KalsaePlatformIOS",
+                "KalsaeCore",
+            ],
+            path: "Tests/KalsaePlatformIOSTests",
+            swiftSettings: commonSwiftSettings
+        ),
+        .testTarget(
+            name: "KalsaePlatformAndroidTests",
+            dependencies: [
+                .target(name: "KalsaePlatformAndroid",
+                        condition: .when(platforms: [.android])),
+                "KalsaeCore",
+            ],
+            path: "Tests/KalsaePlatformAndroidTests",
+            swiftSettings: commonSwiftSettings
         ),
     ]
 )

@@ -1,6 +1,6 @@
 ﻿import ArgumentParser
 
-/// Root command. Dispatches to `new`, `dev`, or `build` subcommands.
+/// 루트 명령. `new`, `dev`, `build` 서브명령으로 디스패치한다.
 @main
 struct KalsaeCLI: ParsableCommand {
     static let configuration = CommandConfiguration(

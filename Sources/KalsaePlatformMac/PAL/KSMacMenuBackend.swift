@@ -3,7 +3,7 @@ internal import AppKit
 public import KalsaeCore
 public import Foundation
 
-/// macOS implementation of `KSMenuBackend`.
+/// `KSMenuBackend`의 macOS 구현체.
 public struct KSMacMenuBackend: KSMenuBackend, Sendable {
     public init() {}
 

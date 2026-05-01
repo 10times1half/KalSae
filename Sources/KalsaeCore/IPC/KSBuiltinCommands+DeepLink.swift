@@ -11,14 +11,14 @@ extension KSBuiltinCommands {
         let urls: [String]
     }
 
-    /// Registers `__ks.deepLink.*` commands. The configured `schemes`
-    /// list gates `register`/`unregister`/`isRegistered`: callers cannot
-    /// register schemes that are not in the config (`commandNotAllowed`).
+    /// `__ks.deepLink.*` 명령을 등록한다. 설정된 `schemes` 목록은
+    /// `register`/`unregister`/`isRegistered`를 게이팅한다: 호출자는
+    /// 구성에 없는 스킴을 등록할 수 없다(`commandNotAllowed`).
     ///
-    /// `currentLaunchURLs` returns the URLs that the current process
-    /// was launched with (after first-run + subsequent `relayed`
-    /// instances forward their args). The host is responsible for
-    /// emitting `__ks.deepLink.openURL` events when new URLs arrive.
+    /// `currentLaunchURLs`는 현재 프로세스가 시작될 때 전달된 URL을
+    /// 반환한다(첫 실행 후 이후 `relayed` 인스턴스가 인자를 전달하는
+    /// 경우도 포함). 새 URL이 도착하면 호스트가 `__ks.deepLink.openURL`
+    /// 이벤트를 방출할 책임이 있다.
     static func registerDeepLinkCommands(
         into registry: KSCommandRegistry,
         backend: any KSDeepLinkBackend,

@@ -90,6 +90,9 @@ extern "C" int32_t KSWV2_AddWebResourceRequestedHandler(
                 headers += L"Content-Security-Policy: ";
                 headers += csp;
             }
+            if (!headers.empty()) headers += L"\r\n";
+            headers += L"X-Content-Type-Options: nosniff";
+            headers += L"\r\nReferrer-Policy: no-referrer";
             if (ct) free(ct);
             if (csp) free(csp);
 

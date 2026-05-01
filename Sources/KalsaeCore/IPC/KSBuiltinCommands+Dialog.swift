@@ -1,20 +1,20 @@
 import Foundation
 
 extension KSBuiltinCommands {
-    /// Registers `__ks.dialog.*` handlers — `openFile`, `saveFile`,
-    /// `selectFolder`, `message`. The PAL `KSDialogBackend` already
-    /// owns modal lifecycle, so this layer is a thin Codable adapter.
+    /// `__ks.dialog.*` 핸들러를 등록한다 — `openFile`, `saveFile`,
+    /// `selectFolder`, `message`. 모달 생명주기는 PAL `KSDialogBackend`가
+    /// 담당하므로 이 레이어는 얇은 Codable 어댑터에 불과하다.
     ///
-    /// JS shape (path-as-string for portability across platforms):
+    /// JS 형태 (플랫폼 간 이식성을 위해 경로를 문자열로 전달):
     /// ```
     /// __KS_.dialog.openFile({ filters, allowsMultiple? }) → { paths: [String] }
     /// __KS_.dialog.saveFile({ defaultFileName?, filters }) → { path: String? }
     /// __KS_.dialog.selectFolder({ title?, defaultDirectory? }) → { path: String? }
     /// __KS_.dialog.message({ kind, title, message, buttons }) → { result }
     /// ```
-    /// `defaultDirectory` (input) accepts a path string. Returned `path`
-    /// fields are POSIX-style on POSIX platforms and Windows-native
-    /// (e.g. `C:\\Users\\…`) on Windows.
+    /// `defaultDirectory`(입력)은 경로 문자열을 받는다. 반환되는 `path` 필드는
+    /// POSIX 플랫폼에서는 POSIX 스타일, Windows에서는 네이티브 스타일
+    /// (예: `C:\\Users\\…`)이다.
     static func registerDialogCommands(
         into registry: KSCommandRegistry,
         dialogs: any KSDialogBackend,

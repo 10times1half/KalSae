@@ -3,7 +3,7 @@ import Foundation
 import KalsaeCLICore
 import KalsaeCore
 
-/// `kalsae build` — build the project for release (or debug with `--debug`).
+/// `kalsae build` — 릴리스 (또는 `--debug`일 때는 디버그) 옵션으로 프로젝트를 빌드한다.
 struct BuildCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "build",
@@ -141,10 +141,10 @@ struct BuildCommand: ParsableCommand {
         let executableName: String
     }
 
-    /// Parses just the metadata used by packaging out of `Kalsae.json`.
-    /// Reuses `KalsaeCore.KSConfig` so the schema stays in lockstep with
-    /// the runtime loader — no more drift between the manual CLI parser
-    /// and the engine's view of the world.
+    /// `Kalsae.json`에서 패키징에 필요한 메타데이터만 파싱한다.
+    /// `KalsaeCore.KSConfig`를 재사용하여 스키마가 런타임 로더와
+    /// 동기화된 상태를 유지한다 — 수동 CLI 파서와
+    /// 엔진 관점 사이의 관점 차이가 없다.
     private func parseAppInfo(configURL: URL) throws -> AppInfo {
         let config: KSConfig
         do {

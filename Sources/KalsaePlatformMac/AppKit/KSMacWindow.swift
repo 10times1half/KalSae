@@ -53,7 +53,7 @@ public final class KSMacWindow {
         DispatchQueue.main.async { MainActor.assumeIsolated { block() } }
     }
 
-    // MARK: - Window operations
+    // MARK: - 윈도우 조작
 
     public func show() { nsWindow.makeKeyAndOrderFront(nil) }
     public func hide() { nsWindow.orderOut(nil) }

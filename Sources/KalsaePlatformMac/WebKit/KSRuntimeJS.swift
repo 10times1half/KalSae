@@ -1,11 +1,10 @@
 #if os(macOS)
-/// JavaScript injected into every frame via
-/// `WKUserContentController.addUserScript`. Mirrors the Windows runtime in
-/// `KalsaePlatformWindows.KSRuntimeJS` except for the `nativePost`
-/// transport (`webkit.messageHandlers.ks.postMessage` instead of
-/// `window.chrome.webview.postMessage`) and exposes a private
-/// `__kb_receive` function that the native side invokes with
-/// `evaluateJavaScript` to deliver responses and events.
+/// `WKUserContentController.addUserScript`를 통해 모든 프레임에 주입되는 JavaScript.
+/// `KalsaePlatformWindows.KSRuntimeJS`의 Windows 런타임과 유사하지만
+/// 전송 방식이 다르고 (`webkit.messageHandlers.ks.postMessage` 대신
+/// `window.chrome.webview.postMessage`) 응답과 이벤트를 전달하기 위해
+/// 네이티브 측이 `evaluateJavaScript`로 호출하는 `__kb_receive` 함수를
+/// 노출한다.
 internal enum KSRuntimeJS {
     static let source: String = #"""
     (function () {
