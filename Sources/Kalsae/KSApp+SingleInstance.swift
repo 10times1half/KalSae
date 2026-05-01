@@ -2,6 +2,10 @@ internal import Foundation
 
 #if os(Windows)
 internal import KalsaePlatformWindows
+#elseif os(macOS)
+internal import KalsaePlatformMac
+#elseif os(Linux)
+internal import KalsaePlatformLinux
 #endif
 
 extension KSApp {
@@ -23,8 +27,7 @@ extension KSApp {
     /// callers must exit immediately. The primary receives the relayed
     /// arguments via `onSecondInstance` (invoked on the main thread).
     ///
-    /// On platforms without a single-instance backend (currently macOS
-    /// and Linux) this is a no-op that always returns `.primary`.
+    /// On macOS this delegates to `KSMacSingleInstance`.
     ///
     /// Call this **before** `boot(...)`:
     /// ```swift
@@ -44,6 +47,24 @@ extension KSApp {
     ) -> SingleInstanceOutcome {
         #if os(Windows)
         switch KSWindowsSingleInstance.acquire(
+            identifier: identifier,
+            args: args,
+            onSecondInstance: onSecondInstance)
+        {
+        case .primary: return .primary
+        case .relayed: return .relayed
+        }
+        #elseif os(macOS)
+        switch KSMacSingleInstance.acquire(
+            identifier: identifier,
+            args: args,
+            onSecondInstance: onSecondInstance)
+        {
+        case .primary: return .primary
+        case .relayed: return .relayed
+        }
+        #elseif os(Linux)
+        switch KSLinuxSingleInstance.acquire(
             identifier: identifier,
             args: args,
             onSecondInstance: onSecondInstance)

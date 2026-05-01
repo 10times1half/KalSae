@@ -44,15 +44,16 @@ public final class KSApp {
 
     #if os(Windows)
     private let host: KSWindowsDemoHost
-    /// Optional deep-link backend installed when `config.deepLink` is
-    /// declared. Used by `dispatchDeepLinkURLs` to filter incoming
-    /// arguments and emit `__ks.deepLink.openURL` events.
-    private let deepLinkBackend: (any KSDeepLinkBackend)?
     #elseif os(macOS)
     private let host: KSMacDemoHost
     #elseif os(Linux)
     private let host: KSLinuxDemoHost
     #endif
+
+    /// Optional deep-link backend installed when `config.deepLink` is
+    /// declared. Used by `dispatchDeepLinkURLs` to filter incoming
+    /// arguments and emit `__ks.deepLink.openURL` events.
+    private let deepLinkBackend: (any KSDeepLinkBackend)?
 
     private init(config: KSConfig,
                  registry: KSCommandRegistry,
@@ -62,9 +63,7 @@ public final class KSApp {
         self.config = config
         self.registry = registry
         self.platform = platform
-        #if os(Windows)
         self.deepLinkBackend = deepLinkBackend as? any KSDeepLinkBackend
-        #endif
         // 컴파일 타임에 한 case만 활성화되므로 망라적 switch가
         // 강제 언래핑 없이 정확히 하나의 호스트를 추출한다.
         switch host {
@@ -164,9 +163,19 @@ public final class KSApp {
             }
         }
         #elseif os(macOS)
+        let stateStore: KSWindowStateStore? = window.persistState
+            ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+            : nil
         let concrete = try KSMacDemoHost(
             windowConfig: window, registry: registry)
         let wrapper = AnyPlatformHost.mac(concrete)
+
+        if let store = stateStore {
+            let label = window.label
+            concrete.setWindowStateSaveSink { state in
+                _ = store.save(label: label, state: state)
+            }
+        }
         #elseif os(Linux)
         let concrete = try KSLinuxDemoHost(
             windowConfig: window, registry: registry)
@@ -301,6 +310,35 @@ public final class KSApp {
                         deepLinkBackend: {
                             #if os(Windows)
                             return deepLinkPair?.backend
+                            #elseif os(macOS)
+                            guard let dlc = config.deepLink else { return nil }
+                            KSMacDeepLinkBackend.installAppleEventHandler()
+                            let backend = KSMacDeepLinkBackend(identifier: config.app.identifier)
+                            if dlc.autoRegisterOnLaunch {
+                                for s in dlc.schemes {
+                                    do {
+                                        try backend.register(scheme: s)
+                                    } catch {
+                                        KSLog.logger("kalsae.app").error(
+                                            "deepLink auto-register failed for '\(s)': \(error)")
+                                    }
+                                }
+                            }
+                            return backend
+                            #elseif os(Linux)
+                            guard let dlc = config.deepLink else { return nil }
+                            let backend = KSLinuxDeepLinkBackend(identifier: config.app.identifier)
+                            if dlc.autoRegisterOnLaunch {
+                                for s in dlc.schemes {
+                                    do {
+                                        try backend.register(scheme: s)
+                                    } catch {
+                                        KSLog.logger("kalsae.app").error(
+                                            "deepLink auto-register failed for '\(s)': \(error)")
+                                    }
+                                }
+                            }
+                            return backend
                             #else
                             return nil
                             #endif
@@ -338,11 +376,13 @@ public final class KSApp {
     ///   * Once at startup with `CommandLine.arguments` so the page can
     ///     observe the URL the app was launched with.
     public func dispatchDeepLinkURLs(args: [String]) {
-        #if os(Windows)
         guard let backend = deepLinkBackend, let dlc = config.deepLink else { return }
-        let urls = backend.extractURLs(fromArgs: args, forSchemes: dlc.schemes)
+        var urls = backend.currentLaunchURLs(forSchemes: dlc.schemes)
+        urls.append(contentsOf: backend.extractURLs(fromArgs: args, forSchemes: dlc.schemes))
+        var seen: Set<String> = []
         struct Payload: Encodable { let url: String }
         for u in urls {
+            if !seen.insert(u).inserted { continue }
             do {
                 try emit("__ks.deepLink.openURL", payload: Payload(url: u))
             } catch {
@@ -350,7 +390,6 @@ public final class KSApp {
                     "deepLink emit failed for '\(u)': \(error)")
             }
         }
-        #endif
     }
 
     /// Runs the platform message loop until exit.

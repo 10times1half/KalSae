@@ -9,11 +9,15 @@ public final class KSMacWindow {
     public let config: KSWindowConfig
     public var webviewHost: WKWebViewHost?
     public private(set) var theme: KSWindowTheme = .system
+    private var onBeforeCloseSwift: (@MainActor () -> Bool)?
+    private var stateSaveSink: (@MainActor (KSPersistedWindowState) -> Void)?
+    private let delegateProxy: WindowDelegateProxy
 
     private let log: Logger = KSLog.logger("platform.mac.window")
 
     public init(config: KSWindowConfig) throws(KSError) {
         self.config = config
+        self.delegateProxy = WindowDelegateProxy()
 
         var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable]
         if config.resizable { style.insert(.resizable) }
@@ -35,6 +39,8 @@ public final class KSMacWindow {
         if config.alwaysOnTop { window.level = .floating }
 
         self.nsWindow = window
+        self.delegateProxy.owner = self
+        window.delegate = delegateProxy
         log.info("NSWindow created: \(config.title) \(config.width)x\(config.height)")
     }
 
@@ -123,8 +129,78 @@ public final class KSMacWindow {
         webviewHost?.setCloseInterceptor(enabled)
     }
 
+    public func setOnBeforeClose(_ cb: (@MainActor () -> Bool)?) {
+        onBeforeCloseSwift = cb
+    }
+
+    public func setWindowStateSaveSink(_ sink: (@MainActor (KSPersistedWindowState) -> Void)?) {
+        stateSaveSink = sink
+    }
+
     public func reload() {
         webviewHost?.webView.reload()
+    }
+
+    fileprivate func capturePersistedState() -> KSPersistedWindowState {
+        let size = getSize()
+        let pos = getPosition()
+        return KSPersistedWindowState(
+            x: Int(pos.x.rounded()),
+            y: Int(pos.y.rounded()),
+            width: size.width,
+            height: size.height,
+            maximized: isMaximized(),
+            fullscreen: isFullscreen())
+    }
+
+    fileprivate func dispatchStateSave() {
+        stateSaveSink?(capturePersistedState())
+    }
+
+    fileprivate func handleShouldClose() -> Bool {
+        dispatchStateSave()
+        if let cb = onBeforeCloseSwift, cb() == true {
+            webviewHost?.emitBeforeCloseEvent()
+            return false
+        }
+        if config.hideOnClose {
+            webviewHost?.emitBeforeCloseEvent()
+            hide()
+            return false
+        }
+        if webviewHost?.isCloseInterceptorEnabled == true {
+            webviewHost?.emitBeforeCloseEvent()
+            return false
+        }
+        return true
+    }
+
+    fileprivate func handleDidMove() {
+        dispatchStateSave()
+    }
+
+    fileprivate func handleDidResize() {
+        dispatchStateSave()
+    }
+}
+
+@MainActor
+private final class WindowDelegateProxy: NSObject, NSWindowDelegate {
+    weak var owner: KSMacWindow?
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        _ = sender
+        return owner?.handleShouldClose() ?? true
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        _ = notification
+        owner?.handleDidMove()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        _ = notification
+        owner?.handleDidResize()
     }
 }
 #endif

@@ -152,6 +152,11 @@ public final class WKWebViewHost: KSWebViewBackend {
 
     public var isCloseInterceptorEnabled: Bool { closeInterceptorEnabled }
 
+    public func emitBeforeCloseEvent() {
+        webView.evaluateJavaScript(
+            "if(window.__KS_)window.__KS_.emit('__ks.window.beforeClose',null);") { _, _ in }
+    }
+
     public func setZoomFactor(_ factor: Double) {
         let clamped = min(max(factor, 0.5), 5.0)
         zoomFactor = clamped
