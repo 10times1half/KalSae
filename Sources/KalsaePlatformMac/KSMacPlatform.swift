@@ -390,6 +390,41 @@ public final class KSMacDemoHost {
     public func setDefaultContextMenusEnabled(_ enabled: Bool) { _ = enabled }
     public func setAllowExternalDrop(_ allow: Bool) { _ = allow }
 
+    /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
+    ///
+    /// `KSApp.boot()` 내부에서 자동으로 호출된다.
+    public func registerBuiltinCommands(
+        platformName: String = "macOS (AppKit + WKWebView)",
+        shellScope: KSShellScope = .init(),
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
+    ) async {
+        let handle = mainHandle
+        let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
+        let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
+        await KSBuiltinCommands.register(
+            into: registry,
+            windows: KSMacWindowBackend(),
+            shell: KSMacShellBackend(),
+            clipboard: KSMacClipboardBackend(),
+            notifications: KSMacNotificationBackend(),
+            dialogs: KSMacDialogBackend(),
+            mainWindow: mainProvider,
+            quit: quitBlock,
+            platformName: platformName,
+            shellScope: shellScope,
+            notificationScope: notificationScope,
+            fsScope: fsScope,
+            httpScope: httpScope,
+            autostart: autostart,
+            deepLink: deepLink,
+            appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+    }
+
     private func installPowerObservers() {
         let center = NSWorkspace.shared.notificationCenter
         let sleepToken = center.addObserver(

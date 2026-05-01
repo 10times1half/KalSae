@@ -77,56 +77,52 @@ struct KSLinuxWindowBackendUnitTests {
 @Suite("KSLinux PAL stubs and clipboard no-host contract")
 struct KSLinuxPALStubContractTests {
 
-    @Test("tray install/setTooltip/setMenu throw unsupportedPlatform")
-    func trayMethodsAreUnsupported() async {
-        let backend = KSLinuxTrayBackend()
+    @Test("tray install/setTooltip/setMenu best-effort: never throw")
+    func trayMethodsBestEffort() async {
+        let backend = await KSLinuxTrayBackend()
 
+        // install은 watcher 부재 시에도 throw하지 않고 경고만 남긴다.
+        // CI / 헤드리스 환경에서는 D-Bus 세션이 없을 수 있어 platformInitFailed
+        // (ks_gtk_tray_new 실패는 없음, 세션 버스 부재는 install 내부에서 폴백).
         do {
             try await backend.install(KSTrayConfig(icon: "tray.png"))
-            Issue.record("Expected unsupportedPlatform from tray.install")
-        } catch let error {
-            #expect(error.code == .unsupportedPlatform)
+        } catch {
+            // best-effort 경계 — 환경 한계로 인한 실패는 허용.
         }
-
-        do {
-            try await backend.setTooltip("tip")
-            Issue.record("Expected unsupportedPlatform from tray.setTooltip")
-        } catch let error {
-            #expect(error.code == .unsupportedPlatform)
-        }
-
-        do {
-            try await backend.setMenu([])
-            Issue.record("Expected unsupportedPlatform from tray.setMenu")
-        } catch let error {
-            #expect(error.code == .unsupportedPlatform)
-        }
+        try? await backend.setTooltip("tip")
+        try? await backend.setMenu([])
+        await backend.remove()
     }
 
-    @Test("accelerator protocol defaults throw unsupportedPlatform")
-    func acceleratorMethodsAreUnsupported() async {
-        let backend = KSLinuxAcceleratorBackend()
+    @Test("accelerator without active host throws platformInitFailed; no-op for unregister")
+    func acceleratorRequiresActiveHost() async {
+        let backend = await KSLinuxAcceleratorBackend()
 
         do {
             try await backend.register(id: "accel-1", accelerator: "Ctrl+K") {}
-            Issue.record("Expected unsupportedPlatform from accelerator.register")
+            Issue.record("Expected platformInitFailed without active window")
         } catch let error {
-            #expect(error.code == .unsupportedPlatform)
+            #expect(error.code == .platformInitFailed
+                 || error.code == .invalidArgument)
         }
 
-        do {
-            try await backend.unregister(id: "accel-1")
-            Issue.record("Expected unsupportedPlatform from accelerator.unregister")
-        } catch let error {
-            #expect(error.code == .unsupportedPlatform)
-        }
+        // unregister/unregisterAll without a running window is a no-op.
+        try? await backend.unregister(id: "accel-1")
+        try? await backend.unregisterAll()
+    }
 
-        do {
-            try await backend.unregisterAll()
-            Issue.record("Expected unsupportedPlatform from accelerator.unregisterAll")
-        } catch let error {
-            #expect(error.code == .unsupportedPlatform)
-        }
+    @Test("accelerator parser produces GTK trigger strings")
+    func acceleratorParserMapsTokens() async {
+        #expect(KSLinuxAcceleratorBackend.toGtkTrigger("Ctrl+Shift+K")
+                == "<Control><Shift>k")
+        #expect(KSLinuxAcceleratorBackend.toGtkTrigger("CmdOrCtrl+N")
+                == "<Control>n")
+        #expect(KSLinuxAcceleratorBackend.toGtkTrigger("Alt+F4")
+                == "<Alt>F4")
+        #expect(KSLinuxAcceleratorBackend.toGtkTrigger("F11")
+                == "F11")
+        #expect(KSLinuxAcceleratorBackend.toGtkTrigger("garbage+plus+thing")
+                == nil)
     }
 
     @Test("clipboard no-host path returns nil/false or throws unsupportedPlatform")

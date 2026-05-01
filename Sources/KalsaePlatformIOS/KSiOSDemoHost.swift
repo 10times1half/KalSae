@@ -32,9 +32,8 @@ public final class KSiOSDemoHost {
                 registry: KSCommandRegistry) throws(KSError) {
         self.registry = registry
         self.windowConfig = windowConfig
-        self._mainHandle = KSWindowHandle(
-            label: windowConfig.label,
-            rawValue: UInt64.random(in: 1...UInt64.max))
+        // KSiOSHandleRegistry에 등록해 KSiOSWindowBackend.find(label:)에서 찾을 수 있게 한다.
+        self._mainHandle = KSiOSHandleRegistry.shared.register(label: windowConfig.label)
         self.webViewHost = KSiOSWebViewHost(label: windowConfig.label)
         self.bridge = KSiOSBridge(host: webViewHost, registry: registry)
         try self.bridge.install()
@@ -115,6 +114,42 @@ public final class KSiOSDemoHost {
         _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
     ) {
         _ = sink
+    }
+
+    /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
+    ///
+    /// `KSApp.boot()` 내부에서 자동으로 호출된다. 직접 호출할 경우
+    /// `start(url:devtools:)` 이전에 실행해야 한다.
+    public func registerBuiltinCommands(
+        platformName: String = "iOS (UIKit + WKWebView)",
+        shellScope: KSShellScope = .init(),
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
+    ) async {
+        let cachedHandle = _mainHandle
+        let mainProvider: @Sendable () -> KSWindowHandle? = { cachedHandle }
+        let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
+        await KSBuiltinCommands.register(
+            into: registry,
+            windows: KSiOSWindowBackend(),
+            shell: KSiOSShellBackend(),
+            clipboard: KSiOSClipboardBackend(),
+            notifications: KSiOSNotificationBackend(),
+            dialogs: KSiOSDialogBackend(),
+            mainWindow: mainProvider,
+            quit: quitBlock,
+            platformName: platformName,
+            shellScope: shellScope,
+            notificationScope: notificationScope,
+            fsScope: fsScope,
+            httpScope: httpScope,
+            autostart: autostart,
+            deepLink: deepLink,
+            appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
     }
 }
 #endif

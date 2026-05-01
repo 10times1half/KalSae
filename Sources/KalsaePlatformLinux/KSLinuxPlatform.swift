@@ -72,6 +72,22 @@ public final class KSLinuxPlatform: KSPlatform, @unchecked Sendable {
             label: window.label,
             host: host.mainWebView)
 
+        // Phase 1: 윈도우 상태 영속화 — `persistState=true`일 때만 활성화.
+        // 메인 루프(=activate) 진입 전에 복원 상태를 호스트에 주입하고,
+        // close-request 시점에 디스크에 저장하는 sink를 등록한다.
+        let stateStore: KSWindowStateStore? = window.persistState
+            ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+            : nil
+        if let restored = stateStore?.load(label: window.label) {
+            host.applyRestoredState(restored)
+        }
+        if let store = stateStore {
+            let label = window.label
+            host.setWindowStateSaveSink { state in
+                _ = store.save(label: label, state: state)
+            }
+        }
+
         let resourceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(config.build.frontendDist)
         let servingMode = Self.decideServingMode(
@@ -248,6 +264,7 @@ public final class KSLinuxDemoHost {
     public let registry: KSCommandRegistry
     nonisolated private let webview: GtkWebViewHost
     public let bridge: GtkBridge
+    private let windowConfig: KSWindowConfig
 
     /// 대기 중인 초기 탐색 + devtools 플래그.
     /// GtkApplication이 "activate"를 발행하고 실제 웹뷰가 살아있어
@@ -258,6 +275,7 @@ public final class KSLinuxDemoHost {
     public init(windowConfig: KSWindowConfig,
                 registry: KSCommandRegistry) throws(KSError) {
         self.registry = registry
+        self.windowConfig = windowConfig
         let appId = "app.Kalsae.\(windowConfig.label)"
         self.webview = GtkWebViewHost(
             appId: appId,
@@ -281,6 +299,20 @@ public final class KSLinuxDemoHost {
             webview.hostPtr,
             linuxActivationTrampoline,
             ctx)
+    }
+
+    /// 활성화 전에 적용할 윈도우 복원 상태를 등록한다. `start` 호출
+    /// 이전이거나 적어도 메인 루프 진입 전에 호출되어야 한다.
+    public func applyRestoredState(_ state: KSPersistedWindowState) {
+        webview.applyRestoredState(state)
+    }
+
+    /// 윈도우 상태 저장 sink를 등록한다. close-request 시점에
+    /// 메인 스레드에서 동기적으로 호출된다.
+    public func setWindowStateSaveSink(
+        _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
+    ) {
+        webview.setWindowStateSaveSink(sink)
     }
 
     /// `root`에서 에셋을 제공하도록 `ks://` 스킴 핸들러를 바인딩한다.
@@ -380,6 +412,43 @@ public final class KSLinuxDemoHost {
 
     private func ensurePowerBox() {
         if powerBox == nil { powerBox = PowerBox(host: self) }
+    }
+
+    /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
+    ///
+    /// `KSApp.boot()` 내부에서 자동으로 호출된다.
+    @MainActor
+    public func registerBuiltinCommands(
+        platformName: String = "Linux (GTK4 + WebKitGTK 6.0)",
+        shellScope: KSShellScope = .init(),
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
+    ) async {
+        let handle = KSLinuxWindowBackend().registerMainWindow(
+            label: windowConfig.label, host: webview)
+        let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
+        let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
+        await KSBuiltinCommands.register(
+            into: registry,
+            windows: KSLinuxWindowBackend(),
+            shell: KSLinuxShellBackend(),
+            clipboard: KSLinuxClipboardBackend(),
+            notifications: KSLinuxNotificationBackend(),
+            dialogs: KSLinuxDialogBackend(),
+            mainWindow: mainProvider,
+            quit: quitBlock,
+            platformName: platformName,
+            shellScope: shellScope,
+            notificationScope: notificationScope,
+            fsScope: fsScope,
+            httpScope: httpScope,
+            autostart: autostart,
+            deepLink: deepLink,
+            appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
     }
 }
 

@@ -316,6 +316,69 @@ public final class GtkWebViewHost {
 
     private var resolverBox: Unmanaged<ResolverBox>?
 
+    // MARK: - Window state persistence
+
+    /// 활성화 전에 적용할 복원 상태를 호스트에 보관한다.
+    /// `run()` 호출 전(=activate 발생 전)에만 의미가 있다.
+    /// Wayland에서 위치는 컴포지터가 통제하므로 무시되며, 크기/최대화/
+    /// 전체화면은 모든 환경에서 적용된다.
+    public func applyRestoredState(_ state: KSPersistedWindowState) {
+        // 정책: 위치는 Wayland에서 무시되지만, X11에서는 적용된다.
+        // C 측에서 X11 surface 여부를 검사하므로 항상 has_position=1로 전달.
+        ks_gtk_host_set_pending_restore_state(
+            hostPtr,
+            Int32(state.x), Int32(state.y),
+            Int32(state.width), Int32(state.height),
+            1, // has_position
+            state.maximized  ? 1 : 0,
+            state.fullscreen ? 1 : 0)
+    }
+
+    /// 윈도우 상태 저장 sink를 등록한다. close-request 시점에
+    /// 메인 스레드에서 동기적으로 호출된다. `nil` 전달 시 해제.
+    public func setWindowStateSaveSink(
+        _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
+    ) {
+        // 이전 박스 해제.
+        stateSaveBox?.release()
+        stateSaveBox = nil
+
+        guard let sink else {
+            ks_gtk_host_set_state_save_handler(hostPtr, nil, nil)
+            return
+        }
+        let box = StateSaveBox(sink: sink)
+        let um = Unmanaged.passRetained(box)
+        stateSaveBox = um
+        ks_gtk_host_set_state_save_handler(
+            hostPtr,
+            linuxStateSaveTrampoline,
+            um.toOpaque())
+    }
+
+    private var stateSaveBox: Unmanaged<StateSaveBox>?
+
+    /// 현재 윈도우 상태를 동기 조회. C 측에 윈도우가 아직
+    /// 만들어지지 않은 경우 `nil`을 반환한다.
+    public func currentWindowState() -> KSPersistedWindowState? {
+        var x: Int32 = 0, y: Int32 = 0
+        var w: Int32 = 0, h: Int32 = 0
+        var hasPos: Int32 = 0
+        var maximized: Int32 = 0
+        var fullscreen: Int32 = 0
+        let ok = ks_gtk_host_get_window_state(
+            hostPtr, &x, &y, &w, &h,
+            &hasPos, &maximized, &fullscreen)
+        guard ok != 0 else { return nil }
+        return KSPersistedWindowState(
+            x: hasPos != 0 ? Int(x) : 0,
+            y: hasPos != 0 ? Int(y) : 0,
+            width: Int(w),
+            height: Int(h),
+            maximized: maximized != 0,
+            fullscreen: fullscreen != 0)
+    }
+
     /// Runs the GtkApplication's main loop until quit. Blocks.
     internal func run() -> Int32 {
         ks_gtk_host_run(hostPtr, 0, nil)
@@ -333,6 +396,35 @@ public final class GtkWebViewHost {
 private final class ResolverBox: @unchecked Sendable {
     let resolver: KSAssetResolver
     init(resolver: KSAssetResolver) { self.resolver = resolver }
+}
+
+/// Holder for the window-state-save sink. Read-only from C side.
+// @unchecked: GTK callback box (read-only post-init) — passed as opaque context to C
+private final class StateSaveBox: @unchecked Sendable {
+    let sink: @MainActor (KSPersistedWindowState) -> Void
+    init(sink: @escaping @MainActor (KSPersistedWindowState) -> Void) {
+        self.sink = sink
+    }
+}
+
+/// C-side state-save trampoline. Runs on the GTK main thread.
+private let linuxStateSaveTrampoline: @convention(c) (
+    Int32, Int32, Int32, Int32,
+    Int32, Int32, Int32,
+    UnsafeMutableRawPointer?
+) -> Void = { x, y, w, h, hasPos, maximized, fullscreen, ctx in
+    guard let ctx else { return }
+    let box = Unmanaged<StateSaveBox>.fromOpaque(ctx).takeUnretainedValue()
+    let state = KSPersistedWindowState(
+        x: hasPos != 0 ? Int(x) : 0,
+        y: hasPos != 0 ? Int(y) : 0,
+        width: Int(w),
+        height: Int(h),
+        maximized: maximized != 0,
+        fullscreen: fullscreen != 0)
+    MainActor.assumeIsolated {
+        box.sink(state)
+    }
 }
 
 /// C-side scheme trampoline. Runs on the GTK main thread. Reads the

@@ -282,32 +282,69 @@ public final class KSApp {
         // JS 쪽 `__KS_.window.*`, `__KS_.shell.*`, `__KS_.clipboard.*`,
         // `__KS_.app.*` 네임스페이스가 즉시 동작하도록 한다. 해당
         // 백엔드가 노출된 플랫폼에서만 사용 가능하다.
-        #if os(Windows)
-        // 자동 시작 백엔드는 config에 `autostart` 섹션이 있을 때만
-        // 활성화한다. 설치되지 않으면 JS는 `commandNotRegistered`로
-        // 거부 응답을 받아 기능이 꺼졌다는 신호로 해석할 수 있다.
-        let autostartBackend: (any KSAutostartBackend)? = config.autostart.map {
-            KSWindowsAutostartBackend(
+
+        // 모든 플랫폼: autostart 백엔드. config에 `autostart` 섹션이 있을 때만 활성화.
+        let autostartBackend: (any KSAutostartBackend)? = {
+            #if os(Windows)
+            guard let autostartCfg = config.autostart else { return nil }
+            return KSWindowsAutostartBackend(
                 identifier: config.app.identifier,
-                args: $0.args)
-        }
-        // 딥링크 백엔드. config에 `deepLink` 섹션이 있을 때만 활성화.
-        // `autoRegisterOnLaunch=true`면 부팅 시점에 모든 스킴을 등록.
-        let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {
+                args: autostartCfg.args)
+            #elseif os(macOS)
+            guard config.autostart != nil else { return nil }
+            return KSMacAutostartBackend()
+            #elseif os(Linux)
+            guard config.autostart != nil else { return nil }
+            return KSLinuxAutostartBackend(identifier: config.app.identifier)
+            #elseif os(iOS)
+            guard config.autostart != nil else { return nil }
+            return KSiOSAutostartBackend()
+            #elseif os(Android)
+            guard config.autostart != nil else { return nil }
+            return KSAndroidAutostartBackend()
+            #else
+            return nil
+            #endif
+        }()
+
+        // 모든 플랫폼: deepLink 백엔드. config에 `deepLink` 섹션이 있을 때만 활성화.
+        let builtDeepLinkBackend: (any KSDeepLinkBackend)? = {
             guard let dlc = config.deepLink else { return nil }
-            let backend = KSWindowsDeepLinkBackend(identifier: config.app.identifier)
+            let b: any KSDeepLinkBackend
+            #if os(Windows)
+            b = KSWindowsDeepLinkBackend(identifier: config.app.identifier)
+            #elseif os(macOS)
+            KSMacDeepLinkBackend.installAppleEventHandler()
+            b = KSMacDeepLinkBackend(identifier: config.app.identifier)
+            #elseif os(Linux)
+            b = KSLinuxDeepLinkBackend(identifier: config.app.identifier)
+            #elseif os(iOS)
+            b = KSiOSDeepLinkBackend(identifier: config.app.identifier)
+            #elseif os(Android)
+            b = KSAndroidDeepLinkBackend(identifier: config.app.identifier)
+            KSAndroidDeepLinkBackend.knownSchemes = Set(dlc.schemes.map { $0.lowercased() })
+            #else
+            return nil
+            #endif
             if dlc.autoRegisterOnLaunch {
                 for s in dlc.schemes {
                     do {
-                        try backend.register(scheme: s)
+                        try b.register(scheme: s)
                     } catch {
                         KSLog.logger("kalsae.app").error(
                             "deepLink auto-register failed for '\(s)': \(error)")
                     }
                 }
             }
-            return (backend, dlc)
+            return b
         }()
+
+        let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {
+            guard let b = builtDeepLinkBackend, let dlc = config.deepLink else { return nil }
+            return (b, dlc)
+        }()
+
+        // 모든 플랫폼: JS `__ks.*` 내장 명령 등록.
         await concrete.registerBuiltinCommands(
             platformName: platform.name,
             shellScope: config.security.shell,
@@ -317,65 +354,10 @@ public final class KSApp {
             autostart: autostartBackend,
             deepLink: deepLinkPair,
             appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-        #endif
 
         let app = KSApp(config: config, registry: registry,
                         platform: platform, host: wrapper,
-                        deepLinkBackend: {
-                            #if os(Windows)
-                            return deepLinkPair?.backend
-                            #elseif os(macOS)
-                            guard let dlc = config.deepLink else { return nil }
-                            KSMacDeepLinkBackend.installAppleEventHandler()
-                            let backend = KSMacDeepLinkBackend(identifier: config.app.identifier)
-                            if dlc.autoRegisterOnLaunch {
-                                for s in dlc.schemes {
-                                    do {
-                                        try backend.register(scheme: s)
-                                    } catch {
-                                        KSLog.logger("kalsae.app").error(
-                                            "deepLink auto-register failed for '\(s)': \(error)")
-                                    }
-                                }
-                            }
-                            return backend
-                            #elseif os(Linux)
-                            guard let dlc = config.deepLink else { return nil }
-                            let backend = KSLinuxDeepLinkBackend(identifier: config.app.identifier)
-                            if dlc.autoRegisterOnLaunch {
-                                for s in dlc.schemes {
-                                    do {
-                                        try backend.register(scheme: s)
-                                    } catch {
-                                        KSLog.logger("kalsae.app").error(
-                                            "deepLink auto-register failed for '\(s)': \(error)")
-                                    }
-                                }
-                            }
-                            return backend
-                            #elseif os(iOS)
-                            guard let dlc = config.deepLink else { return nil }
-                            let backend = KSiOSDeepLinkBackend(identifier: config.app.identifier)
-                            if dlc.autoRegisterOnLaunch {
-                                for s in dlc.schemes {
-                                    do {
-                                        try backend.register(scheme: s)
-                                    } catch {
-                                        KSLog.logger("kalsae.app").error(
-                                            "deepLink auto-register failed for '\(s)': \(error)")
-                                    }
-                                }
-                            }
-                            return backend
-                            #elseif os(Android)
-                            guard let dlc = config.deepLink else { return nil }
-                            let backend = KSAndroidDeepLinkBackend(identifier: config.app.identifier)
-                            KSAndroidDeepLinkBackend.knownSchemes = Set(dlc.schemes.map { $0.lowercased() })
-                            return backend
-                            #else
-                            return nil
-                            #endif
-                        }())
+                        deepLinkBackend: builtDeepLinkBackend)
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.
         #if os(Windows) || os(Linux)

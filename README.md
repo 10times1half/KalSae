@@ -315,7 +315,7 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | Feature | Windows | macOS | Linux | iOS | Android |
 |---|---|---|---|---|---|
 | WebView load + IPC bridge | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Custom virtual host (`https://app.kalsae/` / `ks://app/`) | ✅ | 🔶 | 🔶 | 🔶 | 🔶 |
+| Custom virtual host (`https://app.kalsae/` / `ks://app/`) | ✅ | 🔶¹ | 🔶¹ | 🔶¹ | 🔶¹ |
 | DevTools | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Window create / close / show / hide | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Window minimize / maximize / fullscreen | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -326,8 +326,8 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | Multi-window | 🔶 | 🔶 | 🔶 | 🔶 | 🔶 |
 | Native dialogs (message / open / save / folder) | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | Application & context menus | ✅ | ✅ | ✅ | ✅ | 🔶 |
-| Keyboard accelerators (global hot-keys) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| System tray icon + menu | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Keyboard accelerators (global hot-keys) | ✅ | ✅ | 🔶² | ❌ | ❌ |
+| System tray icon + menu | ✅ | ✅ | 🔶⁴ | ❌ | ❌ |
 | Native notifications | ✅ WinRT | ✅ UserNotifications | ✅ notify-send | ✅ UNNotification | ✅ JNI bridge |
 | Shell (`openExternal` / `showItemInFolder` / `moveToTrash`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Clipboard (text + image + format check) | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -336,9 +336,14 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | Single instance + argument forwarding | ✅ WM_COPYDATA | ✅ NSRunningApp | ✅ Unix socket | ❌ | ❌ |
 | Filesystem (`__ks.fs.*`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HTTP fetch (`__ks.http.fetch`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Window state persistence | ✅ | ✅ | ❌ | ❌ | ❌ |
+| Window state persistence | ✅ | ✅ | ✅³ | ❌ | ❌ |
 
 **Legend:** ✅ implemented · 🔶 partial · ❌ stub (planned)
+
+¹ macOS / Linux / iOS / Android: only the `ks://app/` custom scheme is supported. The `https://app.kalsae/` form is Windows-only because of WebView engine limitations (WKURLSchemeHandler / WebKitGTK / WKWebView do not intercept `http(s)` schemes). Responses include `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
+² Linux: window-scoped accelerators only via `GtkShortcutController` (LOCAL scope). System-wide global hot-keys are out of scope for v1 due to a missing standard Wayland protocol.
+³ Linux: size, maximized, and fullscreen are always restored. Window position is restored on X11 only — Wayland compositors control window placement and ignore programmatic positioning.
+⁴ Linux: implemented via D-Bus StatusNotifierItem + DBusMenu (no AppIndicator3 / libayatana dependency). Works on KDE Plasma, Cinnamon, XFCE, Pantheon, and GNOME with the AppIndicator extension. Vanilla GNOME has no native SNI support — install logs a warning and falls back to no-op. Submenus are not supported in v1 (flat menus only).
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
@@ -346,7 +351,7 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | 기능 | Windows | macOS | Linux | iOS | Android |
 |---|---|---|---|---|---|
 | WebView 로딩 + IPC 브리지 | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 가상 호스트 (`https://app.kalsae/` / `ks://app/`) | ✅ | 🔶 | 🔶 | 🔶 | 🔶 |
+| 가상 호스트 (`https://app.kalsae/` / `ks://app/`) | ✅ | 🔶¹ | 🔶¹ | 🔶¹ | 🔶¹ |
 | 개발자 도구 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 윈도우 생성/종료/표시/숨김 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 윈도우 최소/최대화/전체화면 | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -357,8 +362,8 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | 다중 윈도우 | 🔶 | 🔶 | 🔶 | 🔶 | 🔶 |
 | 네이티브 다이얼로그 (메시지/열기/저장/폴더) | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | 애플리케이션 메뉴 / 컨텍스트 메뉴 | ✅ | ✅ | ✅ | ✅ | 🔶 |
-| 키보드 단축키 (글로벌) | ✅ | ✅ | ❌ | ❌ | ❌ |
-| 시스템 트레이 아이콘 + 메뉴 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 키보드 단축키 (글로벌) | ✅ | ✅ | 🔶² | ❌ | ❌ |
+| 시스템 트레이 아이콘 + 메뉴 | ✅ | ✅ | 🔶⁴ | ❌ | ❌ |
 | 네이티브 알림 | ✅ WinRT | ✅ UserNotifications | ✅ notify-send | ✅ UNNotification | ✅ JNI 브리지 |
 | Shell (`openExternal` / `showItemInFolder` / `moveToTrash`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 클립보드 (텍스트 + 이미지 + 형식 검사) | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -367,9 +372,14 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | 싱글 인스턴스 + 인자 전달 | ✅ WM_COPYDATA | ✅ NSRunningApp | ✅ Unix 소켓 | ❌ | ❌ |
 | 파일시스템 (`__ks.fs.*`) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HTTP fetch (`__ks.http.fetch`) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 윈도우 상태 영속화 | ✅ | ✅ | ❌ | ❌ | ❌ |
+| 윈도우 상태 영속화 | ✅ | ✅ | ✅³ | ❌ | ❌ |
 
 **범례:** ✅ 구현 완료 · 🔶 부분 · ❌ 스텁 (계획)
+
+¹ macOS/Linux/iOS/Android는 `ks://app/` 커스텀 스킴만 지원. `https://app.kalsae/` 형태는 웹뷰 엔진 한계(WKURLSchemeHandler/WebKitGTK는 `http(s)` 스킴을 가로채지 못함)로 Windows 전용. 응답에는 `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`가 포함된다.
+² Linux는 `GtkShortcutController`(LOCAL scope) 기반 윈도우 스코프 단축키만 지원. 시스템 전역 단축키는 Wayland 표준 부재로 v1 범위 외.
+³ Linux는 크기/최대화/전체화면은 항상 복원하며, 위치는 X11에서만 복원 — Wayland는 컴포지터가 위치를 제어한다.
+⁴ Linux는 D-Bus StatusNotifierItem + DBusMenu 직접 구현(AppIndicator3/libayatana 도입 없음). KDE Plasma, Cinnamon, XFCE, Pantheon 및 AppIndicator extension이 활성화된 GNOME에서 동작. 순수 GNOME은 SNI 다이젝트 지원이 없어 install이 경고 로그만 남기고 no-op으로 폴백. 서브메뉴는 v1에서 미지원(평탄 메뉴만).
 
 </details>
 

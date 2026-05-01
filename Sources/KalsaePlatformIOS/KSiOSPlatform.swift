@@ -17,6 +17,8 @@ public final class KSiOSPlatform: KSPlatform, @unchecked Sendable {
     public var shell: (any KSShellBackend)? { _shell }
     public var clipboard: (any KSClipboardBackend)? { _clipboard }
     public var accelerators: (any KSAcceleratorBackend)? { nil }
+    public var autostart: (any KSAutostartBackend)? { _autostart }
+    public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
 
     private let _windows: KSiOSWindowBackend
     private let _dialogs: KSiOSDialogBackend
@@ -24,6 +26,8 @@ public final class KSiOSPlatform: KSPlatform, @unchecked Sendable {
     private let _notifications: KSiOSNotificationBackend
     private let _shell: KSiOSShellBackend
     private let _clipboard: KSiOSClipboardBackend
+    private let _autostart: KSiOSAutostartBackend
+    private let _deepLink: KSiOSDeepLinkBackend
 
     public init() {
         self.commandRegistry = KSCommandRegistry()
@@ -33,6 +37,9 @@ public final class KSiOSPlatform: KSPlatform, @unchecked Sendable {
         self._notifications = KSiOSNotificationBackend()
         self._shell = KSiOSShellBackend()
         self._clipboard = KSiOSClipboardBackend()
+        self._autostart = KSiOSAutostartBackend()
+        self._deepLink = KSiOSDeepLinkBackend(
+            identifier: Bundle.main.bundleIdentifier ?? "kalsae")
     }
 
     public func run(
@@ -41,7 +48,8 @@ public final class KSiOSPlatform: KSPlatform, @unchecked Sendable {
     ) async throws(KSError) -> Never {
         _ = config
         try await configure(self)
-        fatalError("KSiOSPlatform.run is not wired yet")
+        throw KSError.unsupportedPlatform(
+            "KSiOSPlatform.run is not wired; use KSApp.run()")
     }
 }
 #endif

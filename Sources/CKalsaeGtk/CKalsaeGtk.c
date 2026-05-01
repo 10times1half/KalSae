@@ -13,6 +13,7 @@
 #include <gtk/gtk.h>
 #include <webkit/webkit.h>
 #include <libsoup/soup.h>
+#include <unistd.h>
 #include <glib.h>
 #include <gio/gio.h>
 #include <stdlib.h>
@@ -69,7 +70,30 @@ struct KSGtkHost {
     GSimpleActionGroup  *menu_actions;   /* owned; installed on window */
     GtkWidget           *menu_bar;       /* GtkPopoverMenuBar child, or NULL */
     GtkWidget           *menu_vbox;      /* vertical GtkBox wrapping menu+webview, or NULL */
+
+    /* 윈도우 상태 영속화. */
+    int                   has_pending_restore;     /* 1 = 아래 필드들이 유효 */
+    int                   pending_restore_x;
+    int                   pending_restore_y;
+    int                   pending_restore_w;
+    int                   pending_restore_h;
+    int                   pending_restore_has_position;
+    int                   pending_restore_maximized;
+    int                   pending_restore_fullscreen;
+    KSGtkStateSaveFn      state_save_handler;
+    void                 *state_save_ctx;
+
+    /* 키보드 가속기 (window-scoped). */
+    GtkShortcutController *shortcut_controller;  /* owned, attached to window */
+    GHashTable            *shortcuts_by_id;      /* (gchar*) id -> KSGtkAccelEntry* */
 };
+
+/* 단축키 엔트리 — 등록 해제를 위해 GtkShortcut과 트램폴린 컨텍스트를 보관. */
+typedef struct KSGtkAccelEntry {
+    GtkShortcut         *shortcut;   /* owned ref */
+    KSGtkAcceleratorFn   cb;
+    void                *ctx;
+} KSGtkAccelEntry;
 
 /* -- 헬퍼 -------------------------------------------------------- */
 
@@ -97,6 +121,21 @@ static gboolean on_close_request(GtkWindow *win, gpointer user_data)
     (void) win;
     KSGtkHost *host = (KSGtkHost *) user_data;
     if (!host) return FALSE;
+
+    /* 닫기가 실제로 진행되든 막히든 관계없이 마지막 윈도우 상태를
+     * Swift 측에 흘려보낸다 — 닫히지 않더라도 사용자가 의도한
+     * 마지막 상태를 보존하기 위함이다. */
+    if (host->state_save_handler) {
+        int x = 0, y = 0, w = 0, h = 0;
+        int has_pos = 0, maximized = 0, fullscreen = 0;
+        if (ks_gtk_host_get_window_state(
+                host, &x, &y, &w, &h,
+                &has_pos, &maximized, &fullscreen)) {
+            host->state_save_handler(x, y, w, h,
+                                     has_pos, maximized, fullscreen,
+                                     host->state_save_ctx);
+        }
+    }
 
     /* Swift-side native 핸들러가 우선. 핸들러가 1을 돌려주면
      * JS beforeClose를 발사하고 닫기를 억제한다. */
@@ -185,6 +224,41 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
     host->web_view = view;
     host->user_cm  = ucm;
 
+    /* 영속화된 윈도우 상태 복원: 크기/최대화/전체화면은 모든 환경에서
+     * 적용하고, 위치는 X11에서만 시도한다(Wayland는 컴포지터가 통제). */
+    if (host->has_pending_restore) {
+        if (host->pending_restore_w > 0 && host->pending_restore_h > 0) {
+            gtk_window_set_default_size(win,
+                host->pending_restore_w, host->pending_restore_h);
+        }
+        if (host->pending_restore_has_position) {
+            GdkSurface *surf = gtk_widget_get_surface(GTK_WIDGET(win));
+            if (surf && GDK_IS_X11_SURFACE(surf)) {
+                gdk_x11_window_move_to_position(surf,
+                    host->pending_restore_x,
+                    host->pending_restore_y);
+            }
+        }
+        if (host->pending_restore_maximized) {
+            gtk_window_maximize(win);
+        }
+        if (host->pending_restore_fullscreen) {
+            gtk_window_fullscreen(win);
+        }
+        host->has_pending_restore = 0;
+    }
+
+    /* 윈도우 범위 단축키 컨트롤러 부착(처음 한 번). */
+    if (!host->shortcut_controller) {
+        GtkShortcutController *sc = GTK_SHORTCUT_CONTROLLER(
+            gtk_shortcut_controller_new());
+        gtk_shortcut_controller_set_scope(
+            sc, GTK_SHORTCUT_SCOPE_LOCAL);
+        gtk_widget_add_controller(GTK_WIDGET(win),
+                                   GTK_EVENT_CONTROLLER(sc));
+        host->shortcut_controller = sc;  /* owned by widget; not unref'd */
+    }
+
     /* 웹 컨텍스트에 ks:// 스키마 리졸버가 있으면 등록. */
     if (host->scheme_resolver) {
         WebKitWebContext *wctx = webkit_web_view_get_context(view);
@@ -232,6 +306,12 @@ void ks_gtk_host_free(KSGtkHost *host)
         host->dbus_conn = NULL;
         host->dbus_signal_id = 0;
     }
+    /* shortcut entries는 hash table free 함수가 ref를 정리한다. */
+    if (host->shortcuts_by_id) {
+        g_hash_table_destroy(host->shortcuts_by_id);
+        host->shortcuts_by_id = NULL;
+    }
+    /* shortcut_controller는 윈도우 위젯 트리에 의해 소유된다 — 별도 unref 없음. */
     if (host->app) g_object_unref(host->app);
     if (host->pending_scripts) g_ptr_array_free(host->pending_scripts, TRUE);
     clear_string(&host->app_id);
@@ -539,16 +619,6 @@ static void on_kb_scheme_request(WebKitURISchemeRequest *req,
             hdrs, "X-Content-Type-Options", "nosniff");
         soup_message_headers_append(
             hdrs, "Referrer-Policy", "no-referrer");
-        webkit_uri_scheme_response_set_http_headers(resp, hdrs);
-        /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
-        soup_message_headers_unref(hdrs);
-    }
-    webkit_uri_scheme_request_finish_with_response(req, resp);
-    g_object_unref(resp);
-    g_object_unref(stream);
-    if (mime) g_free(mime);
-}
-
         webkit_uri_scheme_response_set_http_headers(resp, hdrs);
         /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
         soup_message_headers_unref(hdrs);
@@ -1162,6 +1232,189 @@ void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled)
 }
 
 /* ----------------------------------------------------------------
+ * 윈도우 상태 영속화 (window state persistence)
+ * ---------------------------------------------------------------- */
+
+void ks_gtk_host_set_pending_restore_state(KSGtkHost *host,
+                                            int x, int y,
+                                            int width, int height,
+                                            int has_position,
+                                            int maximized,
+                                            int fullscreen)
+{
+    if (!host) return;
+    host->has_pending_restore         = 1;
+    host->pending_restore_x           = x;
+    host->pending_restore_y           = y;
+    host->pending_restore_w           = width;
+    host->pending_restore_h           = height;
+    host->pending_restore_has_position = has_position ? 1 : 0;
+    host->pending_restore_maximized   = maximized ? 1 : 0;
+    host->pending_restore_fullscreen  = fullscreen ? 1 : 0;
+}
+
+int ks_gtk_host_get_window_state(KSGtkHost *host,
+                                  int *out_x, int *out_y,
+                                  int *out_width, int *out_height,
+                                  int *out_has_position,
+                                  int *out_maximized,
+                                  int *out_fullscreen)
+{
+    if (!host || !host->window) return 0;
+
+    int w = 0, h = 0;
+    if (out_width || out_height) {
+        gtk_window_get_default_size(host->window, &w, &h);
+    }
+    /* gtk_window_get_default_size는 윈도우가 매핑된 후에는 마지막
+     * 사용자 크기를 반영하지 않을 수 있으므로 위젯 할당 크기로 폴백한다. */
+    if (w <= 0 || h <= 0) {
+        GtkWidget *wid = GTK_WIDGET(host->window);
+        int aw = gtk_widget_get_width(wid);
+        int ah = gtk_widget_get_height(wid);
+        if (aw > 0) w = aw;
+        if (ah > 0) h = ah;
+    }
+    if (out_width)  *out_width  = w;
+    if (out_height) *out_height = h;
+
+    int has_pos = 0, x = 0, y = 0;
+    GdkSurface *surf = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    if (surf && GDK_IS_X11_SURFACE(surf)) {
+        /* GTK4는 X11에서만 신뢰할 수 있는 위치를 노출. */
+        x = gdk_x11_surface_get_x(surf);
+        y = gdk_x11_surface_get_y(surf);
+        has_pos = 1;
+    }
+    if (out_x) *out_x = x;
+    if (out_y) *out_y = y;
+    if (out_has_position) *out_has_position = has_pos;
+
+    if (out_maximized) {
+        *out_maximized = gtk_window_is_maximized(host->window) ? 1 : 0;
+    }
+    if (out_fullscreen) {
+        *out_fullscreen = gtk_window_is_fullscreen(host->window) ? 1 : 0;
+    }
+    return 1;
+}
+
+void ks_gtk_host_set_state_save_handler(KSGtkHost *host,
+                                         KSGtkStateSaveFn cb,
+                                         void *ctx)
+{
+    if (!host) return;
+    host->state_save_handler = cb;
+    host->state_save_ctx     = ctx;
+}
+
+/* ----------------------------------------------------------------
+ * 키보드 가속기 (window-scoped)
+ * ---------------------------------------------------------------- */
+
+static void ks_gtk_accel_entry_free(gpointer p)
+{
+    KSGtkAccelEntry *entry = (KSGtkAccelEntry *) p;
+    if (!entry) return;
+    /* shortcut은 controller가 보유한 ref를 unref하면 정리된다.
+     * 우리가 잡고 있던 추가 ref만 해제. */
+    if (entry->shortcut) g_object_unref(entry->shortcut);
+    g_free(entry);
+}
+
+/* GtkShortcutFunc: callback action에서 호출됨. 메인 스레드. */
+static gboolean on_shortcut_activate(GtkWidget *widget,
+                                      GVariant  *args,
+                                      gpointer   user_data)
+{
+    (void) widget; (void) args;
+    KSGtkAccelEntry *entry = (KSGtkAccelEntry *) user_data;
+    if (!entry || !entry->cb) return FALSE;
+    int rc = entry->cb(entry->ctx);
+    return rc ? TRUE : FALSE;
+}
+
+int ks_gtk_host_install_accelerator(KSGtkHost *host,
+                                     const char *id,
+                                     const char *trigger,
+                                     KSGtkAcceleratorFn cb,
+                                     void *ctx)
+{
+    if (!host || !id || !trigger || !cb) return 0;
+    if (!host->shortcut_controller) {
+        /* 윈도우가 아직 활성화되지 않음 — 단축키 등록은 윈도우가
+         * 만들어진 후에만 가능하다. 호출자는 start 이후 등록해야 한다. */
+        return 0;
+    }
+
+    GtkShortcutTrigger *trig = gtk_shortcut_trigger_parse_string(trigger);
+    if (!trig) return 0;
+
+    if (!host->shortcuts_by_id) {
+        host->shortcuts_by_id = g_hash_table_new_full(
+            g_str_hash, g_str_equal, g_free, ks_gtk_accel_entry_free);
+    }
+
+    /* 같은 id가 있으면 먼저 제거(해시 테이블 free 함수가 controller에서도 제거해줌은 아님). */
+    KSGtkAccelEntry *existing = (KSGtkAccelEntry *)
+        g_hash_table_lookup(host->shortcuts_by_id, id);
+    if (existing) {
+        gtk_shortcut_controller_remove_shortcut(
+            host->shortcut_controller, existing->shortcut);
+        g_hash_table_remove(host->shortcuts_by_id, id);
+    }
+
+    KSGtkAccelEntry *entry = g_new0(KSGtkAccelEntry, 1);
+    entry->cb = cb;
+    entry->ctx = ctx;
+
+    GtkShortcutAction *action = gtk_callback_action_new(
+        on_shortcut_activate, entry, NULL);
+    GtkShortcut *shortcut = gtk_shortcut_new(trig, action);
+    /* 우리가 entry에 들고 있는 ref를 명시적으로 잡아둔다(controller 추가 시
+     * 한 번 ref를 가져가지만 우리가 별도로 보유하면 안전하다). */
+    g_object_ref(shortcut);
+    entry->shortcut = shortcut;
+
+    gtk_shortcut_controller_add_shortcut(
+        host->shortcut_controller, shortcut);
+
+    g_hash_table_replace(host->shortcuts_by_id, g_strdup(id), entry);
+    return 1;
+}
+
+void ks_gtk_host_uninstall_accelerator(KSGtkHost *host, const char *id)
+{
+    if (!host || !id || !host->shortcuts_by_id) return;
+    KSGtkAccelEntry *entry = (KSGtkAccelEntry *)
+        g_hash_table_lookup(host->shortcuts_by_id, id);
+    if (!entry) return;
+    if (host->shortcut_controller && entry->shortcut) {
+        gtk_shortcut_controller_remove_shortcut(
+            host->shortcut_controller, entry->shortcut);
+    }
+    g_hash_table_remove(host->shortcuts_by_id, id);
+}
+
+void ks_gtk_host_uninstall_all_accelerators(KSGtkHost *host)
+{
+    if (!host || !host->shortcuts_by_id) return;
+    if (host->shortcut_controller) {
+        GHashTableIter it;
+        gpointer key, value;
+        g_hash_table_iter_init(&it, host->shortcuts_by_id);
+        while (g_hash_table_iter_next(&it, &key, &value)) {
+            KSGtkAccelEntry *entry = (KSGtkAccelEntry *) value;
+            if (entry && entry->shortcut) {
+                gtk_shortcut_controller_remove_shortcut(
+                    host->shortcut_controller, entry->shortcut);
+            }
+        }
+    }
+    g_hash_table_remove_all(host->shortcuts_by_id);
+}
+
+/* ----------------------------------------------------------------
  * D-Bus logind PrepareForSleep (suspend / resume)
  * ----------------------------------------------------------------
  * Signal signature: PrepareForSleep(b going_to_sleep)
@@ -1547,4 +1800,619 @@ void ks_gtk_host_show_context_menu(KSGtkHost *host,
     gtk_popover_set_has_arrow(GTK_POPOVER(popover), FALSE);
     gtk_popover_popup(GTK_POPOVER(popover));
 }
+
+/* ================================================================
+ * 시스템 트레이 (StatusNotifierItem + DBusMenu)
+ * ================================================================
+ * 본 구현은 GIO `GDBusConnection`만 사용해 SNI/DBusMenu를 D-Bus
+ * 세션 버스에 직접 노출한다. AppIndicator3/libayatana 의존성 없음.
+ * 메뉴는 평탄 구조(서브메뉴 미지원, v1 스코프).
+ */
+
+#define KS_TRAY_SNI_PATH      "/StatusNotifierItem"
+#define KS_TRAY_MENU_PATH     "/MenuBar"
+#define KS_TRAY_WATCHER_NAME  "org.kde.StatusNotifierWatcher"
+#define KS_TRAY_WATCHER_PATH  "/StatusNotifierWatcher"
+#define KS_TRAY_WATCHER_IFACE "org.kde.StatusNotifierWatcher"
+#define KS_TRAY_SNI_IFACE     "org.kde.StatusNotifierItem"
+#define KS_TRAY_MENU_IFACE    "com.canonical.dbusmenu"
+
+typedef struct KSGtkTrayItem {
+    int   id;             /* 0은 root reserved; 항목은 1부터 시작. */
+    char *label;          /* 구분선이면 NULL. */
+    char *command_id;     /* nullable. */
+    int   enabled;        /* 0/1 */
+    int   is_separator;   /* 0/1 */
+} KSGtkTrayItem;
+
+struct KSGtkTray {
+    GDBusConnection      *conn;
+    char                 *bus_name;     /* org.kde.StatusNotifierItem-<pid>-<seq> */
+    guint                 owner_id;     /* g_bus_own_name id */
+    guint                 sni_reg_id;   /* object registration */
+    guint                 menu_reg_id;  /* object registration */
+    char                 *app_id;
+    char                 *icon_path;
+    char                 *tooltip;
+    KSGtkTrayItem        *items;
+    int                   item_count;
+    int                   installed;    /* 1 = 등록 성공 */
+    guint32               menu_revision;
+    KSGtkTrayActivateFn   activate_cb;
+    void                 *activate_ctx;
+};
+
+static guint g_ks_tray_seq = 0;
+
+static const char KS_TRAY_SNI_XML[] =
+    "<node>"
+    "  <interface name='org.kde.StatusNotifierItem'>"
+    "    <property name='Category' type='s' access='read'/>"
+    "    <property name='Id' type='s' access='read'/>"
+    "    <property name='Title' type='s' access='read'/>"
+    "    <property name='Status' type='s' access='read'/>"
+    "    <property name='IconName' type='s' access='read'/>"
+    "    <property name='IconPixmap' type='a(iiay)' access='read'/>"
+    "    <property name='ToolTip' type='(sa(iiay)ss)' access='read'/>"
+    "    <property name='ItemIsMenu' type='b' access='read'/>"
+    "    <property name='Menu' type='o' access='read'/>"
+    "    <method name='Activate'>"
+    "      <arg type='i' name='x' direction='in'/>"
+    "      <arg type='i' name='y' direction='in'/>"
+    "    </method>"
+    "    <method name='SecondaryActivate'>"
+    "      <arg type='i' name='x' direction='in'/>"
+    "      <arg type='i' name='y' direction='in'/>"
+    "    </method>"
+    "    <method name='ContextMenu'>"
+    "      <arg type='i' name='x' direction='in'/>"
+    "      <arg type='i' name='y' direction='in'/>"
+    "    </method>"
+    "    <method name='Scroll'>"
+    "      <arg type='i' name='delta' direction='in'/>"
+    "      <arg type='s' name='orientation' direction='in'/>"
+    "    </method>"
+    "    <signal name='NewIcon'/>"
+    "    <signal name='NewToolTip'/>"
+    "    <signal name='NewStatus'><arg type='s' name='status'/></signal>"
+    "  </interface>"
+    "</node>";
+
+static const char KS_TRAY_MENU_XML[] =
+    "<node>"
+    "  <interface name='com.canonical.dbusmenu'>"
+    "    <property name='Version' type='u' access='read'/>"
+    "    <property name='TextDirection' type='s' access='read'/>"
+    "    <property name='Status' type='s' access='read'/>"
+    "    <property name='IconThemePath' type='as' access='read'/>"
+    "    <method name='GetLayout'>"
+    "      <arg type='i' name='parentId' direction='in'/>"
+    "      <arg type='i' name='recursionDepth' direction='in'/>"
+    "      <arg type='as' name='propertyNames' direction='in'/>"
+    "      <arg type='u' name='revision' direction='out'/>"
+    "      <arg type='(ia{sv}av)' name='layout' direction='out'/>"
+    "    </method>"
+    "    <method name='GetGroupProperties'>"
+    "      <arg type='ai' name='ids' direction='in'/>"
+    "      <arg type='as' name='propertyNames' direction='in'/>"
+    "      <arg type='a(ia{sv})' name='properties' direction='out'/>"
+    "    </method>"
+    "    <method name='GetProperty'>"
+    "      <arg type='i' name='id' direction='in'/>"
+    "      <arg type='s' name='name' direction='in'/>"
+    "      <arg type='v' name='value' direction='out'/>"
+    "    </method>"
+    "    <method name='Event'>"
+    "      <arg type='i' name='id' direction='in'/>"
+    "      <arg type='s' name='eventId' direction='in'/>"
+    "      <arg type='v' name='data' direction='in'/>"
+    "      <arg type='u' name='timestamp' direction='in'/>"
+    "    </method>"
+    "    <method name='AboutToShow'>"
+    "      <arg type='i' name='id' direction='in'/>"
+    "      <arg type='b' name='needUpdate' direction='out'/>"
+    "    </method>"
+    "    <signal name='ItemsPropertiesUpdated'>"
+    "      <arg type='a(ia{sv})' name='updatedProps'/>"
+    "      <arg type='a(ias)' name='removedProps'/>"
+    "    </signal>"
+    "    <signal name='LayoutUpdated'>"
+    "      <arg type='u' name='revision'/>"
+    "      <arg type='i' name='parent'/>"
+    "    </signal>"
+    "  </interface>"
+    "</node>";
+
+static GDBusNodeInfo *g_ks_tray_sni_info  = NULL;
+static GDBusNodeInfo *g_ks_tray_menu_info = NULL;
+
+static void ks_tray_clear_items(KSGtkTray *tray)
+{
+    if (!tray->items) return;
+    for (int i = 0; i < tray->item_count; ++i) {
+        g_free(tray->items[i].label);
+        g_free(tray->items[i].command_id);
+    }
+    g_free(tray->items);
+    tray->items = NULL;
+    tray->item_count = 0;
+}
+
+static void ks_tray_set_items(KSGtkTray *tray,
+                               const KSGtkTrayMenuItem *items,
+                               int item_count)
+{
+    ks_tray_clear_items(tray);
+    if (!items || item_count <= 0) return;
+    tray->items = g_new0(KSGtkTrayItem, item_count);
+    tray->item_count = item_count;
+    for (int i = 0; i < item_count; ++i) {
+        tray->items[i].id           = i + 1;
+        tray->items[i].label        = items[i].label
+            ? g_strdup(items[i].label) : NULL;
+        tray->items[i].command_id   = items[i].command_id
+            ? g_strdup(items[i].command_id) : NULL;
+        tray->items[i].enabled      = items[i].enabled ? 1 : 0;
+        tray->items[i].is_separator = items[i].is_separator ? 1 : 0;
+    }
+}
+
+/* ---------------------------------------------------------------- */
+/* SNI 메서드/프로퍼티 핸들러                                       */
+/* ---------------------------------------------------------------- */
+
+static void ks_tray_sni_method(GDBusConnection *conn,
+                                const gchar     *sender,
+                                const gchar     *object_path,
+                                const gchar     *interface_name,
+                                const gchar     *method_name,
+                                GVariant        *parameters,
+                                GDBusMethodInvocation *inv,
+                                gpointer         user_data)
+{
+    (void) conn; (void) sender; (void) object_path;
+    (void) interface_name; (void) parameters;
+    KSGtkTray *tray = (KSGtkTray *) user_data;
+
+    if (g_strcmp0(method_name, "Activate") == 0) {
+        if (tray->activate_cb) tray->activate_cb("", tray->activate_ctx);
+        g_dbus_method_invocation_return_value(inv, NULL);
+    } else if (g_strcmp0(method_name, "SecondaryActivate") == 0
+            || g_strcmp0(method_name, "ContextMenu") == 0
+            || g_strcmp0(method_name, "Scroll") == 0) {
+        /* 무시 — 메뉴는 셸이 직접 그려준다. */
+        g_dbus_method_invocation_return_value(inv, NULL);
+    } else {
+        g_dbus_method_invocation_return_error(
+            inv, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD,
+            "Unknown method %s", method_name);
+    }
+}
+
+static GVariant *ks_tray_sni_get_property(GDBusConnection *conn,
+                                           const gchar     *sender,
+                                           const gchar     *object_path,
+                                           const gchar     *interface_name,
+                                           const gchar     *property_name,
+                                           GError         **error,
+                                           gpointer         user_data)
+{
+    (void) conn; (void) sender; (void) object_path; (void) interface_name;
+    KSGtkTray *tray = (KSGtkTray *) user_data;
+
+    if (g_strcmp0(property_name, "Category") == 0) {
+        return g_variant_new_string("ApplicationStatus");
+    }
+    if (g_strcmp0(property_name, "Id") == 0) {
+        return g_variant_new_string(tray->app_id ? tray->app_id : "kalsae");
+    }
+    if (g_strcmp0(property_name, "Title") == 0) {
+        return g_variant_new_string(tray->app_id ? tray->app_id : "Kalsae");
+    }
+    if (g_strcmp0(property_name, "Status") == 0) {
+        return g_variant_new_string("Active");
+    }
+    if (g_strcmp0(property_name, "IconName") == 0) {
+        /* 절대 경로 아이콘은 IconName으로 주면 셸이 폴백 처리한다.
+         * 비어 있으면 빈 문자열을 반환해 셸의 기본 아이콘을 사용. */
+        return g_variant_new_string(tray->icon_path ? tray->icon_path : "");
+    }
+    if (g_strcmp0(property_name, "IconPixmap") == 0) {
+        return g_variant_new("a(iiay)", NULL);
+    }
+    if (g_strcmp0(property_name, "ToolTip") == 0) {
+        const char *tip = tray->tooltip ? tray->tooltip : "";
+        GVariantBuilder pix;
+        g_variant_builder_init(&pix, G_VARIANT_TYPE("a(iiay)"));
+        return g_variant_new("(sa(iiay)ss)", "", &pix, tip, "");
+    }
+    if (g_strcmp0(property_name, "ItemIsMenu") == 0) {
+        /* false = 좌클릭 시 Activate 호출, true이면 메뉴만 열림. */
+        return g_variant_new_boolean(FALSE);
+    }
+    if (g_strcmp0(property_name, "Menu") == 0) {
+        return g_variant_new_object_path(KS_TRAY_MENU_PATH);
+    }
+    g_set_error(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_PROPERTY,
+                "Unknown SNI property %s", property_name);
+    return NULL;
+}
+
+static const GDBusInterfaceVTable ks_tray_sni_vtable = {
+    .method_call  = ks_tray_sni_method,
+    .get_property = ks_tray_sni_get_property,
+    .set_property = NULL,
+    .padding      = { 0 },
+};
+
+/* ---------------------------------------------------------------- */
+/* DBusMenu 빌더 헬퍼                                                */
+/* ---------------------------------------------------------------- */
+
+/* 단일 항목의 a{sv} 프로퍼티 dict를 만든다(GetLayout/GetGroupProperties
+ * 양쪽에서 공유). */
+static GVariant *ks_tray_item_props(const KSGtkTrayItem *item)
+{
+    GVariantBuilder b;
+    g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
+    if (item->is_separator) {
+        g_variant_builder_add(&b, "{sv}", "type",
+                              g_variant_new_string("separator"));
+    } else {
+        if (item->label) {
+            g_variant_builder_add(&b, "{sv}", "label",
+                                  g_variant_new_string(item->label));
+        }
+        g_variant_builder_add(&b, "{sv}", "enabled",
+                              g_variant_new_boolean(item->enabled ? TRUE : FALSE));
+        g_variant_builder_add(&b, "{sv}", "visible",
+                              g_variant_new_boolean(TRUE));
+    }
+    return g_variant_builder_end(&b);
+}
+
+/* 루트 (id=0)의 자식 트리를 (ia{sv}av) 형태로 구성. */
+static GVariant *ks_tray_build_layout(KSGtkTray *tray)
+{
+    /* root props: children-display=submenu */
+    GVariantBuilder root_props;
+    g_variant_builder_init(&root_props, G_VARIANT_TYPE("a{sv}"));
+    g_variant_builder_add(&root_props, "{sv}", "children-display",
+                          g_variant_new_string("submenu"));
+
+    /* children: av (각 자식은 v(ia{sv}av)) */
+    GVariantBuilder children;
+    g_variant_builder_init(&children, G_VARIANT_TYPE("av"));
+    for (int i = 0; i < tray->item_count; ++i) {
+        GVariant *child_props = ks_tray_item_props(&tray->items[i]);
+        GVariantBuilder empty_children;
+        g_variant_builder_init(&empty_children, G_VARIANT_TYPE("av"));
+        GVariant *child = g_variant_new(
+            "(i@a{sv}av)",
+            tray->items[i].id, child_props, &empty_children);
+        g_variant_builder_add(&children, "v", child);
+    }
+    return g_variant_new("(ia{sv}av)", 0, &root_props, &children);
+}
+
+static void ks_tray_menu_method(GDBusConnection *conn,
+                                 const gchar     *sender,
+                                 const gchar     *object_path,
+                                 const gchar     *interface_name,
+                                 const gchar     *method_name,
+                                 GVariant        *parameters,
+                                 GDBusMethodInvocation *inv,
+                                 gpointer         user_data)
+{
+    (void) conn; (void) sender; (void) object_path; (void) interface_name;
+    KSGtkTray *tray = (KSGtkTray *) user_data;
+
+    if (g_strcmp0(method_name, "GetLayout") == 0) {
+        GVariant *layout = ks_tray_build_layout(tray);
+        g_dbus_method_invocation_return_value(
+            inv, g_variant_new("(u@(ia{sv}av))",
+                                tray->menu_revision, layout));
+        return;
+    }
+    if (g_strcmp0(method_name, "GetGroupProperties") == 0) {
+        GVariantIter *ids_iter = NULL;
+        GVariantIter *names_iter = NULL;
+        g_variant_get(parameters, "(aias)", &ids_iter, &names_iter);
+        if (names_iter) g_variant_iter_free(names_iter);
+
+        GVariantBuilder result;
+        g_variant_builder_init(&result, G_VARIANT_TYPE("a(ia{sv})"));
+        gint32 id;
+        while (g_variant_iter_next(ids_iter, "i", &id)) {
+            if (id == 0) continue;
+            for (int i = 0; i < tray->item_count; ++i) {
+                if (tray->items[i].id == id) {
+                    g_variant_builder_add(
+                        &result, "(i@a{sv})",
+                        id, ks_tray_item_props(&tray->items[i]));
+                    break;
+                }
+            }
+        }
+        g_variant_iter_free(ids_iter);
+        g_dbus_method_invocation_return_value(
+            inv, g_variant_new("(a(ia{sv}))", &result));
+        return;
+    }
+    if (g_strcmp0(method_name, "GetProperty") == 0) {
+        gint32 id;
+        const gchar *name;
+        g_variant_get(parameters, "(i&s)", &id, &name);
+        for (int i = 0; i < tray->item_count; ++i) {
+            if (tray->items[i].id != id) continue;
+            if (g_strcmp0(name, "label") == 0 && tray->items[i].label) {
+                g_dbus_method_invocation_return_value(
+                    inv, g_variant_new("(v)",
+                        g_variant_new_string(tray->items[i].label)));
+                return;
+            }
+            if (g_strcmp0(name, "enabled") == 0) {
+                g_dbus_method_invocation_return_value(
+                    inv, g_variant_new("(v)",
+                        g_variant_new_boolean(tray->items[i].enabled)));
+                return;
+            }
+            break;
+        }
+        g_dbus_method_invocation_return_error(
+            inv, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_PROPERTY,
+            "Unknown property %s for id %d", name, id);
+        return;
+    }
+    if (g_strcmp0(method_name, "Event") == 0) {
+        gint32 id;
+        const gchar *event_id;
+        GVariant *data;
+        guint32 ts;
+        g_variant_get(parameters, "(i&sv u)", &id, &event_id, &data, &ts);
+        if (data) g_variant_unref(data);
+        if (g_strcmp0(event_id, "clicked") == 0 && id > 0) {
+            for (int i = 0; i < tray->item_count; ++i) {
+                if (tray->items[i].id == id
+                 && !tray->items[i].is_separator
+                 && tray->items[i].command_id
+                 && tray->activate_cb) {
+                    tray->activate_cb(tray->items[i].command_id,
+                                      tray->activate_ctx);
+                    break;
+                }
+            }
+        }
+        g_dbus_method_invocation_return_value(inv, NULL);
+        return;
+    }
+    if (g_strcmp0(method_name, "AboutToShow") == 0) {
+        g_dbus_method_invocation_return_value(
+            inv, g_variant_new("(b)", FALSE));
+        return;
+    }
+
+    g_dbus_method_invocation_return_error(
+        inv, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_METHOD,
+        "Unknown DBusMenu method %s", method_name);
+}
+
+static GVariant *ks_tray_menu_get_property(GDBusConnection *conn,
+                                            const gchar     *sender,
+                                            const gchar     *object_path,
+                                            const gchar     *interface_name,
+                                            const gchar     *property_name,
+                                            GError         **error,
+                                            gpointer         user_data)
+{
+    (void) conn; (void) sender; (void) object_path; (void) interface_name;
+    (void) user_data;
+    if (g_strcmp0(property_name, "Version") == 0) {
+        return g_variant_new_uint32(3);
+    }
+    if (g_strcmp0(property_name, "TextDirection") == 0) {
+        return g_variant_new_string("ltr");
+    }
+    if (g_strcmp0(property_name, "Status") == 0) {
+        return g_variant_new_string("normal");
+    }
+    if (g_strcmp0(property_name, "IconThemePath") == 0) {
+        const gchar *empty[] = { NULL };
+        return g_variant_new_strv(empty, 0);
+    }
+    g_set_error(error, G_DBUS_ERROR, G_DBUS_ERROR_UNKNOWN_PROPERTY,
+                "Unknown DBusMenu property %s", property_name);
+    return NULL;
+}
+
+static const GDBusInterfaceVTable ks_tray_menu_vtable = {
+    .method_call  = ks_tray_menu_method,
+    .get_property = ks_tray_menu_get_property,
+    .set_property = NULL,
+    .padding      = { 0 },
+};
+
+/* ---------------------------------------------------------------- */
+/* Watcher 등록                                                      */
+/* ---------------------------------------------------------------- */
+
+static int ks_tray_register_with_watcher(KSGtkTray *tray)
+{
+    GError *err = NULL;
+    GVariant *result = g_dbus_connection_call_sync(
+        tray->conn,
+        KS_TRAY_WATCHER_NAME, KS_TRAY_WATCHER_PATH,
+        KS_TRAY_WATCHER_IFACE, "RegisterStatusNotifierItem",
+        g_variant_new("(s)", tray->bus_name),
+        NULL, G_DBUS_CALL_FLAGS_NONE, 5000, NULL, &err);
+    if (err) {
+        g_warning("KSTray: watcher unavailable (%s)",
+                  err->message ? err->message : "no message");
+        g_error_free(err);
+        return 0;
+    }
+    if (result) g_variant_unref(result);
+    return 1;
+}
+
+/* ---------------------------------------------------------------- */
+/* Public API                                                        */
+/* ---------------------------------------------------------------- */
+
+KSGtkTray *ks_gtk_tray_new(void)
+{
+    KSGtkTray *t = g_new0(KSGtkTray, 1);
+    t->menu_revision = 1;
+    return t;
+}
+
+int ks_gtk_tray_install(KSGtkTray *tray,
+                         const char *app_id,
+                         const char *icon_path,
+                         const char *tooltip,
+                         const KSGtkTrayMenuItem *items,
+                         int item_count,
+                         KSGtkTrayActivateFn cb,
+                         void *ctx)
+{
+    if (!tray || tray->installed) return 0;
+
+    /* 1회 introspection 파싱 캐시. */
+    if (!g_ks_tray_sni_info) {
+        GError *e = NULL;
+        g_ks_tray_sni_info = g_dbus_node_info_new_for_xml(
+            KS_TRAY_SNI_XML, &e);
+        if (e) { g_warning("KSTray: SNI XML parse failed: %s",
+                            e->message); g_error_free(e); return 0; }
+    }
+    if (!g_ks_tray_menu_info) {
+        GError *e = NULL;
+        g_ks_tray_menu_info = g_dbus_node_info_new_for_xml(
+            KS_TRAY_MENU_XML, &e);
+        if (e) { g_warning("KSTray: DBusMenu XML parse failed: %s",
+                            e->message); g_error_free(e); return 0; }
+    }
+
+    /* 세션 버스 연결. */
+    GError *err = NULL;
+    GDBusConnection *conn = g_bus_get_sync(G_BUS_TYPE_SESSION, NULL, &err);
+    if (err || !conn) {
+        g_warning("KSTray: session bus unavailable: %s",
+                  err ? err->message : "(no err)");
+        if (err) g_error_free(err);
+        return 0;
+    }
+    tray->conn = conn;
+
+    /* 메타데이터 보관. */
+    clear_string(&tray->app_id);
+    clear_string(&tray->icon_path);
+    clear_string(&tray->tooltip);
+    if (app_id    && *app_id)    tray->app_id    = g_strdup(app_id);
+    if (icon_path && *icon_path) tray->icon_path = g_strdup(icon_path);
+    if (tooltip   && *tooltip)   tray->tooltip   = g_strdup(tooltip);
+    ks_tray_set_items(tray, items, item_count);
+    tray->activate_cb  = cb;
+    tray->activate_ctx = ctx;
+
+    /* 고유 버스 이름 생성. */
+    g_free(tray->bus_name);
+    tray->bus_name = g_strdup_printf(
+        "org.kde.StatusNotifierItem-%d-%u",
+        (int) getpid(), ++g_ks_tray_seq);
+
+    /* 객체 등록. */
+    tray->sni_reg_id = g_dbus_connection_register_object(
+        tray->conn, KS_TRAY_SNI_PATH,
+        g_ks_tray_sni_info->interfaces[0],
+        &ks_tray_sni_vtable, tray, NULL, &err);
+    if (err) {
+        g_warning("KSTray: SNI register failed: %s", err->message);
+        g_error_free(err); err = NULL;
+    }
+    tray->menu_reg_id = g_dbus_connection_register_object(
+        tray->conn, KS_TRAY_MENU_PATH,
+        g_ks_tray_menu_info->interfaces[0],
+        &ks_tray_menu_vtable, tray, NULL, &err);
+    if (err) {
+        g_warning("KSTray: DBusMenu register failed: %s", err->message);
+        g_error_free(err); err = NULL;
+    }
+
+    /* 버스 이름 소유. */
+    tray->owner_id = g_bus_own_name_on_connection(
+        tray->conn, tray->bus_name,
+        G_BUS_NAME_OWNER_FLAGS_NONE,
+        NULL, NULL, NULL, NULL);
+
+    /* Watcher 등록 시도. */
+    int rc = ks_tray_register_with_watcher(tray);
+    tray->installed = rc;
+    return rc;
+}
+
+void ks_gtk_tray_set_tooltip(KSGtkTray *tray, const char *tooltip)
+{
+    if (!tray) return;
+    clear_string(&tray->tooltip);
+    if (tooltip && *tooltip) tray->tooltip = g_strdup(tooltip);
+    if (tray->installed && tray->conn) {
+        g_dbus_connection_emit_signal(
+            tray->conn, NULL, KS_TRAY_SNI_PATH, KS_TRAY_SNI_IFACE,
+            "NewToolTip", NULL, NULL);
+    }
+}
+
+void ks_gtk_tray_set_menu(KSGtkTray *tray,
+                           const KSGtkTrayMenuItem *items,
+                           int item_count)
+{
+    if (!tray) return;
+    ks_tray_set_items(tray, items, item_count);
+    tray->menu_revision++;
+    if (tray->installed && tray->conn) {
+        g_dbus_connection_emit_signal(
+            tray->conn, NULL, KS_TRAY_MENU_PATH, KS_TRAY_MENU_IFACE,
+            "LayoutUpdated",
+            g_variant_new("(ui)", tray->menu_revision, 0),
+            NULL);
+    }
+}
+
+void ks_gtk_tray_remove(KSGtkTray *tray)
+{
+    if (!tray || !tray->installed) return;
+    if (tray->conn) {
+        if (tray->sni_reg_id) {
+            g_dbus_connection_unregister_object(tray->conn, tray->sni_reg_id);
+            tray->sni_reg_id = 0;
+        }
+        if (tray->menu_reg_id) {
+            g_dbus_connection_unregister_object(tray->conn, tray->menu_reg_id);
+            tray->menu_reg_id = 0;
+        }
+    }
+    if (tray->owner_id) {
+        g_bus_unown_name(tray->owner_id);
+        tray->owner_id = 0;
+    }
+    tray->installed = 0;
+}
+
+void ks_gtk_tray_free(KSGtkTray *tray)
+{
+    if (!tray) return;
+    ks_gtk_tray_remove(tray);
+    if (tray->conn) {
+        g_object_unref(tray->conn);
+        tray->conn = NULL;
+    }
+    ks_tray_clear_items(tray);
+    clear_string(&tray->bus_name);
+    clear_string(&tray->app_id);
+    clear_string(&tray->icon_path);
+    clear_string(&tray->tooltip);
+    g_free(tray);
+}
+
 

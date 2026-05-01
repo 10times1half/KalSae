@@ -25,6 +25,8 @@ public final class KSAndroidPlatform: KSPlatform, @unchecked Sendable {
     public var shell: (any KSShellBackend)? { _shell }
     public var clipboard: (any KSClipboardBackend)? { _clipboard }
     public var accelerators: (any KSAcceleratorBackend)? { nil }
+    public var autostart: (any KSAutostartBackend)? { _autostart }
+    public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
 
     private let _windows: KSAndroidWindowBackend
     private let _dialogs: KSAndroidDialogBackend
@@ -32,6 +34,8 @@ public final class KSAndroidPlatform: KSPlatform, @unchecked Sendable {
     private let _notifications: KSAndroidNotificationBackend
     public let _shell: KSAndroidShellBackend
     public let _clipboard: KSAndroidClipboardBackend
+    private let _autostart: KSAndroidAutostartBackend
+    private let _deepLink: KSAndroidDeepLinkBackend
 
     public init() {
         self.commandRegistry = KSCommandRegistry()
@@ -41,6 +45,9 @@ public final class KSAndroidPlatform: KSPlatform, @unchecked Sendable {
         self._notifications = KSAndroidNotificationBackend()
         self._shell = KSAndroidShellBackend()
         self._clipboard = KSAndroidClipboardBackend()
+        self._autostart = KSAndroidAutostartBackend()
+        self._deepLink = KSAndroidDeepLinkBackend(
+            identifier: Bundle.main.bundleIdentifier ?? "kalsae")
     }
 
     public func run(
@@ -151,69 +158,6 @@ public struct KSAndroidWindowBackend: KSWindowBackend, Sendable {
             throw KSError(code: .windowCreationFailed,
                           message: "No Android window registered for label '\(handle.label)'")
         }
-    }
-}
-
-public struct KSAndroidDialogBackend: KSDialogBackend, Sendable {
-    public init() {}
-
-    public func openFile(
-        options: KSOpenFileOptions,
-        parent: KSWindowHandle?
-    ) async throws(KSError) -> [URL] {
-        _ = (options, parent)
-        throw KSError.unsupportedPlatform("KSAndroidDialogBackend.openFile is not implemented yet")
-    }
-
-    public func saveFile(
-        options: KSSaveFileOptions,
-        parent: KSWindowHandle?
-    ) async throws(KSError) -> URL? {
-        _ = (options, parent)
-        throw KSError.unsupportedPlatform("KSAndroidDialogBackend.saveFile is not implemented yet")
-    }
-
-    public func selectFolder(
-        options: KSSelectFolderOptions,
-        parent: KSWindowHandle?
-    ) async throws(KSError) -> URL? {
-        _ = (options, parent)
-        throw KSError.unsupportedPlatform("KSAndroidDialogBackend.selectFolder is not implemented yet")
-    }
-
-    @discardableResult
-    public func message(
-        _ options: KSMessageOptions,
-        parent: KSWindowHandle?
-    ) async throws(KSError) -> KSMessageResult {
-        _ = (options, parent)
-        throw KSError.unsupportedPlatform("KSAndroidDialogBackend.message is not implemented yet")
-    }
-}
-
-public struct KSAndroidMenuBackend: KSMenuBackend, Sendable {
-    public init() {}
-
-    public func installAppMenu(_ items: [KSMenuItem]) async throws(KSError) {
-        _ = items
-        throw KSError.unsupportedPlatform("KSAndroidMenuBackend.installAppMenu is not implemented yet")
-    }
-
-    public func installWindowMenu(
-        _ handle: KSWindowHandle,
-        items: [KSMenuItem]
-    ) async throws(KSError) {
-        _ = (handle, items)
-        throw KSError.unsupportedPlatform("KSAndroidMenuBackend.installWindowMenu is not implemented yet")
-    }
-
-    public func showContextMenu(
-        _ items: [KSMenuItem],
-        at point: KSPoint,
-        in handle: KSWindowHandle?
-    ) async throws(KSError) {
-        _ = (items, point, handle)
-        throw KSError.unsupportedPlatform("KSAndroidMenuBackend.showContextMenu is not implemented yet")
     }
 }
 

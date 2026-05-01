@@ -174,9 +174,17 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Requires GTK4 + WebKitGTK 6.0 via pkg-config.
 - PAL surfaces: windows, menus, dialogs, notifications (notify-send), clipboard,
   shell, autostart (XDG .desktop), deep link (XDG MIME), single instance (Unix
-  socket).
-- **Stubs (planned):** tray (AppIndicator3 / libayatana), global accelerators
-  (GTK shortcut controllers or Wayland protocol).
+  socket), window-scoped accelerators (`GtkShortcutController`, LOCAL scope),
+  window state persistence (size/maximized/fullscreen always; position on X11
+  only — Wayland compositors control placement), system tray (D-Bus
+  StatusNotifierItem + DBusMenu, no AppIndicator3/libayatana dependency — works
+  on KDE/Cinnamon/XFCE/Pantheon and GNOME with AppIndicator extension; vanilla
+  GNOME falls back to no-op with a warning).
+- Virtual host serves `ks://app/` only (`https://app.kalsae/` is Windows-only —
+  WebKitGTK cannot intercept `http(s)`); responses include CSP +
+  `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer`.
+- **Stubs (planned):** system-wide global hot-keys (deferred — no standard
+  Wayland protocol), tray submenus (v1 ships with flat menus only).
 
 ### iOS
 - Deployment target: iOS 16 (via `Package.swift`).

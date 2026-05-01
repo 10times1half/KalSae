@@ -25,12 +25,27 @@ public final class KSAndroidDemoHost {
     private var _onSuspend: (@MainActor () -> Void)?
     private var _onResume: (@MainActor () -> Void)?
 
+    // MARK: - Injectable backends (JS IPC 경로용, Kotlin 훅 연결 대상)
+
+    /// JS `__ks.shell.*` 명령을 처리한다. Kotlin에서 `onOpenExternal`을 주입해야 한다.
+    public let shellBackend: KSAndroidShellBackend
+    /// JS `__ks.clipboard.*` 명령을 처리한다. Kotlin에서 읽기/쓰기 훅을 주입할 수 있다.
+    public let clipboardBackend: KSAndroidClipboardBackend
+    /// JS `__ks.notification.*` 명령을 처리한다. Kotlin에서 `onPost` 등을 주입해야 한다.
+    public let notificationBackend: KSAndroidNotificationBackend
+    /// JS `__ks.dialog.*` 명령을 처리한다. Kotlin에서 `onOpenFile` 등을 주입해야 한다.
+    public let dialogBackend: KSAndroidDialogBackend
+
     public init(windowConfig: KSWindowConfig,
                 registry: KSCommandRegistry) throws(KSError) {
         self.registry = registry
         self.windowConfig = windowConfig
         self.webViewHost = KSAndroidWebViewHost()
         self.bridge = KSAndroidBridge(host: webViewHost, registry: registry)
+        self.shellBackend = KSAndroidShellBackend()
+        self.clipboardBackend = KSAndroidClipboardBackend()
+        self.notificationBackend = KSAndroidNotificationBackend()
+        self.dialogBackend = KSAndroidDialogBackend()
         try self.bridge.install()
     }
 
@@ -87,6 +102,43 @@ public final class KSAndroidDemoHost {
         _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
     ) {
         _ = sink
+    }
+
+    /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
+    ///
+    /// `KSApp.boot()` 내부에서 자동으로 호출된다. 직접 호출할 경우
+    /// `start(url:devtools:)` 이전에 실행해야 한다.
+    public func registerBuiltinCommands(
+        platformName: String = "Android (WebView)",
+        shellScope: KSShellScope = .init(),
+        notificationScope: KSNotificationScope = .init(),
+        fsScope: KSFSScope = .init(),
+        httpScope: KSHTTPScope = .init(),
+        autostart: (any KSAutostartBackend)? = nil,
+        deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        appDirectory: URL? = nil
+    ) async {
+        let windowBackend = KSAndroidWindowBackend()
+        let handle: KSWindowHandle? = try? await windowBackend.create(windowConfig)
+        let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
+        let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
+        await KSBuiltinCommands.register(
+            into: registry,
+            windows: windowBackend,
+            shell: shellBackend,
+            clipboard: clipboardBackend,
+            notifications: notificationBackend,
+            dialogs: dialogBackend,
+            mainWindow: mainProvider,
+            quit: quitBlock,
+            platformName: platformName,
+            shellScope: shellScope,
+            notificationScope: notificationScope,
+            fsScope: fsScope,
+            httpScope: httpScope,
+            autostart: autostart,
+            deepLink: deepLink,
+            appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
     }
 }
 #endif

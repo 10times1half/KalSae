@@ -314,6 +314,77 @@ void ks_gtk_host_set_close_handler(KSGtkHost *host,
 void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled);
 
 /* ----------------------------------------------------------------
+ * 윈도우 상태 영속화 (window state persistence)
+ * ---------------------------------------------------------------- */
+
+/** 활성화 전에 적용할 복원 상태를 호스트에 저장한다.
+ *  값은 `on_activate`에서 윈도우가 만들어진 직후 적용된다.
+ *  has_position이 0이면 위치는 무시되고 기본 배치를 따른다.
+ *  Wayland에서는 위치 설정이 임묵 무시될 수 있으나, 크기/최대화/
+ *  전체화면은 그대로 적용된다.                                       */
+void ks_gtk_host_set_pending_restore_state(KSGtkHost *host,
+                                            int x, int y,
+                                            int width, int height,
+                                            int has_position,
+                                            int maximized,
+                                            int fullscreen);
+
+/** 현재 윈도우 상태를 출력 파라미터에 채워 넣는다.
+ *  성공 시 1, 윈도우가 아직 만들어지지 않은 경우 0을 반환한다.
+ *  out_has_position은 위치를 신뢰할 수 있을 때(주로 X11) 1로 설정된다. */
+int ks_gtk_host_get_window_state(KSGtkHost *host,
+                                  int *out_x, int *out_y,
+                                  int *out_width, int *out_height,
+                                  int *out_has_position,
+                                  int *out_maximized,
+                                  int *out_fullscreen);
+
+/** 윈도우 상태 저장 콜백. close-request 시점에 메인 스레드에서
+ *  동기적으로 호출되며, has_position이 0이면 호출자는 위치 필드를
+ *  무시해야 한다.                                                    */
+typedef void (*KSGtkStateSaveFn)(int x, int y,
+                                  int width, int height,
+                                  int has_position,
+                                  int maximized,
+                                  int fullscreen,
+                                  void *ctx);
+
+/** 윈도우 상태 저장 핸들러를 등록한다. cb=NULL은 등록을 해제한다.
+ *  `close_handler`보다 먼저 호출되어, 닫기가 실제로 진행되든 막히든
+ *  관계없이 마지막 상태가 디스크에 보존된다.                        */
+void ks_gtk_host_set_state_save_handler(KSGtkHost *host,
+                                         KSGtkStateSaveFn cb,
+                                         void *ctx);
+
+/* ----------------------------------------------------------------
+ * 키보드 가속기 (window-scoped)
+ * ----------------------------------------------------------------
+ * GtkShortcutController(scope=LOCAL)에 단축키를 부착한다. 글로벌
+ * 시스템-와이드 단축키는 v1 범위 외이며, 윈도우 포커스가 있을 때만
+ * 발동한다.
+ */
+
+/** 가속기 활성화 콜백. 메인 스레드에서 호출된다.
+ *  사용자가 핸들러로 이벤트가 처리되었다고 보고하려면 1, 그렇지 않으면 0.
+ *  현재 구현은 항상 1을 반환하도록 가정한다(이벤트 소비). */
+typedef int (*KSGtkAcceleratorFn)(void *ctx);
+
+/** GTK 트리거 문자열(`<Control><Shift>n` 형태)을 파싱해 윈도우의
+ *  shortcut controller에 등록한다. 같은 id가 이미 있으면 먼저 제거한다.
+ *  성공 시 1, 트리거 파싱 실패 시 0을 반환한다. */
+int ks_gtk_host_install_accelerator(KSGtkHost *host,
+                                     const char *id,
+                                     const char *trigger,
+                                     KSGtkAcceleratorFn cb,
+                                     void *ctx);
+
+/** id에 대응하는 단축키를 제거한다. id가 없으면 no-op. */
+void ks_gtk_host_uninstall_accelerator(KSGtkHost *host, const char *id);
+
+/** 이 호스트에 등록된 모든 단축키를 제거한다. */
+void ks_gtk_host_uninstall_all_accelerators(KSGtkHost *host);
+
+/* ----------------------------------------------------------------
  * D-Bus logind power monitoring (suspend / resume)
  * ---------------------------------------------------------------- */
 
@@ -406,6 +477,64 @@ void ks_gtk_host_show_context_menu(KSGtkHost *host,
                                     KSGtkMenuActivateFn cb,
                                     void *ctx);
 
+/* ================================================================
+ * 시스템 트레이 (StatusNotifierItem + DBusMenu)
+ * ================================================================
+ * KDE freedesktop StatusNotifierItem 사양과 com.canonical.dbusmenu
+ * 인터페이스를 D-Bus 세션 버스에 직접 노출한다. AppIndicator3 /
+ * libayatana 의존성을 도입하지 않고 GIO `GDBusConnection`만 사용한다.
+ *
+ * 동작하는 데스크톱 환경: KDE Plasma, Cinnamon, XFCE, Pantheon,
+ * AppIndicator extension이 설치된 GNOME. Watcher 부재 시 install은
+ * 실패하지 않고 no-op로 폴백한다(install_rc=0 반환).
+ *
+ * 메뉴 항목은 평탄한 배열로 전달된다(서브메뉴 미지원, v1 스코프).
+ */
+
+typedef struct KSGtkTray KSGtkTray;
+
+/** 트레이 메뉴 항목. command_id는 활성화 시 콜백에 전달되는
+ *  비공개 식별자이며, 빈 문자열은 구분선을 의미한다. */
+typedef struct KSGtkTrayMenuItem {
+    const char *label;       /* UTF-8, 구분선이면 NULL/"" */
+    const char *command_id;  /* UTF-8, 빈 문자열이면 inert */
+    int         enabled;     /* 0 = 비활성, 1 = 활성 */
+    int         is_separator;/* 1이면 다른 필드 무시 */
+} KSGtkTrayMenuItem;
+
+/** 트레이 활성화 콜백. command_id가 비어 있으면 좌클릭/Activate
+ *  이벤트를 의미한다(SNI Activate). 메인 스레드에서 호출된다. */
+typedef void (*KSGtkTrayActivateFn)(const char *command_id, void *ctx);
+
+/** 새 트레이 인스턴스를 생성한다. 아직 D-Bus에는 등록되지 않으며,
+ *  `ks_gtk_tray_install` 호출 시 등록된다. */
+KSGtkTray *ks_gtk_tray_new(void);
+
+/** D-Bus 세션 버스에 SNI/DBusMenu 객체를 등록하고 watcher에
+ *  RegisterStatusNotifierItem 호출을 시도한다.
+ *  성공 시 1, watcher 부재/버스 연결 실패/이미 등록됨이면 0. */
+int ks_gtk_tray_install(KSGtkTray *tray,
+                         const char *app_id,
+                         const char *icon_path,
+                         const char *tooltip,
+                         const KSGtkTrayMenuItem *items,
+                         int item_count,
+                         KSGtkTrayActivateFn cb,
+                         void *ctx);
+
+/** 툴팁만 갱신한다. 등록되지 않은 상태에서는 다음 install에 반영. */
+void ks_gtk_tray_set_tooltip(KSGtkTray *tray, const char *tooltip);
+
+/** 메뉴를 갱신한다(전체 교체). LayoutUpdated 시그널을 emit한다. */
+void ks_gtk_tray_set_menu(KSGtkTray *tray,
+                           const KSGtkTrayMenuItem *items,
+                           int item_count);
+
+/** D-Bus 등록을 해제한다. 이미 해제되었으면 no-op. */
+void ks_gtk_tray_remove(KSGtkTray *tray);
+
+/** 트레이 인스턴스를 파괴한다(자동으로 remove를 호출). */
+void ks_gtk_tray_free(KSGtkTray *tray);
 
 #ifdef __cplusplus
 }

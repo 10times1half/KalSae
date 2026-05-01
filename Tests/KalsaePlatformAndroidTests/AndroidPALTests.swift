@@ -20,6 +20,8 @@ struct KSAndroidPlatformInitTests {
         #expect((platform.shell as? KSAndroidShellBackend) != nil)
         #expect((platform.clipboard as? KSAndroidClipboardBackend) != nil)
         #expect(platform.accelerators == nil)
+        #expect((platform.autostart as? KSAndroidAutostartBackend) != nil)
+        #expect((platform.deepLink as? KSAndroidDeepLinkBackend) != nil)
     }
 
     @Test("commandRegistry wiring — register and dispatch round-trip")
@@ -145,14 +147,14 @@ struct KSAndroidUnsupportedTests {
         }
     }
 
-    @Test("KSAndroidMenuBackend.installAppMenu throws unsupportedPlatform")
-    func menuInstallAppMenuThrows() async {
+    @Test("KSAndroidMenuBackend.installAppMenu succeeds silently (no-op)")
+    func menuInstallAppMenuNoThrow() async {
         let backend = KSAndroidMenuBackend()
         do {
             try await backend.installAppMenu([])
-            Issue.record("Expected unsupportedPlatform")
+            // iOS와 동일하게 no-op이어야 한다 — throw 없음.
         } catch let e {
-            #expect(e.code == .unsupportedPlatform)
+            Issue.record("installAppMenu should not throw on Android: \(e)")
         }
     }
 
