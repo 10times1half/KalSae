@@ -127,8 +127,8 @@ public struct ProjectTemplate {
             .replacingOccurrences(of: "{{DEV_SERVER_URL}}", with: b.devServerURL)
             .replacingOccurrences(of: "{{DEV_COMMAND}}", with: devCommandJSON)
             .replacingOccurrences(of: "{{BUILD_COMMAND}}", with: buildCommandJSON)
-                .replacingOccurrences(of: "{{APP_VERSION}}", with: KSVersion.current)
-                .replacingOccurrences(of: "{{KALSAE_VERSION}}", with: KSVersion.current)
+            .replacingOccurrences(of: "{{APP_VERSION}}", with: KSVersion.current)
+            .replacingOccurrences(of: "{{KALSAE_VERSION}}", with: KSVersion.current)
     }
 
     // MARK: - 리소스 로딩
