@@ -68,11 +68,33 @@ jobs:
       - name: Lint Code Format (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: swift format lint --strict --recursive Sources Tests 2>&1 ; if ($LASTEXITCODE -ne 0) { exit 1 }
+        run: |
+          swift format --help *> $null
+          if ($LASTEXITCODE -eq 0) {
+            swift format lint --strict --recursive Sources Tests
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } else {
+            swift-format --help *> $null
+            if ($LASTEXITCODE -ne 0) {
+              Write-Error "Neither 'swift format' nor 'swift-format' is available on PATH."
+              exit 1
+            }
+
+            swift-format lint --strict --recursive Sources Tests
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          }
 
       - name: Lint Code Format (Unix)
         if: runner.os != 'Windows'
-        run: swift format lint --strict --recursive Sources Tests 2>&1 ; if [ $? -ne 0 ]; then exit 1; fi
+        run: |
+          if swift format --help >/dev/null 2>&1; then
+            swift format lint --strict --recursive Sources Tests
+          elif command -v swift-format >/dev/null 2>&1; then
+            swift-format lint --strict --recursive Sources Tests
+          else
+            echo "Neither 'swift format' nor 'swift-format' is available on PATH." >&2
+            exit 1
+          fi
 
       - name: Cache SwiftPM Build
         uses: actions/cache@v4
