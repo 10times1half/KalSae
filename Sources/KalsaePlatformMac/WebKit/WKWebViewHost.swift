@@ -204,14 +204,14 @@
                             ? [.compressionFactor: 0.9]
                             : [:]
                         if let data = image.representations.first as? NSBitmapImageRep {
-                            if let bytes = data.representation(using: formatUInt, properties: props) {
+                            if let bytes = data.representation(using: formatFileType, properties: props) {
                                 cont.resume(returning: bytes)
                                 return
                             }
                         }
                         if let tiff = image.tiffRepresentation,
                             let rep = NSBitmapImageRep(data: tiff),
-                            let bytes = rep.representation(using: format, properties: props)
+                            let bytes = rep.representation(using: formatFileType, properties: props)
                         {
                             cont.resume(returning: bytes)
                             return

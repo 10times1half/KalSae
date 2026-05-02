@@ -1,7 +1,7 @@
 #if os(macOS)
     internal import AppKit
     public import KalsaeCore
-    internal import Foundation
+    public import Foundation
 
     /// `KSDialogBackend`의 macOS 구현체.
     public struct KSMacDialogBackend: KSDialogBackend, Sendable {
