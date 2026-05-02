@@ -5,7 +5,7 @@ let package = Package(
     name: "{{NAME}}",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/kalsae/kalsae.git", from: "0.1.0"),
+        .package(url: "https://github.com/kalsae/kalsae.git", from: "{{KALSAE_VERSION}}"),
     ],
     targets: [
         .executableTarget(

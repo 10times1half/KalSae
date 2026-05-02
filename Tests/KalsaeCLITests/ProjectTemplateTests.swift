@@ -1,4 +1,5 @@
 import Foundation
+import KalsaeCore
 import Testing
 
 @testable import KalsaeCLICore
@@ -108,6 +109,27 @@ struct ProjectTemplateTests {
 
         #expect(json.contains("\"CoolApp\""), "App name missing from Kalsae.json")
         #expect(json.contains("dev.kalsae.coolapp"), "Identifier missing from Kalsae.json")
+    }
+
+    @Test("Generated files use shared Kalsae version")
+    func generatedFilesUseSharedVersion() throws {
+        let root = try scaffold()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let jsonURL =
+            root
+            .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
+        let packageURL = root.appendingPathComponent("Package.swift")
+
+        let json = try String(contentsOf: jsonURL, encoding: .utf8)
+        let package = try String(contentsOf: packageURL, encoding: .utf8)
+
+        #expect(
+            json.contains("\"version\": \"\(KSVersion.current)\""),
+            "generated Kalsae.json should use shared version")
+        #expect(
+            package.contains("from: \"\(KSVersion.current)\""),
+            "generated Package.swift should use shared version")
     }
 
     // MARK: - 프론트엔드 프리셋

@@ -212,7 +212,7 @@ let package = Package(
         ),
         .testTarget(
             name: "KalsaeCLITests",
-            dependencies: ["KalsaeCLICore"],
+            dependencies: ["KalsaeCLICore", "KalsaeCore"],
             path: "Tests/KalsaeCLITests",
             swiftSettings: commonSwiftSettings
         ),

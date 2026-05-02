@@ -5,6 +5,7 @@
 /// 재컴파일 없이 편집할 수 있으며, 소스 파일이 이스케이프된 문자열을
 /// 왜곡시킬 수 있는 편집기를 통해서도 정상적으로 라운드트립한다.
 public import Foundation
+public import KalsaeCore
 
 public struct ProjectTemplate {
     public let name: String
@@ -112,7 +113,8 @@ public struct ProjectTemplate {
 
     /// 플레이스홀더를 실제 값으로 대체한다.
     /// `{{NAME}}`, `{{IDENTIFIER}}`, `{{FRONTEND_DIST}}`, `{{DEV_SERVER_URL}}`,
-    /// `{{DEV_COMMAND}}`, `{{BUILD_COMMAND}}` 를 처리한다.
+    /// `{{DEV_COMMAND}}`, `{{BUILD_COMMAND}}`, `{{APP_VERSION}}`,
+    /// `{{KALSAE_VERSION}}` 를 처리한다.
     func substitute(_ raw: String) -> String {
         let b = buildDefaults
         let devCommandJSON = b.devCommand.map { "\"\($0)\"" } ?? "null"
@@ -125,6 +127,8 @@ public struct ProjectTemplate {
             .replacingOccurrences(of: "{{DEV_SERVER_URL}}", with: b.devServerURL)
             .replacingOccurrences(of: "{{DEV_COMMAND}}", with: devCommandJSON)
             .replacingOccurrences(of: "{{BUILD_COMMAND}}", with: buildCommandJSON)
+                .replacingOccurrences(of: "{{APP_VERSION}}", with: KSVersion.current)
+                .replacingOccurrences(of: "{{KALSAE_VERSION}}", with: KSVersion.current)
     }
 
     // MARK: - 리소스 로딩

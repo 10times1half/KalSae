@@ -16,7 +16,7 @@
 #endif
 public enum Kalsae {
     /// 프레임워크의 시맨틱 버전.
-    public static let version = "0.0.4-phase4"
+    public static let version = KSVersion.current
 
     /// 현재 OS용 플랫폼 백엔드를 생성한다.
     public static func makePlatform() throws(KSError) -> any KSPlatform {

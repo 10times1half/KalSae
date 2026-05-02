@@ -51,6 +51,26 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Validate tag matches source version
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $expected = $tag -replace '^v', ''
+
+          $raw = Get-Content Sources/KalsaeCore/KSVersion.swift -Raw
+          $match = [regex]::Match($raw, 'public\s+static\s+let\s+current\s*=\s*"([^"]+)"')
+          if (-not $match.Success) {
+            Write-Error "Could not extract KSVersion.current from Sources/KalsaeCore/KSVersion.swift"
+            exit 1
+          }
+
+          $actual = $match.Groups[1].Value
+          if ($actual -ne $expected) {
+            Write-Error "Tag version '$expected' does not match KSVersion.current '$actual'"
+            exit 1
+          }
+
       - name: Setup Swift
         if: matrix.setup-swift
         uses: compnerd/gha-setup-swift@main
