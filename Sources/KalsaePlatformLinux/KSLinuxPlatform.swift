@@ -156,7 +156,9 @@
 
             try await configure(self)
 
-            return host.runMessageLoop()
+            let exitCode = host.runMessageLoop()
+            KSWindowEmitHub.shared.unregister(label: window.label)
+            return exitCode
         }
     }
 
@@ -285,7 +287,7 @@
                 title: windowConfig.title,
                 width: windowConfig.width,
                 height: windowConfig.height)
-            self.bridge = GtkBridge(host: webview, registry: registry)
+            self.bridge = GtkBridge(host: webview, registry: registry, windowLabel: windowConfig.label)
         }
 
         /// 초기 탐색을 대기열에 등록한다. GtkApplication은 메인 루프가 실행되고

@@ -10,6 +10,7 @@
     public final class WebView2Bridge {
         private let host: WebView2Host
         private let core: KSIPCBridgeCore
+        internal let windowLabel: String
 
         /// Sink for `emit` messages from JS. Subscribing here is the Swift
         /// side of `window.__KS_.listen`.
@@ -18,11 +19,13 @@
             set { core.onEvent = newValue }
         }
 
-        internal init(host: WebView2Host, registry: KSCommandRegistry) {
+        internal init(host: WebView2Host, registry: KSCommandRegistry, windowLabel: String) {
             self.host = host
+            self.windowLabel = windowLabel
             self.core = KSIPCBridgeCore(
                 registry: registry,
-                logLabel: "platform.windows.ipc",
+                windowLabel: windowLabel,
+                logLabel: "platform.windows.ipc.\(windowLabel)",
                 post: { [weak host] json throws(KSError) in
                     try host?.postJSON(json)
                 },
@@ -31,6 +34,10 @@
                 hop: { [weak host] block in
                     host?.postJob(block)
                 })
+            KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
+                guard let self else { return }
+                try self.emit(event: event, payload: payload)
+            }
         }
 
         internal func install() throws(KSError) {

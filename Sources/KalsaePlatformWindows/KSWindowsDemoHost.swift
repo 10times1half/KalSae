@@ -33,7 +33,7 @@
                 config: windowConfig,
                 restoredState: restoredState)
             self.webview = WebView2Host(label: windowConfig.label)
-            self.bridge = WebView2Bridge(host: webview, registry: registry)
+            self.bridge = WebView2Bridge(host: webview, registry: registry, windowLabel: windowConfig.label)
             self.webviewOptions = windowConfig.webview
             self.backdropType = windowConfig.webview?.backdropType
             // WndProc가 Win32 시스템 이벤트(WM_SIZE/WM_MOVE/WM_DPICHANGED 등)를

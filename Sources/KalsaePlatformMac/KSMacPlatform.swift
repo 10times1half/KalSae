@@ -309,8 +309,13 @@
             self.window = try KSMacWindow(config: windowConfig)
             self.webview = WKWebViewHost(label: windowConfig.label)
             self.window.webviewHost = self.webview
-            self.bridge = WKBridge(host: webview, registry: registry)
+            self.bridge = WKBridge(host: webview, registry: registry, windowLabel: windowConfig.label)
             self.installPowerObservers()
+
+            let wLabel = windowConfig.label
+            window.onWindowClosed = {
+                KSWindowEmitHub.shared.unregister(label: wLabel)
+            }
 
             let raw = UInt64(UInt(bitPattern: ObjectIdentifier(window)))
             KSMacHandleRegistry.shared.register(

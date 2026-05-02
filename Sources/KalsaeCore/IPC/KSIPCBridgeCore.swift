@@ -120,17 +120,20 @@ public final class KSIPCBridgeCore {
     private let post: PostJSON
     private let hop: MainHop
     private let log: Logger
+    private let windowLabel: String?
 
     /// JS로부터의 `emit` 메시지 싱크.
     public var onEvent: (@MainActor (String, Data?) -> Void)?
 
     public init(
         registry: KSCommandRegistry,
+        windowLabel: String? = nil,
         logLabel: String,
         post: @escaping PostJSON,
         hop: @escaping MainHop
     ) {
         self.registry = registry
+        self.windowLabel = windowLabel
         self.log = Logger(label: logLabel)
         self.post = post
         self.hop = hop
@@ -164,13 +167,18 @@ public final class KSIPCBridgeCore {
             let args = msg.payload ?? Data("null".utf8)
             let registry = self.registry
             let hop = self.hop
+            let wl = self.windowLabel
             // 디스패치는 `Task.detached`로 백그라운드에서 수행한 뒤 hop을
             // 통해 UI 스레드로 복귀해 응답을 송신한다. Mac은 AppKit
             // 런루프가 MainActor 실행기를 펌프하므로 hop이 단순 `Task {`
             // 로 구현되어도 동작하고, Linux/Windows는 g_idle_add /
             // PostMessageW로 명시적으로 복귀해야 한다.
+            // KSInvocationContext.windowLabel을 TaskLocal로 주입해
+            // 명령 핸들러가 어느 창에서 호출됐는지 확인할 수 있도록 한다.
             Task.detached { [weak self] in
-                let result = await registry.dispatch(name: name, args: args)
+                let result = await KSInvocationContext.$windowLabel.withValue(wl) {
+                    await registry.dispatch(name: name, args: args)
+                }
                 hop {
                     self?.sendResponse(id: id, result: result)
                 }

@@ -11,6 +11,7 @@
         public private(set) var theme: KSWindowTheme = .system
         private var onBeforeCloseSwift: (@MainActor () -> Bool)?
         private var stateSaveSink: (@MainActor (KSPersistedWindowState) -> Void)?
+        public var onWindowClosed: (@MainActor () -> Void)?
         private let delegateProxy: WindowDelegateProxy
 
         private let log: Logger = KSLog.logger("platform.mac.window")
@@ -205,6 +206,11 @@
         func windowDidResize(_ notification: Notification) {
             _ = notification
             owner?.handleDidResize()
+        }
+
+        func windowWillClose(_ notification: Notification) {
+            _ = notification
+            owner?.onWindowClosed?()
         }
     }
 #endif

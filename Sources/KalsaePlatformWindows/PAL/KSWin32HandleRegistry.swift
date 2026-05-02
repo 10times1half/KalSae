@@ -6,9 +6,8 @@
     /// Resolves a `KSWindowHandle` to a Win32 `HWND`.
     ///
     /// Used by every PAL backend (dialogs, menus, tray) to find the parent
-    /// window that anchors a modal call. Today we only have a single demo
-    /// window managed by `KSWindowsDemoHost`, so the resolver is a thin
-    /// table; a future Phase 11 multi-window backend will replace it.
+    /// window that anchors a modal call. Maps window label → HWND for all
+    /// live windows.
     @MainActor
     internal final class KSWin32HandleRegistry {
         static let shared = KSWin32HandleRegistry()

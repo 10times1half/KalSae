@@ -15,8 +15,7 @@
 
         public let commandRegistry: KSCommandRegistry
 
-        /// Phase 8 PAL 백엔드. 윈도우 백엔드는 멀티 윈도우 지원이 Phase 11에
-        /// 있어 아직 Phase-1 스터브이지만, 나머지는 모두 Win32에 완전히 연결되어 있다.
+        /// Windows PAL 백엔드. 모든 PAL 서비스가 Win32에 완전히 연결되어 있다.
         public var windows: any KSWindowBackend { _windows }
         public var dialogs: any KSDialogBackend { _dialogs }
         public var tray: (any KSTrayBackend)? { _tray }
@@ -296,9 +295,4 @@
                 """
         }
     }
-
-// MARK: - 아직 미구현인 윈도우 백엔드의 Phase 1 스터브
-
-// 참고: `KSWindowsPlatform.windows`는 이제 실제 `KSWindowsWindowBackend`를
-// 반환한다. 이전의 `NotImplementedBackend` 스터브는 제거되었다.
 #endif

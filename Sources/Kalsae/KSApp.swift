@@ -386,6 +386,19 @@ public final class KSApp {
         try host.emit(event, payload: payload)
     }
 
+    /// 특정 창의 프론트엔드에 이벤트를 방출한다.
+    ///
+    /// `label`이 등록된 창 레이블과 일치하지 않으면 아무 동작도 하지 않는다.
+    /// `label`이 `nil`이면 열려 있는 모든 창에 브로드캐스트한다.
+    @MainActor
+    public func emit(
+        _ event: String,
+        payload: any Encodable,
+        to label: String?
+    ) throws(KSError) {
+        try KSWindowEmitHub.shared.emit(event: event, payload: payload, to: label)
+    }
+
     /// `args`에서 선언된 딥링크 URL을 필터링하고 일치하는 각 URL에 대해
     /// 하나의 `__ks.deepLink.openURL` 이벤트를 방출한다. 페이로드는
     /// `{ "url": "<scheme>://..." }`이다. 앱에 딥링크 설정이 없어도

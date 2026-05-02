@@ -11,10 +11,8 @@
     /// (minimize/maximize/center/setPosition/setAlwaysOnTop/...) work
     /// against it out of the box.
     ///
-    /// `create(_:)` and `webView(for:)` for newly-created windows currently
-    /// throw `unsupportedPlatform` — fully wiring multi-window WebView2
-    /// initialization (each window owning its own `WebView2Host` and bridge)
-    /// is the next milestone. All other operations are functional today.
+    /// Each window owns its own `WebView2Host` and `WebView2Bridge`. All
+    /// lifecycle and geometry operations are functional.
     public struct KSWindowsWindowBackend: KSWindowBackend, Sendable {
         private let registry: KSCommandRegistry
 
@@ -61,7 +59,7 @@
                     }
 
                     let webview = WebView2Host(label: config.label)
-                    let bridge = WebView2Bridge(host: webview, registry: registry)
+                    let bridge = WebView2Bridge(host: webview, registry: registry, windowLabel: config.label)
                     let bridgeRef = bridge
                     window.eventSink = { name, payload in
                         try? bridgeRef.emit(event: name, payload: payload)
@@ -156,7 +154,7 @@
             }
         }
 
-        // MARK: - State (Phase 1 extensions)
+        // MARK: - State
 
         public func minimize(_ handle: KSWindowHandle) async throws(KSError) {
             try await runMain(handle) { $0.minimize() }

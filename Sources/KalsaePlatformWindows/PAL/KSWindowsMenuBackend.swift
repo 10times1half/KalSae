@@ -41,8 +41,7 @@
         public init() {}
 
         /// Installs `items` as the menubar of every currently-tracked top-level
-        /// window. With Phase 8's single-window model that means the demo's
-        /// main window.
+        /// window.
         public func installAppMenu(_ items: [KSMenuItem]) async throws(KSError) {
             let result: Result<Void, KSError> = await MainActor.run {
                 Self._installAppMenuOnMain(items)

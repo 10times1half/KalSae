@@ -10,17 +10,20 @@
     public final class GtkBridge {
         private let host: GtkWebViewHost
         private let core: KSIPCBridgeCore
+        internal let windowLabel: String
 
         public var onEvent: (@MainActor (String, Data?) -> Void)? {
             get { core.onEvent }
             set { core.onEvent = newValue }
         }
 
-        public init(host: GtkWebViewHost, registry: KSCommandRegistry) {
+        public init(host: GtkWebViewHost, registry: KSCommandRegistry, windowLabel: String) {
             self.host = host
+            self.windowLabel = windowLabel
             self.core = KSIPCBridgeCore(
                 registry: registry,
-                logLabel: "platform.linux.ipc",
+                windowLabel: windowLabel,
+                logLabel: "platform.linux.ipc.\(windowLabel)",
                 post: { [weak host] json throws(KSError) in
                     try host?.postJSON(json)
                 },
@@ -29,6 +32,10 @@
                 hop: { block in
                     GtkMainQueue.post(block)
                 })
+            KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
+                guard let self else { return }
+                try self.emit(event: event, payload: payload)
+            }
         }
 
         public func install() throws(KSError) {

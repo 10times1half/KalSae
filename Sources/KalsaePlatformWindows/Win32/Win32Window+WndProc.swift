@@ -1,5 +1,6 @@
 #if os(Windows)
     internal import WinSDK
+    internal import KalsaeCore
 
     // MARK: - Win32Window WNDPROC dispatch
     //
@@ -199,6 +200,7 @@
                     Win32App.shared.unregister(hwnd: hwnd)
                     KSWin32HandleRegistry.shared.unregister(label: label)
                     KSWin32MainWindowTracker.shared.untrack(hwnd: hwnd)
+                    KSWindowEmitHub.shared.unregister(label: label)
                 }
                 webviewHost?.dispose()
                 webviewHost = nil
@@ -207,9 +209,11 @@
                     backgroundBrush = nil
                 }
                 hwnd = nil
-                // 데모용 종료 메시지. 실제 PAL은 윈도우 수를 추적해 마지막
-                // 윈도우가 닫힐 때만 종료한다.
-                PostQuitMessage(0)
+                // 마지막 창이 닫힌 경우에만 메시지 루프를 종료한다.
+                // `untrack` 이후에 확인하므로 해제된 창은 집계에 포함되지 않는다.
+                if KSWin32MainWindowTracker.shared.allWindowHWNDs().isEmpty {
+                    PostQuitMessage(0)
+                }
                 return 0
 
             default:

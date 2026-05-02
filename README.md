@@ -2,7 +2,7 @@
 
 > A Swift-native, cross-platform desktop framework for shipping web UIs as small, secure native apps.
 
-![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.0.4--phase4-blue.svg)
+![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
 Kalsae lets you build desktop (and mobile) applications by combining a **native OS shell written in Swift** with a **web frontend** of your choice (Vite, Next.js, plain HTML — anything that produces static assets). It is in the same family as Tauri and Electron, but the host process is pure Swift 6 and the runtime stays small by reusing the OS web engine: **WebView2** on Windows, **WKWebView** on macOS/iOS, **WebKitGTK 6.0** on Linux, and **Android WebView** on Android.
 
@@ -749,7 +749,6 @@ try app.emit("custom:event", payload: ["key": "value"])
 ## Roadmap
 
 - Linux global accelerator backend improvements (Wayland ecosystem dependent)
-- Multi-window orchestration
 - Auto-updater
 - Mobile host ergonomics (iOS integration polish, Android host-side tooling)
 
@@ -757,7 +756,6 @@ try app.emit("custom:event", payload: ["key": "value"])
 <summary>🇰🇷 한국어로 보기</summary>
 
 - Linux 글로벌 단축키 개선 (Wayland 생태계 의존)
-- 다중 윈도우 오케스트레이션
 - 자동 업데이트
 - 모바일 호스트 경험 개선 (iOS 통합 완성도, Android 호스트 측 툴링)
 

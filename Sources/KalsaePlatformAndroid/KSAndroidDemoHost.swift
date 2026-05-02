@@ -43,7 +43,7 @@
             self.registry = registry
             self.windowConfig = windowConfig
             self.webViewHost = KSAndroidWebViewHost()
-            self.bridge = KSAndroidBridge(host: webViewHost, registry: registry)
+            self.bridge = KSAndroidBridge(host: webViewHost, registry: registry, windowLabel: windowConfig.label)
             self.shellBackend = KSAndroidShellBackend()
             self.clipboardBackend = KSAndroidClipboardBackend()
             self.notificationBackend = KSAndroidNotificationBackend()

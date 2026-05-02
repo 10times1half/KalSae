@@ -12,6 +12,7 @@
     public final class WKBridge {
         private let host: WKWebViewHost
         private let core: KSIPCBridgeCore
+        internal let windowLabel: String
 
         /// JS에서 수신하는 `emit` 메시지의 싱크.
         public var onEvent: (@MainActor (String, Data?) -> Void)? {
@@ -19,11 +20,13 @@
             set { core.onEvent = newValue }
         }
 
-        public init(host: WKWebViewHost, registry: KSCommandRegistry) {
+        public init(host: WKWebViewHost, registry: KSCommandRegistry, windowLabel: String) {
             self.host = host
+            self.windowLabel = windowLabel
             self.core = KSIPCBridgeCore(
                 registry: registry,
-                logLabel: "platform.mac.ipc",
+                windowLabel: windowLabel,
+                logLabel: "platform.mac.ipc.\(windowLabel)",
                 post: { [weak host] json throws(KSError) in
                     try host?.postJSON(json)
                 },
@@ -31,6 +34,10 @@
                 hop: { block in
                     Task { @MainActor in block() }
                 })
+            KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
+                guard let self else { return }
+                try self.emit(event: event, payload: payload)
+            }
         }
 
         public func install() throws(KSError) {

@@ -37,7 +37,7 @@
             // KSiOSHandleRegistry에 등록해 KSiOSWindowBackend.find(label:)에서 찾을 수 있게 한다.
             self._mainHandle = KSiOSHandleRegistry.shared.register(label: windowConfig.label)
             self.webViewHost = KSiOSWebViewHost(label: windowConfig.label)
-            self.bridge = KSiOSBridge(host: webViewHost, registry: registry)
+            self.bridge = KSiOSBridge(host: webViewHost, registry: registry, windowLabel: windowConfig.label)
             try self.bridge.install()
         }
 
