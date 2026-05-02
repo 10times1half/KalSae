@@ -172,7 +172,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 
 ### Linux
 - Requires GTK4 + WebKitGTK 6.0 via pkg-config.
-- PAL surfaces: windows, menus, dialogs, notifications (notify-send), clipboard,
+- Full PAL: windows, menus, dialogs, notifications (notify-send), clipboard,
   shell, autostart (XDG .desktop), deep link (XDG MIME), single instance (Unix
   socket), window-scoped accelerators (`GtkShortcutController`, LOCAL scope),
   window state persistence (size/maximized/fullscreen always; position on X11
@@ -190,7 +190,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Deployment target: iOS 16 (via `Package.swift`).
 - PAL surfaces: windows, dialogs, menus, notifications (UNNotification), shell,
   clipboard, deep link.
-- **Not yet wired:** `KSiOSPlatform.run()` is a `fatalError` stub.
+- **Not yet wired:** `KSiOSPlatform.run()` throws `KSError.unsupportedPlatform`.
 - WebView bridge: `WKWebView` + `WKUserContentController` message handler.
 
 ### Android
@@ -198,12 +198,12 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Cross-compile target: `aarch64-unknown-linux-android26` (or
   `x86_64-linux-android26` for emulator).
 - JNI entry points in `Sources/KalsaePlatformAndroid/JNI/`.
-- PAL surfaces: windows, dialogs (stubs), menus (stubs), notifications (JNI
-  bridge), shell, clipboard, deep link (JNI).
+- PAL surfaces: windows, dialogs, menus, notifications (JNI bridge), shell,
+  clipboard, deep link (JNI).
 - **Not yet wired:** `KSAndroidPlatform.run()` throws `unsupportedPlatform`.
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows/macOS = 풀 PAL. Linux = 트레이/가속기 스텁. iOS/Android = PAL 구현됨, `run()` 미연결._
+_🇰🇷 Windows/macOS = 풀 PAL. Linux = 풀 PAL (글로벌 단축키/트레이 서브메뉴는 Wayland 표준 부재로 스텁). iOS/Android = PAL 구현됨, `run()` 미연결._
 
 ---
 
