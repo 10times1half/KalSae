@@ -1,8 +1,8 @@
 #if os(Windows)
     internal import WinSDK
     internal import CKalsaeWV2
-    public import KalsaeCore
-    public import Foundation
+    internal import KalsaeCore
+    internal import Foundation
 
     // MARK: - Sendable pointer wrappers
     //
@@ -224,7 +224,7 @@
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))
             }
             if n == 0 { return URL(fileURLWithPath: ".") }
-            let path = UnsafePointer(buf).toString()
+            let path = buf.withUnsafeBufferPointer { $0.baseAddress!.toString() }
             return URL(fileURLWithPath: path).deletingLastPathComponent()
         }
 
@@ -248,7 +248,7 @@
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))
             }
             if n == 0 { return "Kalsae" }
-            let exe = URL(fileURLWithPath: UnsafePointer(buf).toString())
+            let exe = URL(fileURLWithPath: buf.withUnsafeBufferPointer { $0.baseAddress!.toString() })
             return exe.deletingPathExtension().lastPathComponent
         }
     }

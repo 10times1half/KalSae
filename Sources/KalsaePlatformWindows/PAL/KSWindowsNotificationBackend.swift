@@ -2,7 +2,7 @@
     internal import WinSDK
     internal import CKalsaeWV2
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Win32 desktop notifications.
     ///

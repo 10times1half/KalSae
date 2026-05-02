@@ -2,7 +2,7 @@
     internal import WinSDK
     internal import Logging
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Windows 플랫폼 백엔드 (Win32 HWND + WebView2 COM, Phase 1).
     ///
@@ -59,7 +59,6 @@
         ) async throws(KSError) -> Never {
             let code = try await runOnMain(config: config, configure: configure)
             ExitProcess(UINT(UInt32(bitPattern: code)))
-            fatalError("unreachable")
         }
 
         @MainActor

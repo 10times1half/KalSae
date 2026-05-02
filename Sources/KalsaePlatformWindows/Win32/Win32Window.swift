@@ -1,6 +1,6 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
+    internal import KalsaeCore
 
     /// Wraps a single Win32 HWND. Hosts exactly one WebView2 controller.
     ///
@@ -17,8 +17,8 @@
         // 해롭지 않아 조금 올될 수도 있지만 유효한 HWND 읽기는 괜찮다.
         // 확장 파일(`Win32Window+WndProc.swift`)에서 WM_DESTROY 처리 시
         // 정리(nil 대입)해야 하므로 internal(set)로 둔다.
-        nonisolated(unsafe) internal(set) var hwnd: HWND?
-        internal(set) var webviewHost: WebView2Host?
+        nonisolated(unsafe) var hwnd: HWND?
+        var webviewHost: WebView2Host?
         private let log = KSLog.logger("platform.windows.window")
 
         init(

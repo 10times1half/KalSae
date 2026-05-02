@@ -1,8 +1,8 @@
 #if os(Windows)
     internal import WinSDK
     internal import CKalsaeWV2
-    public import KalsaeCore
-    public import Foundation
+    internal import KalsaeCore
+    internal import Foundation
 
     // MARK: - WebView2Host public operation surface
     //

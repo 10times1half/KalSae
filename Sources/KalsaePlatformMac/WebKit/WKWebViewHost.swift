@@ -58,28 +58,37 @@
 
         @discardableResult
         public func evaluateJavaScript(_ source: String) async throws(KSError) -> Data? {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data?, any Error>) in
-                webView.evaluateJavaScript(source) { result, error in
-                    if let error {
-                        cont.resume(throwing: error)
-                        return
-                    }
-                    if let result, !(result is NSNull) {
-                        if let data = try? JSONSerialization.data(withJSONObject: result, options: []) {
-                            cont.resume(returning: data)
+            do {
+                return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data?, any Error>) in
+                    webView.evaluateJavaScript(source) { result, error in
+                        if let error {
+                            cont.resume(throwing: error)
+                            return
+                        }
+                        if let result, !(result is NSNull) {
+                            if let data = try? JSONSerialization.data(withJSONObject: result, options: []) {
+                                cont.resume(returning: data)
+                            } else {
+                                cont.resume(returning: nil)
+                            }
                         } else {
                             cont.resume(returning: nil)
                         }
-                    } else {
-                        cont.resume(returning: nil)
                     }
                 }
+            } catch {
+                throw KSError(code: .internal, message: "evaluateJavaScript: \(error)")
             }
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
-            let encoder = JSONEncoder()
-            let data = try encoder.encode(message)
+            let data: Data
+            do {
+                let encoder = JSONEncoder()
+                data = try encoder.encode(message)
+            } catch {
+                throw KSError(code: .internal, message: "postMessage: \(error)")
+            }
             guard let json = String(data: data, encoding: .utf8) else {
                 throw KSError(code: .internal, message: "postMessage: JSON encoding failed")
             }
@@ -176,37 +185,41 @@
         }
 
         public func capturePreview(format: Int32) async throws(KSError) -> Data {
-            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, any Error>) in
-                let config = WKSnapshotConfiguration()
-                webView.takeSnapshot(with: config) { image, error in
-                    if let error {
-                        cont.resume(throwing: error)
-                        return
-                    }
-                    guard let image else {
-                        cont.resume(throwing: KSError(code: .internal, message: "capturePreview: nil image"))
-                        return
-                    }
-                    let format: NSBitmapImageRep.FileType = format == 1 ? .jpeg : .png
-                    let props: [NSBitmapImageRep.PropertyKey: Any] =
-                        format == 1
-                        ? [.compressionFactor: 0.9]
-                        : [:]
-                    if let data = image.representations.first as? NSBitmapImageRep {
-                        if let bytes = data.representation(using: format, properties: props) {
+            do {
+                return try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Data, any Error>) in
+                    let config = WKSnapshotConfiguration()
+                    webView.takeSnapshot(with: config) { image, error in
+                        if let error {
+                            cont.resume(throwing: error)
+                            return
+                        }
+                        guard let image else {
+                            cont.resume(throwing: KSError(code: .internal, message: "capturePreview: nil image"))
+                            return
+                        }
+                        let format: NSBitmapImageRep.FileType = format == 1 ? .jpeg : .png
+                        let props: [NSBitmapImageRep.PropertyKey: Any] =
+                            format == 1
+                            ? [.compressionFactor: 0.9]
+                            : [:]
+                        if let data = image.representations.first as? NSBitmapImageRep {
+                            if let bytes = data.representation(using: format, properties: props) {
+                                cont.resume(returning: bytes)
+                                return
+                            }
+                        }
+                        if let tiff = image.tiffRepresentation,
+                            let rep = NSBitmapImageRep(data: tiff),
+                            let bytes = rep.representation(using: format, properties: props)
+                        {
                             cont.resume(returning: bytes)
                             return
                         }
+                        cont.resume(throwing: KSError(code: .internal, message: "capturePreview: could not encode image"))
                     }
-                    if let tiff = image.tiffRepresentation,
-                        let rep = NSBitmapImageRep(data: tiff),
-                        let bytes = rep.representation(using: format, properties: props)
-                    {
-                        cont.resume(returning: bytes)
-                        return
-                    }
-                    cont.resume(throwing: KSError(code: .internal, message: "capturePreview: could not encode image"))
                 }
+            } catch {
+                throw KSError(code: .internal, message: "capturePreview: \(error)")
             }
         }
     }

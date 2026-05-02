@@ -1,6 +1,6 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
+    internal import KalsaeCore
 
     /// Posts a closure onto a window's UI thread via `PostMessageW`. Free
     /// function (not instance-isolated) because it must be callable from any

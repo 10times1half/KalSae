@@ -1,5 +1,5 @@
 internal import Foundation
-public import KalsaeCore
+internal import KalsaeCore
 
 #if os(macOS)
     internal import KalsaePlatformMac
@@ -168,7 +168,7 @@ extension KSApp {
     public func shutdown() async {
         // 1. 고립된 쉘 상태 항목을 피하기 위해 트레이 아이콘 제거.
         if let tray = platform.tray {
-            try? await tray.remove()
+            await tray.remove()
         }
         // 2. 모든 등록된 명령을 해제해 이후 디스패치가 해제된 핸들러에
         //    도달하는 대신 commandNotFound를 반환하도록 한다.

@@ -297,7 +297,7 @@
         public let bridge: WKBridge
         private var onSuspendSwift: (@MainActor () -> Void)?
         private var onResumeSwift: (@MainActor () -> Void)?
-        private var workspaceObservers: [NSObjectProtocol] = []
+        private var workspaceObservers: [any NSObjectProtocol] = []
 
         public init(
             windowConfig: KSWindowConfig,

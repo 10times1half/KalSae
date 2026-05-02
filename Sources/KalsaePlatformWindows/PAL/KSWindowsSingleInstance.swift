@@ -1,8 +1,8 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
+    internal import KalsaeCore
     internal import Logging
-    public import Foundation
+    internal import Foundation
 
     /// Single-instance helper for Windows applications.
     ///

@@ -20,6 +20,24 @@
 #include <string.h>
 #include <stdio.h>
 
+#if defined(__has_include)
+#  if __has_include(<gdk/x11/gdkx.h>)
+#    include <gdk/x11/gdkx.h>
+#    define KS_GTK_HAS_X11 1
+#  endif
+#endif
+
+#ifndef KS_GTK_HAS_X11
+#define KS_GTK_HAS_X11 0
+#endif
+
+static GdkSurface *ks_gtk_window_surface(GtkWindow *window)
+{
+    if (!window) return NULL;
+    if (!GTK_IS_NATIVE(window)) return NULL;
+    return gtk_native_get_surface(GTK_NATIVE(window));
+}
+
 struct KSGtkHost {
     /* `new` 시점에 측정된 설정값. */
     char       *app_id;
@@ -232,12 +250,10 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
                 host->pending_restore_w, host->pending_restore_h);
         }
         if (host->pending_restore_has_position) {
-            GdkSurface *surf = gtk_widget_get_surface(GTK_WIDGET(win));
-            if (surf && GDK_IS_X11_SURFACE(surf)) {
-                gdk_x11_window_move_to_position(surf,
-                    host->pending_restore_x,
-                    host->pending_restore_y);
-            }
+            /* GTK4 does not provide a portable absolute-position API.
+             * Keep persisted coordinates for state save, but do not force-move. */
+            (void) host->pending_restore_x;
+            (void) host->pending_restore_y;
         }
         if (host->pending_restore_maximized) {
             gtk_window_maximize(win);
@@ -1131,54 +1147,45 @@ void ks_gtk_host_set_min_size(KSGtkHost *host, int width, int height)
 void ks_gtk_host_set_max_size(KSGtkHost *host, int width, int height)
 {
     if (!host || !host->window) return;
-    /* GtkWindow does not have a built-in max-size API.
-     * We use geometry hints via gdk_toplevel_set_size_hints (GTK4).
-     * Fallback: store values and refuse resize events >= threshold. */
-    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
-    if (!surface) return;
-    GdkToplevel *toplevel = GDK_TOPLEVEL(surface);
-    GdkToplevelSize hints;
-    (void) hints;   /* GdkToplevelSize is stack-allocated by the signal */
-    /* GTK4 does not have a synchronous max-size API — we post a size
-     * constraint via gtk_widget_set_size_request (used as upper bound
-     * by the compositor on tiling-friendly WMs only). */
-    (void) toplevel;
-    /* Best-effort: override_redirect windows on X11 honor max-size
-     * from gtk_window_set_geometry_hints (deprecated in GTK4). On
-     * Wayland the compositor controls sizing; we record the intent. */
+    /* GTK4 has no stable cross-backend max-size setter for toplevels.
+     * Record the intended caps and best-effort clamp current default size. */
     host->width  = width  > 0 ? width  : host->width;
     host->height = height > 0 ? height : host->height;
-    if (GDK_IS_X11_SURFACE(surface)) {
-        /* X11 path: use size hints */
-        GdkGeometry geo = {0};
-        geo.max_width  = width  > 0 ? width  : G_MAXINT;
-        geo.max_height = height > 0 ? height : G_MAXINT;
-        gdk_toplevel_set_size_hints(toplevel, &geo, GDK_HINT_MAX_SIZE);
+
+    int cur_w = 0;
+    int cur_h = 0;
+    gtk_window_get_default_size(host->window, &cur_w, &cur_h);
+
+    if (width > 0 && (cur_w <= 0 || cur_w > width)) cur_w = width;
+    if (height > 0 && (cur_h <= 0 || cur_h > height)) cur_h = height;
+    if (cur_w > 0 && cur_h > 0) {
+        gtk_window_set_default_size(host->window, cur_w, cur_h);
     }
 }
 
 void ks_gtk_host_set_position(KSGtkHost *host, int x, int y)
 {
     if (!host || !host->window) return;
-    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    GdkSurface *surface = ks_gtk_window_surface(host->window);
     if (!surface) return;
-    /* X11: move_to is supported. Wayland: compositor controls position;
-     * the call is silently ignored there. */
-    if (GDK_IS_X11_SURFACE(surface)) {
-        gdk_x11_window_move_to_position(surface, x, y);
-    }
+    /* GTK4 does not expose a stable explicit move API for toplevel windows. */
+    (void) surface;
+    (void) x;
+    (void) y;
 }
 
 int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y)
 {
     if (!host || !host->window || !out_x || !out_y) return 0;
-    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    GdkSurface *surface = ks_gtk_window_surface(host->window);
     if (!surface) return 0;
+#if KS_GTK_HAS_X11
     if (GDK_IS_X11_SURFACE(surface)) {
         *out_x = gdk_x11_surface_get_x(surface);
         *out_y = gdk_x11_surface_get_y(surface);
         return 1;
     }
+#endif
     return 0;
 }
 
@@ -1187,7 +1194,7 @@ void ks_gtk_host_center(KSGtkHost *host)
     if (!host || !host->window) return;
     GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(host->window));
     if (!display) return;
-    GdkSurface *surface = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    GdkSurface *surface = ks_gtk_window_surface(host->window);
     if (!surface) return;
     /* Use primary monitor geometry if available. */
     GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
@@ -1279,13 +1286,15 @@ int ks_gtk_host_get_window_state(KSGtkHost *host,
     if (out_height) *out_height = h;
 
     int has_pos = 0, x = 0, y = 0;
-    GdkSurface *surf = gtk_widget_get_surface(GTK_WIDGET(host->window));
+    GdkSurface *surf = ks_gtk_window_surface(host->window);
+#if KS_GTK_HAS_X11
     if (surf && GDK_IS_X11_SURFACE(surf)) {
         /* GTK4는 X11에서만 신뢰할 수 있는 위치를 노출. */
         x = gdk_x11_surface_get_x(surf);
         y = gdk_x11_surface_get_y(surf);
         has_pos = 1;
     }
+#endif
     if (out_x) *out_x = x;
     if (out_y) *out_y = y;
     if (out_has_position) *out_has_position = has_pos;

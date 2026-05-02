@@ -265,8 +265,7 @@
             do {
                 return try await host.capturePreview(format: fmt)
             } catch {
-                throw (error as? KSError)
-                    ?? KSError(code: .internal, message: "capturePreview: \(error)")
+                throw error
             }
         }
 

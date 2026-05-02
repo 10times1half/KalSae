@@ -12,7 +12,7 @@
         public let identifier: String
         /// 시작 이벤트에서 수집된 URL들, `installAppleEventHandler()`에 의해 채워진다.
         nonisolated(unsafe) private static var launchURLs: [String] = []
-        private static var urlHandler: (@MainActor (String) -> Void)?
+        nonisolated(unsafe) private static var urlHandler: (@MainActor (String) -> Void)?
 
         public init(identifier: String) {
             self.identifier = identifier

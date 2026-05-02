@@ -65,7 +65,7 @@
             // start를 `prepare`/`navigate`로 나눠 호출자가 webview.initialize 이후에
             // 우리를 호출하도록 요구한다. 지금은 웹뷰가 필요하면 온 디맨드로
             // 초기화한다.
-            guard let hwnd = window.hwnd else {
+            guard window.hwnd != nil else {
                 throw KSError(
                     code: .windowCreationFailed,
                     message: "Window has no HWND")
@@ -77,7 +77,7 @@
         /// 모든 문서 시작 시 실행될 스크립트를 설치한다.
         /// 페이지 스크립트가 실행되기 전에 CSP `<meta>` 태그를 주입할 때 사용한다.
         public func addDocumentCreatedScript(_ script: String) throws(KSError) {
-            guard let hwnd = window.hwnd else {
+            guard window.hwnd != nil else {
                 throw KSError(
                     code: .windowCreationFailed,
                     message: "Window has no HWND")
@@ -93,7 +93,7 @@
         public func setResourceHandler(
             resolver: KSAssetResolver, csp: String, host: String
         ) throws(KSError) {
-            guard let hwnd = window.hwnd else {
+            guard window.hwnd != nil else {
                 throw KSError(
                     code: .windowCreationFailed,
                     message: "Window has no HWND")

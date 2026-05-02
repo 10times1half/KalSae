@@ -1,7 +1,7 @@
 #if os(Windows)
     internal import WinSDK
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Win32 implementation of the autostart ("launch on login") feature.
     ///

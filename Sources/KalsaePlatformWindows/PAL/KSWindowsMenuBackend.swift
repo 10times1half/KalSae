@@ -1,7 +1,7 @@
 #if os(Windows)
     internal import WinSDK
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Routes WM_COMMAND clicks back to a Kalsae command id. The
     /// table is shared between every menu we install in the process: the

@@ -1,7 +1,7 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
-    public import Foundation
+    internal import KalsaeCore
+    internal import Foundation
 
     /// Routes menu / tray commands back to subscribers. The platform layer
     /// (or the demo) installs a single sink that forwards to the JS bridge,

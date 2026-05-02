@@ -1,7 +1,7 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
-    public import Foundation
+    internal import KalsaeCore
+    internal import Foundation
 
     /// Resolves a `KSWindowHandle` to a Win32 `HWND`.
     ///

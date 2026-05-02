@@ -2,8 +2,8 @@
     internal import WinSDK
     internal import CKalsaeWV2
     internal import Logging
-    public import KalsaeCore
-    public import Foundation
+    internal import KalsaeCore
+    internal import Foundation
 
     /// Hosts the WebView2 environment + controller + webview for a single
     /// `Win32Window`.

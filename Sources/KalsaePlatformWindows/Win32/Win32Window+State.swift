@@ -1,6 +1,6 @@
 #if os(Windows)
     internal import WinSDK
-    public import KalsaeCore
+    internal import KalsaeCore
 
     // MARK: - Win32Window window state operations
     //

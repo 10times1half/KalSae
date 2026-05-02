@@ -1,7 +1,7 @@
 #if os(Windows)
     internal import WinSDK
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
     // HKCU\Software\Classes\<scheme>\shell\open\command
     //   (Default) = "\"<exePath>\" \"%1\""
     //

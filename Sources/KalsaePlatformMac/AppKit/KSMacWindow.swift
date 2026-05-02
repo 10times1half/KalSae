@@ -1,5 +1,5 @@
 #if os(macOS)
-    internal import AppKit
+    public import AppKit
     internal import Logging
     public import KalsaeCore
 
