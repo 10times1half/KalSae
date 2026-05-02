@@ -40,7 +40,8 @@ extension KSBuiltinCommands {
             let url = try await dialogs.saveFile(options: opts, parent: parent)
             return SaveFileResult(path: url?.path)
         }
-        await register(registry, "__ks.dialog.selectFolder") { (args: SelectFolderArg) throws(KSError) -> SaveFileResult in
+        await register(registry, "__ks.dialog.selectFolder") {
+            (args: SelectFolderArg) throws(KSError) -> SaveFileResult in
             let parent = try? await resolver.resolve(window: args.window)
             let opts = KSSelectFolderOptions(
                 title: args.title,

@@ -1,5 +1,3 @@
-public import Foundation
-
 /// 내장 `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`,
 /// `__ks.notification.*`, `__ks.app.*` 명령을 연결하여 JS 측
 /// `__KS_.window.*` 네임스페이스에 Swift 대응부가 있도록 한다.
@@ -15,6 +13,15 @@ public import Foundation
 ///   - `KSBuiltinCommands+Clipboard.swift`     — clipboard.*
 ///   - `KSBuiltinCommands+Notification.swift`  — notification.*
 ///   - `KSBuiltinCommands+App.swift`           — app.*, environment, log
+public import Foundation
+
+// MARK: - Window resolver
+
+/// 윈도우 레이블(또는 부재)을 구체적인 핸들로 해석한다.
+/// 모든 `window.*` 및 윈도우를 대상으로 하는 다른 명령에서 사용된다.
+
+// MARK: - OS/Arch helpers
+
 public enum KSBuiltinCommands {
     /// 모든 내장 명령을 등록한다. 두 번 이상 호출하면
     /// 이전 핸들러를 조용히 덮어쓴다.
@@ -56,7 +63,8 @@ public enum KSBuiltinCommands {
         }
         await registerAppCommands(
             into: registry, quit: quit, platformName: platformName)
-        let appDir = appDirectory
+        let appDir =
+            appDirectory
             ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         await registerFSCommands(
             into: registry, scope: fsScope, appDirectory: appDir)
@@ -131,7 +139,10 @@ public enum KSBuiltinCommands {
     struct TextArg: Codable, Sendable { let text: String }
     struct FormatArg: Codable, Sendable { let format: String }
     struct IDArg: Codable, Sendable { let id: String }
-    struct LogArg: Codable, Sendable { let level: String; let message: String }
+    struct LogArg: Codable, Sendable {
+        let level: String
+        let message: String
+    }
 
     // MARK: - Generic register helpers
 
@@ -146,13 +157,16 @@ public enum KSBuiltinCommands {
         await registry.register(name) { data -> Result<Data, KSError> in
             let input: In
             do {
-                input = try JSONDecoder().decode(In.self, from: data.isEmpty
-                    ? Data("{}".utf8)
-                    : data)
+                input = try JSONDecoder().decode(
+                    In.self,
+                    from: data.isEmpty
+                        ? Data("{}".utf8)
+                        : data)
             } catch {
-                return .failure(KSError(
-                    code: .commandDecodeFailed,
-                    message: "Failed to decode args for \(name): \(error)"))
+                return .failure(
+                    KSError(
+                        code: .commandDecodeFailed,
+                        message: "Failed to decode args for \(name): \(error)"))
             }
             do {
                 let out = try await handler(input)
@@ -162,9 +176,10 @@ public enum KSBuiltinCommands {
                 // 혼합 throw 지점 (JSONEncoder + handler(KSError)) — AGENTS §4 참조
                 return .failure(e)
             } catch {
-                return .failure(KSError(
-                    code: .commandExecutionFailed,
-                    message: "\(error)"))
+                return .failure(
+                    KSError(
+                        code: .commandExecutionFailed,
+                        message: "\(error)"))
             }
         }
     }
@@ -185,9 +200,10 @@ public enum KSBuiltinCommands {
                 // 혼합 throw 지점 (JSONEncoder + handler(KSError)) — AGENTS §4 참조
                 return .failure(e)
             } catch {
-                return .failure(KSError(
-                    code: .commandExecutionFailed,
-                    message: "\(error)"))
+                return .failure(
+                    KSError(
+                        code: .commandExecutionFailed,
+                        message: "\(error)"))
             }
         }
     }
@@ -210,17 +226,14 @@ public enum KSBuiltinCommands {
         await register(registry, name, handler: handler)
     }
 }
-
-// MARK: - Window resolver
-
-/// 윈도우 레이블(또는 부재)을 구체적인 핸들로 해석한다.
-/// 모든 `window.*` 및 윈도우를 대상으로 하는 다른 명령에서 사용된다.
 actor WindowResolver {
     let windows: any KSWindowBackend
     let mainWindowProvider: @Sendable () -> KSWindowHandle?
 
-    init(windows: any KSWindowBackend,
-         mainWindow: @escaping @Sendable () -> KSWindowHandle?) {
+    init(
+        windows: any KSWindowBackend,
+        mainWindow: @escaping @Sendable () -> KSWindowHandle?
+    ) {
         self.windows = windows
         self.mainWindowProvider = mainWindow
     }
@@ -228,41 +241,39 @@ actor WindowResolver {
     func resolve(window: String?) async throws(KSError) -> KSWindowHandle {
         if let label = window {
             if let h = await windows.find(label: label) { return h }
-            throw KSError(code: .windowCreationFailed,
-                          message: "No window registered for label '\(label)'")
+            throw KSError(
+                code: .windowCreationFailed,
+                message: "No window registered for label '\(label)'")
         }
         if let h = mainWindowProvider() { return h }
-        throw KSError(code: .windowCreationFailed,
-                      message: "No primary window registered.")
+        throw KSError(
+            code: .windowCreationFailed,
+            message: "No primary window registered.")
     }
 }
-
-// MARK: - OS/Arch helpers
-
 @inline(__always)
 func kalsaeOSName() -> String {
     #if os(Windows)
-    return "windows"
+        return "windows"
     #elseif os(macOS)
-    return "macos"
+        return "macos"
     #elseif os(Linux)
-    return "linux"
+        return "linux"
     #else
-    return "unknown"
+        return "unknown"
     #endif
 }
-
 @inline(__always)
 func kalsaeArchName() -> String {
     #if arch(x86_64)
-    return "x86_64"
+        return "x86_64"
     #elseif arch(arm64)
-    return "arm64"
+        return "arm64"
     #elseif arch(i386)
-    return "i386"
+        return "i386"
     #elseif arch(arm)
-    return "arm"
+        return "arm"
     #else
-    return "unknown"
+        return "unknown"
     #endif
 }

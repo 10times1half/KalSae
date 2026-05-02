@@ -10,7 +10,6 @@ public struct KSDoctorOptions: Sendable {
         self.configPath = configPath
     }
 }
-
 public struct KSDoctorReport: Sendable {
     public var infos: [String]
     public var warnings: [String]
@@ -22,7 +21,6 @@ public struct KSDoctorReport: Sendable {
 
     public var hasWarnings: Bool { !warnings.isEmpty }
 }
-
 public enum KSDoctor {
     public static func run(_ options: KSDoctorOptions) -> KSDoctorReport {
         let fm = FileManager.default
@@ -32,18 +30,21 @@ public enum KSDoctor {
         let appConfig = loadConfigIfPresent(configURL: configURL, report: &report)
 
         if let appConfig, let configURL {
-            checkFrontendDist(config: appConfig,
-                              configURL: configURL,
-                              report: &report,
-                              fm: fm)
+            checkFrontendDist(
+                config: appConfig,
+                configURL: configURL,
+                report: &report,
+                fm: fm)
         }
 
-        checkWebView2(projectRoot: options.projectRoot,
-                      report: &report,
-                      fm: fm)
-        checkSwiftSyntaxCache(projectRoot: options.projectRoot,
-                              report: &report,
-                              fm: fm)
+        checkWebView2(
+            projectRoot: options.projectRoot,
+            report: &report,
+            fm: fm)
+        checkSwiftSyntaxCache(
+            projectRoot: options.projectRoot,
+            report: &report,
+            fm: fm)
 
         return report
     }
@@ -74,10 +75,12 @@ public enum KSDoctor {
         }
     }
 
-    private static func checkFrontendDist(config: KSConfig,
-                                          configURL: URL,
-                                          report: inout KSDoctorReport,
-                                          fm: FileManager) {
+    private static func checkFrontendDist(
+        config: KSConfig,
+        configURL: URL,
+        report: inout KSDoctorReport,
+        fm: FileManager
+    ) {
         let distURL = configURL.deletingLastPathComponent().appendingPathComponent(config.build.frontendDist)
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: distURL.path, isDirectory: &isDir), isDir.boolValue else {
@@ -85,10 +88,11 @@ public enum KSDoctor {
             return
         }
 
-        let count = (try? fm.contentsOfDirectory(
-            at: distURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]))?.count ?? 0
+        let count =
+            (try? fm.contentsOfDirectory(
+                at: distURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]))?.count ?? 0
         if count == 0 {
             report.warnings.append("Frontend dist directory is empty: \(distURL.path)")
         } else {
@@ -96,31 +100,37 @@ public enum KSDoctor {
         }
     }
 
-    private static func checkWebView2(projectRoot: URL,
-                                      report: inout KSDoctorReport,
-                                      fm: FileManager) {
+    private static func checkWebView2(
+        projectRoot: URL,
+        report: inout KSDoctorReport,
+        fm: FileManager
+    ) {
         #if os(Windows)
-        let staticLib = projectRoot
-            .appendingPathComponent("Vendor")
-            .appendingPathComponent("WebView2")
-            .appendingPathComponent("build")
-            .appendingPathComponent("native")
-            .appendingPathComponent("x64")
-            .appendingPathComponent("WebView2LoaderStatic.lib")
-        if fm.fileExists(atPath: staticLib.path) {
-            report.infos.append("WebView2 static loader found: \(staticLib.path)")
-        } else {
-            report.warnings.append("WebView2 static loader missing: \(staticLib.path)")
-            report.warnings.append("Run .\\Scripts\\fetch-webview2.ps1 from project root, or pass -ProjectRoot to script.")
-        }
+            let staticLib =
+                projectRoot
+                .appendingPathComponent("Vendor")
+                .appendingPathComponent("WebView2")
+                .appendingPathComponent("build")
+                .appendingPathComponent("native")
+                .appendingPathComponent("x64")
+                .appendingPathComponent("WebView2LoaderStatic.lib")
+            if fm.fileExists(atPath: staticLib.path) {
+                report.infos.append("WebView2 static loader found: \(staticLib.path)")
+            } else {
+                report.warnings.append("WebView2 static loader missing: \(staticLib.path)")
+                report.warnings.append(
+                    "Run .\\Scripts\\fetch-webview2.ps1 from project root, or pass -ProjectRoot to script.")
+            }
         #else
-        report.infos.append("WebView2 check skipped on non-Windows platform.")
+            report.infos.append("WebView2 check skipped on non-Windows platform.")
         #endif
     }
 
-    private static func checkSwiftSyntaxCache(projectRoot: URL,
-                                              report: inout KSDoctorReport,
-                                              fm: FileManager) {
+    private static func checkSwiftSyntaxCache(
+        projectRoot: URL,
+        report: inout KSDoctorReport,
+        fm: FileManager
+    ) {
         let repositories = projectRoot.appendingPathComponent(".build").appendingPathComponent("repositories")
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: repositories.path, isDirectory: &isDir), isDir.boolValue else {
@@ -128,10 +138,11 @@ public enum KSDoctor {
             return
         }
 
-        let children = (try? fm.contentsOfDirectory(
-            at: repositories,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles])) ?? []
+        let children =
+            (try? fm.contentsOfDirectory(
+                at: repositories,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles])) ?? []
         let swiftSyntaxDirs = children.filter { $0.lastPathComponent.hasPrefix("swift-syntax-") }
         if swiftSyntaxDirs.isEmpty {
             report.infos.append("No swift-syntax cache directory detected.")
@@ -141,7 +152,8 @@ public enum KSDoctor {
         for dir in swiftSyntaxDirs {
             let gitConfig = dir.appendingPathComponent(".git").appendingPathComponent("config")
             guard fm.fileExists(atPath: gitConfig.path),
-                  let text = try? String(contentsOf: gitConfig, encoding: .utf8) else {
+                let text = try? String(contentsOf: gitConfig, encoding: .utf8)
+            else {
                 report.warnings.append("swift-syntax cache may be incomplete: \(dir.lastPathComponent)")
                 continue
             }

@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSHTTPScope")
@@ -78,7 +79,6 @@ struct KSHTTPScopeTests {
         #expect(scope.defaultHeaders.isEmpty)
     }
 }
-
 @Suite("KSNavigationScope")
 struct KSNavigationScopeTests {
     @Test("Empty allow list permits everything (no restriction)")
@@ -104,7 +104,6 @@ struct KSNavigationScopeTests {
         #expect(decoded == scope)
     }
 }
-
 @Suite("KSDownloadScope")
 struct KSDownloadScopeTests {
     @Test("Default scope is disabled (deny by default)")

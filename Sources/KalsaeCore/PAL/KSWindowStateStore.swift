@@ -1,5 +1,3 @@
-public import Foundation
-
 /// 론치 간 윈돈우 기하학의 영속 레코드.
 ///
 /// 파일 위치: Windows는 `%APPDATA%\<identifier>\window-state.json`,
@@ -8,6 +6,11 @@ public import Foundation
 ///
 /// 파일은 윈돈우 레이블로 키징된 사전을 보유하여
 /// 멀티 윈돈우 앱이 각 윈돈우를 독립적으로 저장할 수 있다.
+public import Foundation
+
+/// `KSPersistedWindowState` 항목의 파일 기반 저장소. 쓰기는 원자적,
+/// 읽기는 최선 노력(파일이 손상되었거나 없는 경우 요청된 레이블에
+/// 대해 `nil`을 반환하여 호출자가 config 기본값으로 폴백하도록 한다).
 public struct KSPersistedWindowState: Codable, Sendable, Equatable {
     /// 윈돈우 왼쪽 가장자리, 화면 픽셀(공백 인식 춨표).
     public var x: Int
@@ -29,16 +32,14 @@ public struct KSPersistedWindowState: Codable, Sendable, Equatable {
         maximized: Bool = false,
         fullscreen: Bool = false
     ) {
-        self.x = x; self.y = y
-        self.width = width; self.height = height
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
         self.maximized = maximized
         self.fullscreen = fullscreen
     }
 }
-
-/// `KSPersistedWindowState` 항목의 파일 기반 저장소. 쓰기는 원자적,
-/// 읽기는 최선 노력(파일이 손상되었거나 없는 경우 요청된 레이블에
-/// 대해 `nil`을 반환하여 호출자가 config 기본값으로 폴백하도록 한다).
 public struct KSWindowStateStore: Sendable {
     /// 이 저장소를 뒷받침하는 JSON 파일의 절대 경로.
     public let url: URL
@@ -75,7 +76,7 @@ public struct KSWindowStateStore: Sendable {
     /// JSON이 손상되었거나 해당 레이블에 대한 항목이 없으면 `nil`을 반환한다.
     public func load(label: String) -> KSPersistedWindowState? {
         guard let data = try? Data(contentsOf: url),
-              let dict = try? JSONDecoder()
+            let dict = try? JSONDecoder()
                 .decode([String: KSPersistedWindowState].self, from: data)
         else { return nil }
         return dict[label]
@@ -88,8 +89,9 @@ public struct KSWindowStateStore: Sendable {
     public func save(label: String, state: KSPersistedWindowState) -> Bool {
         var dict: [String: KSPersistedWindowState] = [:]
         if let data = try? Data(contentsOf: url),
-           let existing = try? JSONDecoder()
-            .decode([String: KSPersistedWindowState].self, from: data) {
+            let existing = try? JSONDecoder()
+                .decode([String: KSPersistedWindowState].self, from: data)
+        {
             dict = existing
         }
         dict[label] = state

@@ -1,8 +1,9 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 
-@Suite("KSBindingsGenerator — TypeMapper")
+@Suite("KSBindingsGenerator ??TypeMapper")
 struct BindingsTypeMapperTests {
 
     @Test("Primitives map to TS scalars")
@@ -43,7 +44,7 @@ struct BindingsTypeMapperTests {
     func dictionarySugar() {
         #expect(KSBindingsGenerator.mapType("[String: Int]") == "Record<string, number>")
         #expect(KSBindingsGenerator.mapType("[String: Bool?]") == "Record<string, boolean | null>")
-        // 가시성을 위한 주석으로 비-String 키 보존
+        // 媛?쒖꽦???꾪븳 二쇱꽍?쇰줈 鍮?String ??蹂댁〈
         let mapped = KSBindingsGenerator.mapType("[Int: String]")
         #expect(mapped.hasPrefix("Record<string, string>"))
         #expect(mapped.contains("keys: Int"))
@@ -72,8 +73,7 @@ struct BindingsTypeMapperTests {
         #expect(KSBindingsGenerator.stripBackticks("plain") == "plain")
     }
 }
-
-@Suite("KSBindingsGenerator — Renderer & end-to-end")
+@Suite("KSBindingsGenerator ??Renderer & end-to-end")
 struct BindingsRendererTests {
 
     private func makeOptions(sources: [URL], output: URL) -> KSBindingsGenerator.Options {
@@ -109,10 +109,10 @@ struct BindingsRendererTests {
     @Test("@KSCommand without params renders zero-arg promise")
     func commandNoParams() throws {
         let src = """
-        import Foundation
-        @KSCommand
-        func ping() -> String { "pong" }
-        """
+            import Foundation
+            @KSCommand
+            func ping() -> String { "pong" }
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
@@ -125,9 +125,9 @@ struct BindingsRendererTests {
     @Test("@KSCommand with single param wraps into object literal")
     func commandSingleParam() throws {
         let src = """
-        @KSCommand
-        func greet(name: String) -> String { name }
-        """
+            @KSCommand
+            func greet(name: String) -> String { name }
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
@@ -140,9 +140,9 @@ struct BindingsRendererTests {
     @Test("@KSCommand with multiple params uses args object")
     func commandMultiParam() throws {
         let src = """
-        @KSCommand
-        func add(a: Int, b: Int) -> Int { a + b }
-        """
+            @KSCommand
+            func add(a: Int, b: Int) -> Int { a + b }
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
@@ -155,11 +155,11 @@ struct BindingsRendererTests {
     @Test("Codable struct renders as TS interface")
     func codableStruct() throws {
         let src = """
-        struct User: Codable {
+            struct User: Codable {
             let id: String
             let age: Int?
-        }
-        """
+            }
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
@@ -174,11 +174,11 @@ struct BindingsRendererTests {
     @Test("String-raw enum becomes TS string union")
     func stringEnum() throws {
         let src = """
-        enum Mode: String, Codable {
+            enum Mode: String, Codable {
             case light
             case dark
-        }
-        """
+            }
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 
@@ -190,9 +190,9 @@ struct BindingsRendererTests {
     @Test("Custom command name from attribute argument")
     func customCommandName() throws {
         let src = """
-        @KSCommand("custom.name")
-        func foo() {}
-        """
+            @KSCommand("custom.name")
+            func foo() {}
+            """
         let (input, output) = try writeTemp(src)
         defer { try? FileManager.default.removeItem(at: input.deletingLastPathComponent()) }
 

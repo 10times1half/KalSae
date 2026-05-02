@@ -1,5 +1,3 @@
-internal import Foundation
-
 /// `KSAssetResolver` 결과를 위한 제한된 LRU 캐시.
 ///
 /// Webview 페이지는 일반적으로 세션 동안 동일한 소수의 번들 자산
@@ -16,6 +14,8 @@ internal import Foundation
 /// 캐시는 내부적으로 비재귀적 잠금으로 동기화되며 `Sendable`이다.
 /// `final class`이므로 `KSAssetResolver`(값 타입)가 안정적인 참조를
 /// 유지할 수 있다.
+internal import Foundation
+
 public final class KSAssetCache: @unchecked Sendable {
     // @unchecked: NSLock — 가변 상태 동기화; 값 타입 래퍼에 액터는 부적합
     public let maxEntries: Int
@@ -61,23 +61,28 @@ public final class KSAssetCache: @unchecked Sendable {
     private var misses: Int = 0
 
     public func stats() -> Stats {
-        lock.lock(); defer { lock.unlock() }
-        return Stats(entries: entries.count,
-                     totalBytes: totalBytes,
-                     hits: hits, misses: misses)
+        lock.lock()
+        defer { lock.unlock() }
+        return Stats(
+            entries: entries.count,
+            totalBytes: totalBytes,
+            hits: hits, misses: misses)
     }
 
     public func clear() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         entries.removeAll(keepingCapacity: true)
-        head = nil; tail = nil
+        head = nil
+        tail = nil
         totalBytes = 0
     }
 
     // MARK: - KSAssetResolver가 사용하는 내부 API
 
     func lookup(_ key: String) -> KSAssetResolver.Asset? {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         guard let node = entries[key] else {
             misses &+= 1
             return nil
@@ -93,7 +98,8 @@ public final class KSAssetCache: @unchecked Sendable {
         // 정상 hot set을 다 밀어내는 것을 막는다.
         if bytes > maxBytes { return }
 
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
 
         if let existing = entries[key] {
             // 같은 키 갱신: 바이트 회계 조정 후 노드 교체.

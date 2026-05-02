@@ -1,23 +1,25 @@
-﻿import ArgumentParser
+import ArgumentParser
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 import KalsaeCLICore
+/// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
 import KalsaeCore
 
-/// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
+#if canImport(FoundationNetworking)
+    import FoundationNetworking
+#endif
 struct DevCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dev",
         abstract: "Build and run the project in development mode."
     )
 
-    @Option(name: .shortAndLong, help: "Executable target to run (required when Package.swift has multiple executables).")
+    @Option(
+        name: .shortAndLong, help: "Executable target to run (required when Package.swift has multiple executables).")
     var target: String? = nil
 
-    @Option(name: .long,
-            help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json when present).")
+    @Option(
+        name: .long,
+        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json when present).")
     var config: String? = nil
 
     @Flag(name: .long, help: "Do not launch build.devCommand even when configured.")
@@ -50,13 +52,15 @@ struct DevCommand: ParsableCommand {
 
         defer {
             if let devProcess,
-               devProcess.isRunning {
+                devProcess.isRunning
+            {
                 devProcess.terminate()
             }
         }
 
-          if plan.shouldWaitForDevServer,
-           let url = plan.devServerURL {
+        if plan.shouldWaitForDevServer,
+            let url = plan.devServerURL
+        {
             try waitForDevServer(urlString: url, timeoutSeconds: 20)
         }
 
@@ -164,14 +168,16 @@ struct DevCommand: ParsableCommand {
                     includingPropertiesForKeys: [.contentModificationDateKey],
                     options: [.skipsHiddenFiles])
                 while let child = e?.nextObject() as? URL {
-                    let mtime = (try? child.resourceValues(
-                        forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                    let mtime =
+                        (try? child.resourceValues(
+                            forKeys: [.contentModificationDateKey]))?.contentModificationDate
                         ?? .distantPast
                     if mtime > latest { latest = mtime }
                 }
             } else {
-                let mtime = (try? url.resourceValues(
-                    forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                let mtime =
+                    (try? url.resourceValues(
+                        forKeys: [.contentModificationDateKey]))?.contentModificationDate
                     ?? .distantPast
                 if mtime > latest { latest = mtime }
             }
@@ -193,7 +199,8 @@ struct DevCommand: ParsableCommand {
 
         let task = URLSession.shared.dataTask(with: request) { _, response, _ in
             if let http = response as? HTTPURLResponse,
-               (200..<500).contains(http.statusCode) {
+                (200..<500).contains(http.statusCode)
+            {
                 result.ok = true
             }
             semaphore.signal()

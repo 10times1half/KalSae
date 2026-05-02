@@ -1,5 +1,6 @@
-﻿import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 
 @Suite("ProjectTemplate")
@@ -7,9 +8,11 @@ struct ProjectTemplateTests {
 
     // MARK: - 헬퍼
 
-    private func scaffold(name: String = "MyApp",
-                          frontend: String = "vanilla",
-                          packageManager: String = "npm") throws -> URL {
+    private func scaffold(
+        name: String = "MyApp",
+        frontend: String = "vanilla",
+        packageManager: String = "npm"
+    ) throws -> URL {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("Kalsae-test-\(UUID().uuidString)")
         try ProjectTemplate(
@@ -29,7 +32,7 @@ struct ProjectTemplateTests {
 
         let fm = FileManager.default
         let base = root.appendingPathComponent("Sources/MyApp")
-        let res  = base.appendingPathComponent("Resources")
+        let res = base.appendingPathComponent("Resources")
 
         #expect(fm.fileExists(atPath: root.appendingPathComponent("Package.swift").path))
         #expect(fm.fileExists(atPath: base.appendingPathComponent("App.swift").path))
@@ -44,11 +47,12 @@ struct ProjectTemplateTests {
         let root = try scaffold()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let htmlURL = root
+        let htmlURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/index.html")
         let html = try String(contentsOf: htmlURL, encoding: .utf8)
 
-        #expect(html.contains("window.__KS_"),  "Expected window.__KS_ in generated index.html")
+        #expect(html.contains("window.__KS_"), "Expected window.__KS_ in generated index.html")
         #expect(!html.contains("window.__kb."), "Found legacy window.__kb in generated index.html")
     }
 
@@ -59,18 +63,23 @@ struct ProjectTemplateTests {
         let root = try scaffold()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
-        #expect(json.contains("\"about:blank\""),
-                "devServerURL should default to about:blank, got: \(json)")
-        #expect(!json.contains("localhost:5173"),
-                "devServerURL must not point at a dev server by default")
-        #expect(json.contains("\"devCommand\": null"),
-                "vanilla preset should have null devCommand")
-        #expect(json.contains("\"buildCommand\": null"),
-                "vanilla preset should have null buildCommand")
+        #expect(
+            json.contains("\"about:blank\""),
+            "devServerURL should default to about:blank, got: \(json)")
+        #expect(
+            !json.contains("localhost:5173"),
+            "devServerURL must not point at a dev server by default")
+        #expect(
+            json.contains("\"devCommand\": null"),
+            "vanilla preset should have null devCommand")
+        #expect(
+            json.contains("\"buildCommand\": null"),
+            "vanilla preset should have null buildCommand")
     }
 
     @Test("Kalsae.json contains commandAllowlist with hello")
@@ -78,12 +87,13 @@ struct ProjectTemplateTests {
         let root = try scaffold()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
         #expect(json.contains("commandAllowlist"), "Expected commandAllowlist in Kalsae.json")
-        #expect(json.contains("\"hello\""),        "Expected hello command in allowlist")
+        #expect(json.contains("\"hello\""), "Expected hello command in allowlist")
     }
 
     @Test("Kalsae.json encodes project name and identifier")
@@ -91,12 +101,13 @@ struct ProjectTemplateTests {
         let root = try scaffold(name: "CoolApp")
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/CoolApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
-        #expect(json.contains("\"CoolApp\""),             "App name missing from Kalsae.json")
-        #expect(json.contains("dev.kalsae.coolapp"),   "Identifier missing from Kalsae.json")
+        #expect(json.contains("\"CoolApp\""), "App name missing from Kalsae.json")
+        #expect(json.contains("dev.kalsae.coolapp"), "Identifier missing from Kalsae.json")
     }
 
     // MARK: - 프론트엔드 프리셋
@@ -106,13 +117,14 @@ struct ProjectTemplateTests {
         let root = try scaffold(frontend: "react", packageManager: "pnpm")
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
-        #expect(json.contains("\"frontendDist\": \"dist\""),   "react preset should set frontendDist to dist")
-        #expect(json.contains("localhost:5173"),                 "react preset should set devServerURL")
-        #expect(json.contains("\"devCommand\": \"pnpm run dev\""),   "react preset should include pnpm dev command")
+        #expect(json.contains("\"frontendDist\": \"dist\""), "react preset should set frontendDist to dist")
+        #expect(json.contains("localhost:5173"), "react preset should set devServerURL")
+        #expect(json.contains("\"devCommand\": \"pnpm run dev\""), "react preset should include pnpm dev command")
         #expect(json.contains("\"buildCommand\": \"pnpm run build\""), "react preset should include pnpm build command")
     }
 
@@ -121,11 +133,12 @@ struct ProjectTemplateTests {
         let root = try scaffold(frontend: "vue", packageManager: "yarn")
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
-        #expect(json.contains("\"devCommand\": \"yarn run dev\""),   "vue+yarn preset should use yarn dev")
+        #expect(json.contains("\"devCommand\": \"yarn run dev\""), "vue+yarn preset should use yarn dev")
         #expect(json.contains("\"buildCommand\": \"yarn run build\""), "vue+yarn preset should use yarn build")
     }
 
@@ -134,7 +147,8 @@ struct ProjectTemplateTests {
         let root = try scaffold(frontend: "angular")  // unsupported — fallback
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let jsonURL = root
+        let jsonURL =
+            root
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 

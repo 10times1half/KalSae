@@ -56,8 +56,8 @@ extension KSBindingsGenerator {
         case "Bool":
             return "boolean"
         case "Int", "Int8", "Int16", "Int32", "Int64",
-             "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
-             "Float", "Double", "CGFloat":
+            "UInt", "UInt8", "UInt16", "UInt32", "UInt64",
+            "Float", "Double", "CGFloat":
             return "number"
         case "Void", "()":
             return "void"
@@ -85,9 +85,7 @@ extension KSBindingsGenerator {
         var depth = 0
         for i in s.indices {
             let c = s[i]
-            if c == "<" { depth += 1 }
-            else if c == ">" { depth -= 1 }
-            else if c == sep, depth == 0 { return i }
+            if c == "<" { depth += 1 } else if c == ">" { depth -= 1 } else if c == sep, depth == 0 { return i }
         }
         return nil
     }

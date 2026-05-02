@@ -23,11 +23,15 @@ jobs:
 
           - name: macOS
             os: macos-14
-            setup-swift: false
+            setup-swift: true
+            swift-version: swift-6.3.1-release
+            swift-build: 6.3.1-RELEASE
 
           - name: Linux
             os: ubuntu-24.04
-            setup-swift: false
+            setup-swift: true
+            swift-version: swift-6.3.1-release
+            swift-build: 6.3.1-RELEASE
             apt-deps: >-
               libgtk-4-dev
               libwebkitgtk-6.0-dev
@@ -39,7 +43,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Swift (Windows)
+      - name: Setup Swift
         if: matrix.setup-swift
         uses: compnerd/gha-setup-swift@main
         with:

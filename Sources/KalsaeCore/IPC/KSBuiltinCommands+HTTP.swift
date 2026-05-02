@@ -1,8 +1,8 @@
 import Foundation
-#if canImport(FoundationNetworking)
-import FoundationNetworking
-#endif
 
+#if canImport(FoundationNetworking)
+    import FoundationNetworking
+#endif
 extension KSBuiltinCommands {
     // MARK: - HTTP arg / result types
 
@@ -50,17 +50,20 @@ extension KSBuiltinCommands {
         await register(registry, "__ks.http.fetch") { (args: HTTPFetchArg) throws(KSError) -> HTTPFetchResult in
             // 1. URL/메서드 게이트.
             guard scope.permits(urlString: args.url) else {
-                throw KSError(code: .commandNotAllowed,
+                throw KSError(
+                    code: .commandNotAllowed,
                     message: "security.http denies URL '\(args.url)'",
                     data: .string(args.url))
             }
             guard let url = URL(string: args.url) else {
-                throw KSError(code: .invalidArgument,
+                throw KSError(
+                    code: .invalidArgument,
                     message: "Invalid URL: \(args.url)")
             }
             let method = (args.method ?? "GET").uppercased()
             guard scope.permits(method: method) else {
-                throw KSError(code: .commandNotAllowed,
+                throw KSError(
+                    code: .commandNotAllowed,
                     message: "security.http denies method '\(method)'",
                     data: .string(method))
             }
@@ -80,7 +83,8 @@ extension KSBuiltinCommands {
             }
             if let bytes = args.bodyBytes {
                 guard let data = Data(base64Encoded: bytes) else {
-                    throw KSError(code: .invalidArgument,
+                    throw KSError(
+                        code: .invalidArgument,
                         message: "http.fetch: bodyBytes is not valid base64")
                 }
                 req.httpBody = data
@@ -94,11 +98,13 @@ extension KSBuiltinCommands {
             do {
                 (data, response) = try await session.data(for: req)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "http.fetch failed: \(error.localizedDescription)")
             }
             guard let http = response as? HTTPURLResponse else {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "http.fetch: response is not HTTP")
             }
 
@@ -119,7 +125,8 @@ extension KSBuiltinCommands {
             case "json", "text":
                 body = String(data: data, encoding: .utf8) ?? ""
             default:
-                throw KSError(code: .invalidArgument,
+                throw KSError(
+                    code: .invalidArgument,
                     message: "http.fetch: unknown responseType '\(responseType)'")
             }
 

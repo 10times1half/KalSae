@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 
 @Suite("KSDoctor")
@@ -39,14 +40,15 @@ struct DoctorTests {
             to: configURL)
 
         #if os(Windows)
-        let webView2 = root
-            .appendingPathComponent("Vendor")
-            .appendingPathComponent("WebView2")
-            .appendingPathComponent("build")
-            .appendingPathComponent("native")
-            .appendingPathComponent("x64")
-        try FileManager.default.createDirectory(at: webView2, withIntermediateDirectories: true)
-        try write("stub", to: webView2.appendingPathComponent("WebView2LoaderStatic.lib"))
+            let webView2 =
+                root
+                .appendingPathComponent("Vendor")
+                .appendingPathComponent("WebView2")
+                .appendingPathComponent("build")
+                .appendingPathComponent("native")
+                .appendingPathComponent("x64")
+            try FileManager.default.createDirectory(at: webView2, withIntermediateDirectories: true)
+            try write("stub", to: webView2.appendingPathComponent("WebView2LoaderStatic.lib"))
         #endif
 
         let report = KSDoctor.run(.init(projectRoot: root))
@@ -65,7 +67,10 @@ struct DoctorTests {
         try write("not valid json", to: configURL)
 
         let report = KSDoctor.run(.init(projectRoot: root))
-        #expect(report.warnings.contains { $0.contains("Config") || $0.contains("config") || $0.contains("parse") || $0.contains("invalid") })
+        #expect(
+            report.warnings.contains {
+                $0.contains("Config") || $0.contains("config") || $0.contains("parse") || $0.contains("invalid")
+            })
     }
 
     @Test("Warns when swift-syntax cache remote is invalid")
@@ -73,14 +78,16 @@ struct DoctorTests {
         let root = try makeTempProject()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let cache = root
+        let cache =
+            root
             .appendingPathComponent(".build")
             .appendingPathComponent("repositories")
             .appendingPathComponent("swift-syntax-test")
             .appendingPathComponent(".git")
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
-        try write("[remote \"origin\"]\nurl = https://example.invalid/swift-syntax.git\n",
-                  to: cache.appendingPathComponent("config"))
+        try write(
+            "[remote \"origin\"]\nurl = https://example.invalid/swift-syntax.git\n",
+            to: cache.appendingPathComponent("config"))
 
         let report = KSDoctor.run(.init(projectRoot: root))
         #expect(report.warnings.contains { $0.contains("swift-syntax cache remote looks invalid") })

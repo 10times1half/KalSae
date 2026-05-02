@@ -1,11 +1,11 @@
-﻿public import Foundation
-
 /// 새로 스케폴딩된 Kalsae 프로젝트의 파일 트리를 생성한다.
 ///
 /// 템플릿은 `Support/Templates/*.tmpl` 리소스 파일로 저장되어
 /// Swift가 아닌 저자 (e.g. 번역가, 디자이너)들이
 /// 재컴파일 없이 편집할 수 있으며, 소스 파일이 이스케이프된 문자열을
 /// 왜곡시킬 수 있는 편집기를 통해서도 정상적으로 라운드트립한다.
+public import Foundation
+
 public struct ProjectTemplate {
     public let name: String
     public let frontend: String
@@ -59,8 +59,8 @@ public struct ProjectTemplate {
         public var description: String {
             switch self {
             case .missingResource(let name):
-                return "Bundled template resource '\(name)' is missing. " +
-                    "This is a build-time bug — please report it."
+                return "Bundled template resource '\(name)' is missing. "
+                    + "This is a build-time bug — please report it."
             }
         }
     }
@@ -71,23 +71,31 @@ public struct ProjectTemplate {
         let fm = FileManager.default
 
         // 디렉터리 트리
-        let sourcesDir   = directory.appendingPathComponent("Sources")
+        let sourcesDir = directory.appendingPathComponent("Sources")
             .appendingPathComponent(name)
         let resourcesDir = sourcesDir.appendingPathComponent("Resources")
-        try fm.createDirectory(at: directory,    withIntermediateDirectories: true)
-        try fm.createDirectory(at: sourcesDir,   withIntermediateDirectories: true)
+        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        try fm.createDirectory(at: sourcesDir, withIntermediateDirectories: true)
         try fm.createDirectory(at: resourcesDir, withIntermediateDirectories: true)
 
         // 출력 매핑: 템플릿 리소스 이름 → 결과 경로.
         let mapping: [(resource: String, ext: String, destination: URL)] = [
-            ("Package.swift", "tmpl",
-             directory.appendingPathComponent("Package.swift")),
-            ("App.swift", "tmpl",
-             sourcesDir.appendingPathComponent("App.swift")),
-            ("kalsae.json", "tmpl",
-             resourcesDir.appendingPathComponent("kalsae.json")),
-            ("index.html", "tmpl",
-             resourcesDir.appendingPathComponent("index.html")),
+            (
+                "Package.swift", "tmpl",
+                directory.appendingPathComponent("Package.swift")
+            ),
+            (
+                "App.swift", "tmpl",
+                sourcesDir.appendingPathComponent("App.swift")
+            ),
+            (
+                "kalsae.json", "tmpl",
+                resourcesDir.appendingPathComponent("kalsae.json")
+            ),
+            (
+                "index.html", "tmpl",
+                resourcesDir.appendingPathComponent("index.html")
+            ),
         ]
 
         for (resource, ext, dest) in mapping {
@@ -107,9 +115,10 @@ public struct ProjectTemplate {
     /// `{{DEV_COMMAND}}`, `{{BUILD_COMMAND}}` 를 처리한다.
     func substitute(_ raw: String) -> String {
         let b = buildDefaults
-        let devCommandJSON  = b.devCommand.map  { "\"\($0)\"" } ?? "null"
+        let devCommandJSON = b.devCommand.map { "\"\($0)\"" } ?? "null"
         let buildCommandJSON = b.buildCommand.map { "\"\($0)\"" } ?? "null"
-        return raw
+        return
+            raw
             .replacingOccurrences(of: "{{NAME}}", with: name)
             .replacingOccurrences(of: "{{IDENTIFIER}}", with: identifier)
             .replacingOccurrences(of: "{{FRONTEND_DIST}}", with: b.frontendDist)
@@ -123,8 +132,9 @@ public struct ProjectTemplate {
     /// 이 모듈의 리소스 번들에서 `<resource>.<ext>`를 로드한다.
     /// 런타임이 사용하는 동일한 름업 경로를 단위 테스트가 확인할 수 있도록 `internal`로 유지한다.
     static func loadTemplate(resource: String, ext: String) throws -> String {
-        guard let url = Bundle.module.url(
-            forResource: resource, withExtension: ext, subdirectory: "Templates")
+        guard
+            let url = Bundle.module.url(
+                forResource: resource, withExtension: ext, subdirectory: "Templates")
         else {
             throw TemplateError.missingResource("\(resource).\(ext)")
         }

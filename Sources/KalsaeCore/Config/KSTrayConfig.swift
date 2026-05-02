@@ -1,6 +1,6 @@
+/// 시스템 트레이(상태 항목) 설정.
 import Foundation
 
-/// 시스템 트레이(상태 항목) 설정.
 public struct KSTrayConfig: Codable, Sendable, Equatable {
     /// 아이콘 파일 경로. 프로젝트 루트 기준 상대 경로이며,
     /// 플랫폼 레이어가 적절한 형식(`.icns`/`.ico`/`.png`)을 고른다.
@@ -13,10 +13,12 @@ public struct KSTrayConfig: Codable, Sendable, Equatable {
     /// `nil`이면 트레이는 메뉴만 표시한다.
     public var onLeftClick: String?
 
-    public init(icon: String,
-                tooltip: String? = nil,
-                menu: [KSMenuItem]? = nil,
-                onLeftClick: String? = nil) {
+    public init(
+        icon: String,
+        tooltip: String? = nil,
+        menu: [KSMenuItem]? = nil,
+        onLeftClick: String? = nil
+    ) {
         self.icon = icon
         self.tooltip = tooltip
         self.menu = menu

@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSAutostartConfig + KSDeepLinkConfig")
@@ -35,7 +36,6 @@ struct KSAutostartConfigTests {
         #expect(decoded == cfg)
     }
 }
-
 @Suite("KSWindowStateStore")
 struct KSWindowStateStoreTests {
     private func makeTempStore() -> KSWindowStateStore {

@@ -1,6 +1,6 @@
-﻿public import Foundation
-
 /// `kalsae.json`을 로드하고 검증한다.
+public import Foundation
+
 public enum KSConfigLoader {
     /// 주어진 URL에서 설정을 로드한다.
     public static func load(from url: URL) throws(KSError) -> KSConfig {

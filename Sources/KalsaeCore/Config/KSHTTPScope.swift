@@ -1,5 +1,3 @@
-import Foundation
-
 /// `__ks.http.*` 명령군에 대한 권한 범위. Tauri 스타일.
 ///
 /// 네트워크 접근은 **기본 거부**다. 범위를 초기의 빈 값으로 두면
@@ -12,6 +10,23 @@ import Foundation
 ///   * 오리진 와일드카드: `"https://*.example.com"` — `example.com`의 모든 서브호스트.
 ///   * 전체 URL 접두사: `"https://api.example.com/v1/"` — URL이 이 접두사로 시작할 때만 허용.
 ///   * 스킴 전용: `"https://*"` — 해당 스킴을 사용하는 모든 URL.
+import Foundation
+
+/// WebView 다운로드 이벤트(`ICoreWebView2.add_DownloadStarting`)에 대한 권한 범위.
+///
+/// `enabled`가 `false`이면(기본값, 즉 기본 거부) 페이지가 시작한 모든 다운로드를 취소한다.
+/// `true`이면 다운로드를 허용하며, 호스트가 별도 진행 상황 싱크를 등록하지 않는 한
+/// WebView2 기본 다운로드 UI가 이를 처리한다.
+
+/// 모든 WebView 네비게이션(`ICoreWebView2.add_NavigationStarting`)에 강제되는
+/// 오리진 허용 목록.
+///
+/// 허용 목록이 비어 있으면 네비게이션은 제한되지 않는다(기존 앱을 깨지 않는 레거시 동작).
+/// 하나 이상 선언되면 목록 밖 URL로의 이동은 취소되고,
+/// 스킴이 허용된 경우 `KSShellBackend.openExternal`로 우회하며,
+/// 그렇지 않으면 버린다.
+///
+/// 패턴 형태는 `KSHTTPScope`와 동일하다.
 public struct KSHTTPScope: Codable, Sendable, Equatable {
     /// 허용되는 오리진/URL 접두사 패턴.
     public var allow: [String]
@@ -46,8 +61,9 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
         self.allow = try c.decodeIfPresent([String].self, forKey: .allow) ?? []
         self.deny = try c.decodeIfPresent([String].self, forKey: .deny) ?? []
         self.methods = try c.decodeIfPresent([String].self, forKey: .methods)
-        self.defaultHeaders = try c.decodeIfPresent(
-            [String: String].self, forKey: .defaultHeaders) ?? [:]
+        self.defaultHeaders =
+            try c.decodeIfPresent(
+                [String: String].self, forKey: .defaultHeaders) ?? [:]
     }
 
     /// `urlString`이 이 범위에 의해 허용되면 `true`를 반환한다.
@@ -138,7 +154,7 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
     private static func hostMatches(pattern: String, input: String) -> Bool {
         if pattern == "*" { return true }
         if pattern.hasPrefix("*.") {
-            let suffix = String(pattern.dropFirst(1)) // ".foo.com[:port]"
+            let suffix = String(pattern.dropFirst(1))  // ".foo.com[:port]"
             // 정확한 루트 호스트(서브도메인 없음): "foo.com"과 일치.
             if input == String(suffix.dropFirst()) { return true }
             // 서브도메인: ".foo.com"을 입력의 첫 점 이후 부분이 가져야 함.
@@ -150,12 +166,6 @@ public struct KSHTTPScope: Codable, Sendable, Equatable {
         return pattern == input
     }
 }
-
-/// WebView 다운로드 이벤트(`ICoreWebView2.add_DownloadStarting`)에 대한 권한 범위.
-///
-/// `enabled`가 `false`이면(기본값, 즉 기본 거부) 페이지가 시작한 모든 다운로드를 취소한다.
-/// `true`이면 다운로드를 허용하며, 호스트가 별도 진행 상황 싱크를 등록하지 않는 한
-/// WebView2 기본 다운로드 UI가 이를 처리한다.
 public struct KSDownloadScope: Codable, Sendable, Equatable {
     /// 다운로드 자체를 허용할지 여부.
     public var enabled: Bool
@@ -187,16 +197,6 @@ public struct KSDownloadScope: Codable, Sendable, Equatable {
         self.promptUser = try c.decodeIfPresent(Bool.self, forKey: .promptUser) ?? true
     }
 }
-
-/// 모든 WebView 네비게이션(`ICoreWebView2.add_NavigationStarting`)에 강제되는
-/// 오리진 허용 목록.
-///
-/// 허용 목록이 비어 있으면 네비게이션은 제한되지 않는다(기존 앱을 깨지 않는 레거시 동작).
-/// 하나 이상 선언되면 목록 밖 URL로의 이동은 취소되고,
-/// 스킴이 허용된 경우 `KSShellBackend.openExternal`로 우회하며,
-/// 그렇지 않으면 버린다.
-///
-/// 패턴 형태는 `KSHTTPScope`와 동일하다.
 public struct KSNavigationScope: Codable, Sendable, Equatable {
     /// 창 내부 네비게이션에 허용되는 오리진/URL 접두사 패턴.
     public var allow: [String]
@@ -217,8 +217,9 @@ public struct KSNavigationScope: Codable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.allow = try c.decodeIfPresent([String].self, forKey: .allow) ?? []
-        self.openExternallyOnReject = try c.decodeIfPresent(
-            Bool.self, forKey: .openExternallyOnReject) ?? true
+        self.openExternallyOnReject =
+            try c.decodeIfPresent(
+                Bool.self, forKey: .openExternallyOnReject) ?? true
     }
 
     /// `urlString`로의 네비게이션이 창 내부에서 허용되어야 하면 `true`를 반환한다.

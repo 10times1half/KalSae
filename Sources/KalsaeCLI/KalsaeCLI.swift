@@ -1,6 +1,6 @@
-﻿import ArgumentParser
-
 /// 루트 명령. `new`, `dev`, `build` 서브명령으로 디스패치한다.
+import ArgumentParser
+
 @main
 struct KalsaeCLI: ParsableCommand {
     static let configuration = CommandConfiguration(

@@ -12,11 +12,11 @@
 public protocol KSDeepLinkBackend: Sendable {
     /// `scheme`을 OS에 등록하여 `<scheme>://...` 외부 호출이 이 실행 파일로
     /// 라우팅되도록 한다. 멱등 연산.
-    func register(scheme: String) throws(KSError) -> Void
+    func register(scheme: String) throws(KSError)
 
     /// `scheme`의 레지스트리 항목을 제거한다. 멱등 연산 — 항목이 없으면
     /// 성공으로 처리된다.
-    func unregister(scheme: String) throws(KSError) -> Void
+    func unregister(scheme: String) throws(KSError)
 
     /// `scheme`이 현재 이 실행 파일을 가리키도록 등록되어 있으면 `true`를
     /// 반환한다(`shell\open\command` 값의 문자열 일치).

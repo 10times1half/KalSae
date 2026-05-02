@@ -1,7 +1,14 @@
-import Foundation
-
 /// 라이브 윈도우의 뺈타입 식별자. 플랫폼 레이어는 네이티브 객체로
 /// 해석할 수 있는 구체적인 핸들을 제공한다(NSWindow, HWND, GtkWindow).
+import Foundation
+
+/// 최상위 플랫폼 추상화. 각 OS는 정확히 하나의 철혷 타입을 제공한다
+/// (예: `KSMacPlatform`, `KSWindowsPlatform`, `KSLinuxPlatform`).
+///
+/// 엄브레라 모듈은 `#if os(...)`를 통해 컴파일 시점에 올바른 것을 선택한다.
+
+// MARK: - Source-compatible defaults
+
 public struct KSWindowHandle: Hashable, Sendable {
     public let label: String
     public let rawValue: UInt64
@@ -10,11 +17,6 @@ public struct KSWindowHandle: Hashable, Sendable {
         self.rawValue = rawValue
     }
 }
-
-/// 최상위 플랫폼 추상화. 각 OS는 정확히 하나의 철혷 타입을 제공한다
-/// (예: `KSMacPlatform`, `KSWindowsPlatform`, `KSLinuxPlatform`).
-///
-/// 엄브레라 모듈은 `#if os(...)`를 통해 컴파일 시점에 올바른 것을 선택한다.
 public protocol KSPlatform: Sendable {
     /// 이 백엔드의 사람이 읽을 수 있는 이름(로그용).
     var name: String { get }
@@ -63,9 +65,6 @@ public protocol KSPlatform: Sendable {
         configure: @Sendable (any KSPlatform) async throws(KSError) -> Void
     ) async throws(KSError) -> Never
 }
-
-// MARK: - Source-compatible defaults
-
 extension KSPlatform {
     /// 기본값: 플랫폼이 솔 백엔드를 아직 노출하지 않는다.
     public var shell: (any KSShellBackend)? { nil }

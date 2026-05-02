@@ -1,10 +1,6 @@
 public import Foundation
 public import KalsaeCore
 
-#if os(Windows)
-internal import KalsaePlatformWindows
-#endif
-
 // MARK: - UI 스레드 편의 헬퍼
 //
 // 백그라운드 컨텍스트(예: `Task.detached`에서 돌아가는 IPC 디스패치
@@ -14,6 +10,9 @@ internal import KalsaePlatformWindows
 // `await MainActor.run`은 재개되지 않지만, PostMessageW(WM_USER+1)은
 // 재개된다.
 
+#if os(Windows)
+    internal import KalsaePlatformWindows
+#endif
 extension KSApp {
 
     /// 네이티브 메시지 대화상자를 표시한다. `completion`은 사용자가
@@ -24,15 +23,15 @@ extension KSApp {
         completion: @MainActor @Sendable @escaping (KSMessageResult) -> Void = { _ in }
     ) {
         #if os(Windows)
-        postJob {
-            let result = KSWindowsDialogBackend.messageOnUI(options)
-            completion(result)
-        }
+            postJob {
+                let result = KSWindowsDialogBackend.messageOnUI(options)
+                completion(result)
+            }
         #else
-        KSLog.logger("kalsae.app").info(
-            "showMessage is not implemented on this platform yet")
-        _ = options
-        _ = completion
+            KSLog.logger("kalsae.app").info(
+                "showMessage is not implemented on this platform yet")
+            _ = options
+            _ = completion
         #endif
     }
 
@@ -43,34 +42,34 @@ extension KSApp {
         completion: @MainActor @Sendable @escaping ([URL]) -> Void
     ) {
         #if os(Windows)
-        postJob {
-            let urls = KSWindowsDialogBackend.openFileOnUI(options)
-            completion(urls)
-        }
+            postJob {
+                let urls = KSWindowsDialogBackend.openFileOnUI(options)
+                completion(urls)
+            }
         #else
-        KSLog.logger("kalsae.app").info(
-            "openFile is not implemented on this platform yet")
-        _ = options
-        // 플랫폼 미구현 시 호출자가 영구히 대기하지 않도록 빈 결과로 콜백한다.
-        Task { @MainActor in completion([]) }
+            KSLog.logger("kalsae.app").info(
+                "openFile is not implemented on this platform yet")
+            _ = options
+            // 플랫폼 미구현 시 호출자가 영구히 대기하지 않도록 빈 결과로 콜백한다.
+            Task { @MainActor in completion([]) }
         #endif
     }
 
     /// 네이티브 데스크톱 알림을 게시한다. 발사 후 망각(Fire-and-forget).
     nonisolated public func postNotification(_ n: KSNotification) {
         #if os(Windows)
-        let platform = self.platform
-        postJob {
-            // 플랫폼 알림 백엔드를 재사용해 (부팅 시 `tray.install`로 설치한)
-            // 상주 트레이 아이콘을 경유해 전달한다.
-            if let nbackend = platform.notifications as? KSWindowsNotificationBackend {
-                nbackend.postOnUI(n)
+            let platform = self.platform
+            postJob {
+                // 플랫폼 알림 백엔드를 재사용해 (부팅 시 `tray.install`로 설치한)
+                // 상주 트레이 아이콘을 경유해 전달한다.
+                if let nbackend = platform.notifications as? KSWindowsNotificationBackend {
+                    nbackend.postOnUI(n)
+                }
             }
-        }
         #else
-        KSLog.logger("kalsae.app").info(
-            "notifications are not implemented on this platform yet")
-        _ = n
+            KSLog.logger("kalsae.app").info(
+                "notifications are not implemented on this platform yet")
+            _ = n
         #endif
     }
 
@@ -83,11 +82,11 @@ extension KSApp {
     @MainActor
     public func setAppUserModelID(_ aumid: String) {
         #if os(Windows)
-        if let nbackend = platform.notifications as? KSWindowsNotificationBackend {
-            nbackend.setAppUserModelID(aumid)
-        }
+            if let nbackend = platform.notifications as? KSWindowsNotificationBackend {
+                nbackend.setAppUserModelID(aumid)
+            }
         #else
-        _ = aumid
+            _ = aumid
         #endif
     }
 }

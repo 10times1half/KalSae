@@ -1,6 +1,6 @@
+/// 데스크탑 알림.
 import Foundation
 
-/// 데스크탑 알림.
 public protocol KSNotificationBackend: Sendable {
     /// 필요한 경우(macOS) 사용자 권한을 요청한다. 알림이 허용되면 `true`를
     /// 반환한다.
@@ -11,7 +11,6 @@ public protocol KSNotificationBackend: Sendable {
 
     func cancel(id: String) async
 }
-
 public struct KSNotification: Codable, Sendable, Equatable {
     public var id: String
     public var title: String
@@ -20,11 +19,13 @@ public struct KSNotification: Codable, Sendable, Equatable {
     /// 소리 이름 또는 무음을 위해 `nil`. 플랫폼 레이어가 네이티브 소리에 매핑한다.
     public var sound: String?
 
-    public init(id: String,
-                title: String,
-                body: String? = nil,
-                iconPath: String? = nil,
-                sound: String? = nil) {
+    public init(
+        id: String,
+        title: String,
+        body: String? = nil,
+        iconPath: String? = nil,
+        sound: String? = nil
+    ) {
         self.id = id
         self.title = title
         self.body = body

@@ -1,4 +1,4 @@
-﻿// MARK: - @KSCommand
+// MARK: - @KSCommand
 //
 // 이 속성을 최상위 또는 static 함수에 붙이면 `KSCommandRegistry`를
 // 통해 노출된다. 컴파일러 플러그인이 `_ksRegister_<funcName>(into:)`
@@ -30,5 +30,6 @@
 // - `-> Void` 반환: 빈 JSON 객체 `{}`가 돌아간다.
 // - 임의의 `Encodable` 반환 타입.
 @attached(peer, names: prefixed(_ksRegister_), prefixed(__KSArgs_))
-public macro KSCommand(_ name: String? = nil) = #externalMacro(
-    module: "KalsaeMacrosPlugin", type: "KSCommandMacro")
+public macro KSCommand(_ name: String? = nil) =
+    #externalMacro(
+        module: "KalsaeMacrosPlugin", type: "KSCommandMacro")

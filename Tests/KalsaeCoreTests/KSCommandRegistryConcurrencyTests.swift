@@ -1,11 +1,14 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 // MARK: - 레지스트리 동시성 & 스루풀
 //
 // Phase 9 측정 슈트. baseline을 못 박아 둠으로써 추후 최적화의 효과를
 // 가시화하고, 동시 dispatch 정합성 회귀를 막는다.
+
+// MARK: - 헬퍼
 
 @Suite("KSCommandRegistry — concurrency contract")
 struct KSCommandRegistryConcurrencyTests {
@@ -35,7 +38,8 @@ struct KSCommandRegistryConcurrencyTests {
             var seen = Set<Int>()
             for await (i, data) in group {
                 seen.insert(i)
-                #expect(data == payloads[i],
+                #expect(
+                    data == payloads[i],
                     "echo handler must return its argument unchanged")
             }
             #expect(seen.count == 1000)
@@ -89,12 +93,14 @@ struct KSCommandRegistryConcurrencyTests {
         for _ in 0..<iterations {
             _ = await registry.dispatch(name: "noop", args: Data())
         }
-        let elapsedNs = DispatchTime.now().uptimeNanoseconds
-                      - start.uptimeNanoseconds
+        let elapsedNs =
+            DispatchTime.now().uptimeNanoseconds
+            - start.uptimeNanoseconds
         let perCall = elapsedNs / UInt64(iterations)
 
         // 정보용 — 실패 게이트 없음. 명백히 무너진 경우에만 fail.
-        #expect(perCall < 1_000_000,
+        #expect(
+            perCall < 1_000_000,
             "noop dispatch must stay under 1 ms (got \(perCall) ns)")
     }
     // MARK: - 속도 제한
@@ -144,11 +150,9 @@ struct KSCommandRegistryConcurrencyTests {
         }
     }
 }
-
-// MARK: - 헬퍼
-
-private extension Result {
-    var isSuccess: Bool {
+extension Result {
+    fileprivate var isSuccess: Bool {
         if case .success = self { return true }
         return false
-    }}
+    }
+}

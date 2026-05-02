@@ -1,16 +1,17 @@
 import ArgumentParser
 import Foundation
+/// `kalsae doctor` - 로컬 개발 환경과 프로젝트 구성을 점검한다.
 import KalsaeCLICore
 
-/// `kalsae doctor` - 로컬 개발 환경과 프로젝트 구성을 점검한다.
 struct DoctorCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "doctor",
         abstract: "Check common environment and project issues."
     )
 
-    @Option(name: .long,
-            help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
+    @Option(
+        name: .long,
+        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
     var config: String? = nil
 
     @Flag(name: .long, help: "Exit with non-zero status when warnings are detected.")

@@ -1,11 +1,11 @@
-﻿public import Logging
-import Foundation
-
 /// Kalsae의 중앙 로깅 파사드.
 ///
 /// 플랫폼 백엔드는 ``bootstrap(factory:)``를 통해 네이티브 `LogHandler`를
 /// 등록한다(예: macOS에서 `os.Logger`, Windows에서 `OutputDebugStringW`).
 /// `bootstrap` 호출 전에는 `swift-log`의 기본 stderr 핸들러가 사용된다.
+import Foundation
+public import Logging
+
 public enum KSLog {
     /// 플랫폼 로그 싱크가 사용하는 서브시스템 / 리버스 DNS 레이블.
     public static let subsystem = "dev.Kalsae"

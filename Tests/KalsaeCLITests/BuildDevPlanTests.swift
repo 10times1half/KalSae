@@ -1,13 +1,16 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 @testable import KalsaeCore
 
 @Suite("KSBuildPlan")
 struct BuildPlanTests {
-    private func makeConfig(devServerURL: String = "about:blank",
-                            devCommand: String? = nil,
-                            buildCommand: String? = nil) -> KSConfig {
+    private func makeConfig(
+        devServerURL: String = "about:blank",
+        devCommand: String? = nil,
+        buildCommand: String? = nil
+    ) -> KSConfig {
         KSConfig(
             app: KSAppInfo(name: "Demo", version: "0.1.0", identifier: "dev.kalsae.demo"),
             build: KSBuildConfig(
@@ -70,11 +73,12 @@ struct BuildPlanTests {
             allowMissingDist: true)
     }
 }
-
 @Suite("KSDevPlan")
 struct DevPlanTests {
-    private func makeConfig(devServerURL: String = "about:blank",
-                            devCommand: String? = nil) -> KSConfig {
+    private func makeConfig(
+        devServerURL: String = "about:blank",
+        devCommand: String? = nil
+    ) -> KSConfig {
         KSConfig(
             app: KSAppInfo(name: "Demo", version: "0.1.0", identifier: "dev.kalsae.demo"),
             build: KSBuildConfig(

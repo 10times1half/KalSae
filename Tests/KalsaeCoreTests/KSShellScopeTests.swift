@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSShellScope")
@@ -53,15 +54,15 @@ struct KSShellScopeTests {
     @Test("Embedded shell field round-trips inside KSSecurityConfig")
     func roundTripsInsideSecurity() throws {
         let json = #"""
-        {
-          "csp": "default-src 'self'",
-          "shell": {
+            {
+            "csp": "default-src 'self'",
+            "shell": {
             "openExternalSchemes": ["https"],
             "showItemInFolder": true,
             "moveToTrash": false
-          }
-        }
-        """#
+            }
+            }
+            """#
         let sec = try JSONDecoder().decode(KSSecurityConfig.self, from: Data(json.utf8))
         #expect(sec.shell.openExternalSchemes == ["https"])
         #expect(sec.shell.showItemInFolder)

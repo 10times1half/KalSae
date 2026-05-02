@@ -1,8 +1,8 @@
 import ArgumentParser
 import Foundation
+/// `kalsae generate ...` 그룹.
 import KalsaeCLICore
 
-/// `kalsae generate ...` 그룹.
 struct GenerateCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "generate",
@@ -15,16 +15,19 @@ struct GenerateCommand: ParsableCommand {
             commandName: "bindings",
             abstract: "Generate TypeScript bindings for @KSCommand functions.")
 
-        @Option(name: [.long, .customShort("o")],
-                help: "Output .ts file path. Defaults to <project>/src/lib/kalsae.gen.ts.")
+        @Option(
+            name: [.long, .customShort("o")],
+            help: "Output .ts file path. Defaults to <project>/src/lib/kalsae.gen.ts.")
         var out: String?
 
-        @Option(name: .long,
-                help: "Project root containing Sources/. Defaults to CWD.")
+        @Option(
+            name: .long,
+            help: "Project root containing Sources/. Defaults to CWD.")
         var project: String?
 
-        @Option(name: .long,
-                help: "Module name embedded in the generated header.")
+        @Option(
+            name: .long,
+            help: "Module name embedded in the generated header.")
         var module: String = "Kalsae"
 
         @Argument(help: "Optional explicit Swift source files / directories.")
@@ -57,7 +60,8 @@ struct GenerateCommand: ParsableCommand {
             if let out {
                 outURL = URL(fileURLWithPath: out, relativeTo: root)
             } else {
-                outURL = root
+                outURL =
+                    root
                     .appendingPathComponent("src")
                     .appendingPathComponent("lib")
                     .appendingPathComponent("kalsae.gen.ts")

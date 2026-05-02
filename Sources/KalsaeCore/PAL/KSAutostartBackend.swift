@@ -8,7 +8,7 @@
 /// - macOS  : 예약됨 (`SMAppService`를 통한 Login Items — 아직 미출시).
 /// - Linux  : 예약됨 (XDG autostart `.desktop` 파일 — 아직 미출시).
 public protocol KSAutostartBackend: Sendable {
-    func enable() throws(KSError) -> Void
-    func disable() throws(KSError) -> Void
+    func enable() throws(KSError)
+    func disable() throws(KSError)
     func isEnabled() -> Bool
 }

@@ -1,13 +1,12 @@
 internal import Foundation
 
 #if os(Windows)
-internal import KalsaePlatformWindows
+    internal import KalsaePlatformWindows
 #elseif os(macOS)
-internal import KalsaePlatformMac
+    internal import KalsaePlatformMac
 #elseif os(Linux)
-internal import KalsaePlatformLinux
+    internal import KalsaePlatformLinux
 #endif
-
 extension KSApp {
 
     /// 단일 인스턴스 획득 시도의 결과.
@@ -46,37 +45,37 @@ extension KSApp {
         onSecondInstance: @escaping @MainActor ([String]) -> Void
     ) -> SingleInstanceOutcome {
         #if os(Windows)
-        switch KSWindowsSingleInstance.acquire(
-            identifier: identifier,
-            args: args,
-            onSecondInstance: onSecondInstance)
-        {
-        case .primary: return .primary
-        case .relayed: return .relayed
-        }
+            switch KSWindowsSingleInstance.acquire(
+                identifier: identifier,
+                args: args,
+                onSecondInstance: onSecondInstance)
+            {
+            case .primary: return .primary
+            case .relayed: return .relayed
+            }
         #elseif os(macOS)
-        switch KSMacSingleInstance.acquire(
-            identifier: identifier,
-            args: args,
-            onSecondInstance: onSecondInstance)
-        {
-        case .primary: return .primary
-        case .relayed: return .relayed
-        }
+            switch KSMacSingleInstance.acquire(
+                identifier: identifier,
+                args: args,
+                onSecondInstance: onSecondInstance)
+            {
+            case .primary: return .primary
+            case .relayed: return .relayed
+            }
         #elseif os(Linux)
-        switch KSLinuxSingleInstance.acquire(
-            identifier: identifier,
-            args: args,
-            onSecondInstance: onSecondInstance)
-        {
-        case .primary: return .primary
-        case .relayed: return .relayed
-        }
+            switch KSLinuxSingleInstance.acquire(
+                identifier: identifier,
+                args: args,
+                onSecondInstance: onSecondInstance)
+            {
+            case .primary: return .primary
+            case .relayed: return .relayed
+            }
         #else
-        _ = identifier
-        _ = args
-        _ = onSecondInstance
-        return .primary
+            _ = identifier
+            _ = args
+            _ = onSecondInstance
+            return .primary
         #endif
     }
 }

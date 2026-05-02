@@ -97,9 +97,10 @@ extension KSBuiltinCommands {
             let url = URL(fileURLWithPath: expanded).standardizedFileURL
             let absolute = url.path
             guard scope.permits(absolutePath: absolute, in: ctx) else {
-                throw KSError(code: .fsScopeDenied,
-                              message: "fs scope denies path '\(raw)'",
-                              data: .string(absolute))
+                throw KSError(
+                    code: .fsScopeDenied,
+                    message: "fs scope denies path '\(raw)'",
+                    data: .string(absolute))
             }
             return url
         }
@@ -110,11 +111,13 @@ extension KSBuiltinCommands {
             do {
                 data = try Data(contentsOf: url)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.readTextFile failed: \(error.localizedDescription)")
             }
             guard let s = String(data: data, encoding: .utf8) else {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.readTextFile: file is not valid UTF-8")
             }
             return FSReadTextResult(contents: s)
@@ -126,7 +129,8 @@ extension KSBuiltinCommands {
             do {
                 data = try Data(contentsOf: url)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.readFile failed: \(error.localizedDescription)")
             }
             return FSReadBytesResult(
@@ -147,7 +151,8 @@ extension KSBuiltinCommands {
                     try data.write(to: url, options: [.atomic])
                 }
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.writeTextFile failed: \(error.localizedDescription)")
             }
             return Empty()
@@ -156,7 +161,8 @@ extension KSBuiltinCommands {
         await register(registry, "__ks.fs.writeFile") { (args: FSWriteBytesArg) throws(KSError) -> Empty in
             let url = try resolve(args.path)
             guard let data = Data(base64Encoded: args.contents) else {
-                throw KSError(code: .invalidArgument,
+                throw KSError(
+                    code: .invalidArgument,
                     message: "fs.writeFile: contents is not valid base64")
             }
             do {
@@ -169,7 +175,8 @@ extension KSBuiltinCommands {
                     try data.write(to: url, options: [.atomic])
                 }
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.writeFile failed: \(error.localizedDescription)")
             }
             return Empty()
@@ -198,7 +205,8 @@ extension KSBuiltinCommands {
             do {
                 attrs = try FileManager.default.attributesOfItem(atPath: url.path)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.metadata failed: \(error.localizedDescription)")
             }
             let size = (attrs[.size] as? NSNumber)?.int64Value
@@ -220,21 +228,25 @@ extension KSBuiltinCommands {
             let fm = FileManager.default
             var entries: [FSDirEntry] = []
             if recursive {
-                guard let it = fm.enumerator(
-                    at: root,
-                    includingPropertiesForKeys: [.isDirectoryKey],
-                    options: [.skipsHiddenFiles]) else {
-                    throw KSError(code: .ioFailed,
+                guard
+                    let it = fm.enumerator(
+                        at: root,
+                        includingPropertiesForKeys: [.isDirectoryKey],
+                        options: [.skipsHiddenFiles])
+                else {
+                    throw KSError(
+                        code: .ioFailed,
                         message: "fs.readDir: cannot enumerate '\(root.path)'")
                 }
                 for case let url as URL in it {
                     let standardized = url.standardizedFileURL.path
                     guard scope.permits(absolutePath: standardized, in: ctx) else { continue }
                     let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    entries.append(FSDirEntry(
-                        name: url.lastPathComponent,
-                        path: standardized,
-                        isDirectory: isDir))
+                    entries.append(
+                        FSDirEntry(
+                            name: url.lastPathComponent,
+                            path: standardized,
+                            isDirectory: isDir))
                 }
             } else {
                 let urls: [URL]
@@ -244,17 +256,19 @@ extension KSBuiltinCommands {
                         includingPropertiesForKeys: [.isDirectoryKey],
                         options: [.skipsHiddenFiles])
                 } catch {
-                    throw KSError(code: .ioFailed,
+                    throw KSError(
+                        code: .ioFailed,
                         message: "fs.readDir failed: \(error.localizedDescription)")
                 }
                 for url in urls {
                     let standardized = url.standardizedFileURL.path
                     guard scope.permits(absolutePath: standardized, in: ctx) else { continue }
                     let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
-                    entries.append(FSDirEntry(
-                        name: url.lastPathComponent,
-                        path: standardized,
-                        isDirectory: isDir))
+                    entries.append(
+                        FSDirEntry(
+                            name: url.lastPathComponent,
+                            path: standardized,
+                            isDirectory: isDir))
                 }
             }
             return FSReadDirResult(entries: entries)
@@ -267,7 +281,8 @@ extension KSBuiltinCommands {
                     at: url,
                     withIntermediateDirectories: args.recursive ?? true)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.createDir failed: \(error.localizedDescription)")
             }
             return Empty()
@@ -280,21 +295,25 @@ extension KSBuiltinCommands {
             let exists = FileManager.default.fileExists(
                 atPath: url.path, isDirectory: &isDir)
             guard exists else {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.remove: path does not exist")
             }
             if isDir.boolValue, args.recursive != true {
-                let count = (try? FileManager.default
-                    .contentsOfDirectory(atPath: url.path).count) ?? 0
+                let count =
+                    (try? FileManager.default
+                        .contentsOfDirectory(atPath: url.path).count) ?? 0
                 if count > 0 {
-                    throw KSError(code: .ioFailed,
+                    throw KSError(
+                        code: .ioFailed,
                         message: "fs.remove: directory not empty (set recursive=true)")
                 }
             }
             do {
                 try FileManager.default.removeItem(at: url)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.remove failed: \(error.localizedDescription)")
             }
             return Empty()
@@ -306,7 +325,8 @@ extension KSBuiltinCommands {
             do {
                 try FileManager.default.moveItem(at: src, to: dst)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.rename failed: \(error.localizedDescription)")
             }
             return Empty()
@@ -321,18 +341,21 @@ extension KSBuiltinCommands {
                     do {
                         try fm.removeItem(at: dst)
                     } catch {
-                        throw KSError(code: .ioFailed,
+                        throw KSError(
+                            code: .ioFailed,
                             message: "fs.copyFile: cannot overwrite destination: \(error.localizedDescription)")
                     }
                 } else {
-                    throw KSError(code: .ioFailed,
+                    throw KSError(
+                        code: .ioFailed,
                         message: "fs.copyFile: destination exists (set overwrite=true)")
                 }
             }
             do {
                 try fm.copyItem(at: src, to: dst)
             } catch {
-                throw KSError(code: .ioFailed,
+                throw KSError(
+                    code: .ioFailed,
                     message: "fs.copyFile failed: \(error.localizedDescription)")
             }
             return Empty()

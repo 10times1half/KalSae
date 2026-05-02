@@ -1,18 +1,6 @@
 public import Foundation
 public import KalsaeCore
 
-#if os(macOS)
-internal import KalsaePlatformMac
-#elseif os(Windows)
-internal import KalsaePlatformWindows
-#elseif os(Linux)
-internal import KalsaePlatformLinux
-#elseif os(iOS)
-internal import KalsaePlatformIOS
-#elseif os(Android)
-internal import KalsaePlatformAndroid
-#endif
-
 /// Kalsae 애플리케이션의 최상위 진입점.
 ///
 /// `KSApp`은 `Kalsae.json`을 로드하고, 보안 설정을 적용하며,
@@ -26,6 +14,17 @@ internal import KalsaePlatformAndroid
 /// }
 /// exit(app.run())
 /// ```
+#if os(macOS)
+    internal import KalsaePlatformMac
+#elseif os(Windows)
+    internal import KalsaePlatformWindows
+#elseif os(Linux)
+    internal import KalsaePlatformLinux
+#elseif os(iOS)
+    internal import KalsaePlatformIOS
+#elseif os(Android)
+    internal import KalsaePlatformAndroid
+#endif
 @MainActor
 public final class KSApp {
     /// 로드된 애플리케이션 설정 (보안 설정, 윈도우, 메뉴, 트레이, 빌드 디렉터리).
@@ -46,15 +45,15 @@ public final class KSApp {
     nonisolated public let platform: any KSPlatform
 
     #if os(Windows)
-    private let host: KSWindowsDemoHost
+        private let host: KSWindowsDemoHost
     #elseif os(macOS)
-    private let host: KSMacDemoHost
+        private let host: KSMacDemoHost
     #elseif os(Linux)
-    private let host: KSLinuxDemoHost
+        private let host: KSLinuxDemoHost
     #elseif os(iOS)
-    private let host: KSiOSDemoHost
+        private let host: KSiOSDemoHost
     #elseif os(Android)
-    private let host: KSAndroidDemoHost
+        private let host: KSAndroidDemoHost
     #endif
 
     /// `config.deepLink`가 선언되었을 때 설치되는 선택적 딥링크 백엔드.
@@ -62,11 +61,13 @@ public final class KSApp {
     /// `__ks.deepLink.openURL` 이벤트를 방출하는 데 사용된다.
     private let deepLinkBackend: (any KSDeepLinkBackend)?
 
-    private init(config: KSConfig,
-                 registry: KSCommandRegistry,
-                 platform: any KSPlatform,
-                 host: AnyPlatformHost,
-                 deepLinkBackend: (Any)? = nil) {
+    private init(
+        config: KSConfig,
+        registry: KSCommandRegistry,
+        platform: any KSPlatform,
+        host: AnyPlatformHost,
+        deepLinkBackend: (Any)? = nil
+    ) {
         self.config = config
         self.registry = registry
         self.platform = platform
@@ -75,15 +76,15 @@ public final class KSApp {
         // 강제 언래핑 없이 정확히 하나의 호스트를 추출한다.
         switch host {
         #if os(Windows)
-        case .windows(let h): self.host = h
+            case .windows(let h): self.host = h
         #elseif os(macOS)
-        case .mac(let h): self.host = h
+            case .mac(let h): self.host = h
         #elseif os(Linux)
-        case .linux(let h): self.host = h
+            case .linux(let h): self.host = h
         #elseif os(iOS)
-        case .ios(let h): self.host = h
+            case .ios(let h): self.host = h
         #elseif os(Android)
-        case .android(let h): self.host = h
+            case .android(let h): self.host = h
         #endif
         }
     }
@@ -111,10 +112,12 @@ public final class KSApp {
         configure: (KSCommandRegistry) async throws(KSError) -> Void
     ) async throws(KSError) -> KSApp {
         let config = try KSConfigLoader.load(from: configURL)
-        let root = resourceRoot ?? {
-            let dir = configURL.deletingLastPathComponent()
-            return dir.appendingPathComponent(config.build.frontendDist)
-        }()
+        let root =
+            resourceRoot
+            ?? {
+                let dir = configURL.deletingLastPathComponent()
+                return dir.appendingPathComponent(config.build.frontendDist)
+            }()
         return try await boot(
             config: config,
             windowLabel: windowLabel,
@@ -147,56 +150,58 @@ public final class KSApp {
 
         // 4. 플랫폼 호스트 구성.
         #if os(Windows)
-        // Phase 8: 윈도우 상태 영속화 — `persistState=true`일 때만 활성화.
-        // 부팅 직후의 첫 `Win32Window.init`에서 복원 상태를 적용해야 하므로
-        // 호스트 생성 전에 store를 만들고 load한다.
-        let stateStore: KSWindowStateStore? = window.persistState
-            ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
-            : nil
-        let restoredState = stateStore?.load(label: window.label)
+            // Phase 8: 윈도우 상태 영속화 — `persistState=true`일 때만 활성화.
+            // 부팅 직후의 첫 `Win32Window.init`에서 복원 상태를 적용해야 하므로
+            // 호스트 생성 전에 store를 만들고 load한다.
+            let stateStore: KSWindowStateStore? =
+                window.persistState
+                ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+                : nil
+            let restoredState = stateStore?.load(label: window.label)
 
-        let concrete = try KSWindowsDemoHost(
-            windowConfig: window, registry: registry,
-            restoredState: restoredState)
-        let wrapper = AnyPlatformHost.windows(concrete)
+            let concrete = try KSWindowsDemoHost(
+                windowConfig: window, registry: registry,
+                restoredState: restoredState)
+            let wrapper = AnyPlatformHost.windows(concrete)
 
-        // 저장 sink 설치 — WM_MOVE/SIZE/CLOSE에서 호출되며 디스크 쓰기는
-        // `KSWindowStateStore.save`가 atomic + 비-atomic 폴백으로 처리한다.
-        if let store = stateStore {
-            let label = window.label
-            concrete.setWindowStateSaveSink { state in
-                _ = store.save(label: label, state: state)
+            // 저장 sink 설치 — WM_MOVE/SIZE/CLOSE에서 호출되며 디스크 쓰기는
+            // `KSWindowStateStore.save`가 atomic + 비-atomic 폴백으로 처리한다.
+            if let store = stateStore {
+                let label = window.label
+                concrete.setWindowStateSaveSink { state in
+                    _ = store.save(label: label, state: state)
+                }
             }
-        }
         #elseif os(macOS)
-        let stateStore: KSWindowStateStore? = window.persistState
-            ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
-            : nil
-        let concrete = try KSMacDemoHost(
-            windowConfig: window, registry: registry)
-        let wrapper = AnyPlatformHost.mac(concrete)
+            let stateStore: KSWindowStateStore? =
+                window.persistState
+                ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+                : nil
+            let concrete = try KSMacDemoHost(
+                windowConfig: window, registry: registry)
+            let wrapper = AnyPlatformHost.mac(concrete)
 
-        if let store = stateStore {
-            let label = window.label
-            concrete.setWindowStateSaveSink { state in
-                _ = store.save(label: label, state: state)
+            if let store = stateStore {
+                let label = window.label
+                concrete.setWindowStateSaveSink { state in
+                    _ = store.save(label: label, state: state)
+                }
             }
-        }
         #elseif os(Linux)
-        let concrete = try KSLinuxDemoHost(
-            windowConfig: window, registry: registry)
-        let wrapper = AnyPlatformHost.linux(concrete)
+            let concrete = try KSLinuxDemoHost(
+                windowConfig: window, registry: registry)
+            let wrapper = AnyPlatformHost.linux(concrete)
         #elseif os(iOS)
-        let concrete = try KSiOSDemoHost(
-            windowConfig: window, registry: registry)
-        let wrapper = AnyPlatformHost.ios(concrete)
+            let concrete = try KSiOSDemoHost(
+                windowConfig: window, registry: registry)
+            let wrapper = AnyPlatformHost.ios(concrete)
         #elseif os(Android)
-        let concrete = try KSAndroidDemoHost(
-            windowConfig: window, registry: registry)
-        let wrapper = AnyPlatformHost.android(concrete)
+            let concrete = try KSAndroidDemoHost(
+                windowConfig: window, registry: registry)
+            let wrapper = AnyPlatformHost.android(concrete)
         #else
-        throw KSError.unsupportedPlatform(
-            "KSApp requires macOS, Windows, Linux, iOS, or Android")
+            throw KSError.unsupportedPlatform(
+                "KSApp requires macOS, Windows, Linux, iOS, or Android")
         #endif
 
         // 5. 프론트엔드 제공 방식 결정.
@@ -208,26 +213,26 @@ public final class KSApp {
 
         if case .virtualHost(let servedRoot) = servingMode {
             #if os(Windows)
-            try concrete.prepare(devtools: config.security.devtools)
-            // WebResourceRequested를 통한 헤더 기반 CSP. 가상 호스트 매핑은
-            // 사용하지 않는다 — 이는 헤더 수정이 불가능한 엔진 내부 응답을
-            // 반환하기 때문이다. 대신 `https://{virtualHost}/*` 아래 모든
-            // 요청을 가로채 `KSAssetResolver`가 제공하고, 각 응답에
-            // Content-Security-Policy를 붙여준다.
-            //
-            // Phase 9: 동일 자산이 webview lifecycle 동안 여러 번 요청되는
-            // 정상 패턴 — 디스크 재읽기를 피하기 위해 작은 LRU 캐시를 단다.
-            let resolver = KSAssetResolver(
-                root: servedRoot, cache: KSAssetCache())
-            try concrete.setResourceHandler(
-                resolver: resolver,
-                csp: config.security.csp,
-                host: Self.virtualHost)
+                try concrete.prepare(devtools: config.security.devtools)
+                // WebResourceRequested를 통한 헤더 기반 CSP. 가상 호스트 매핑은
+                // 사용하지 않는다 — 이는 헤더 수정이 불가능한 엔진 내부 응답을
+                // 반환하기 때문이다. 대신 `https://{virtualHost}/*` 아래 모든
+                // 요청을 가로채 `KSAssetResolver`가 제공하고, 각 응답에
+                // Content-Security-Policy를 붙여준다.
+                //
+                // Phase 9: 동일 자산이 webview lifecycle 동안 여러 번 요청되는
+                // 정상 패턴 — 디스크 재읽기를 피하기 위해 작은 LRU 캐시를 단다.
+                let resolver = KSAssetResolver(
+                    root: servedRoot, cache: KSAssetCache())
+                try concrete.setResourceHandler(
+                    resolver: resolver,
+                    csp: config.security.csp,
+                    host: Self.virtualHost)
             #elseif os(macOS) || os(Linux) || os(iOS) || os(Android)
-            try concrete.setAssetRoot(servedRoot)
+                try concrete.setAssetRoot(servedRoot)
             #endif
             #if os(Linux)
-            try concrete.setResponseCSP(config.security.csp)
+                try concrete.setResponseCSP(config.security.csp)
             #endif
         }
 
@@ -239,22 +244,22 @@ public final class KSApp {
 
         // 보안 설정의 context-menu / external-drop 정책 적용.
         #if os(Windows)
-        if config.security.contextMenu == .disabled {
-            concrete.setDefaultContextMenusEnabled(false)
-        }
-        if !config.security.allowExternalDrop {
-            concrete.setAllowExternalDrop(false)
-            // Phase 5-3: webview 기본 드롭을 호스트의 IDropTarget으로 교체해
-            // OS 파일 드롭이 JS에서 `__ks.file.drop` 이벤트로 올라오도록 한다.
-            // 시도·실패 동작: OLE 등록이 실패해도(예: STA에 진입 불가능한
-            // 스레드) 로그만 남기고 부팅을 계속한다.
-            do {
-                try concrete.installFileDropEmitter()
-            } catch {
-                KSLog.logger("kalsae.app").warning(
-                    "installFileDropEmitter failed: \(error)")
+            if config.security.contextMenu == .disabled {
+                concrete.setDefaultContextMenusEnabled(false)
             }
-        }
+            if !config.security.allowExternalDrop {
+                concrete.setAllowExternalDrop(false)
+                // Phase 5-3: webview 기본 드롭을 호스트의 IDropTarget으로 교체해
+                // OS 파일 드롭이 JS에서 `__ks.file.drop` 이벤트로 올라오도록 한다.
+                // 시도·실패 동작: OLE 등록이 실패해도(예: STA에 진입 불가능한
+                // 스레드) 로그만 남기고 부팅을 계속한다.
+                do {
+                    try concrete.installFileDropEmitter()
+                } catch {
+                    KSLog.logger("kalsae.app").warning(
+                        "installFileDropEmitter failed: \(error)")
+                }
+            }
         #endif
 
         // 6. URL 결정 — 오버라이드와 윈도우 자체 `url` 세팅을 존중한다.
@@ -265,9 +270,9 @@ public final class KSApp {
             servingMode: servingMode)
 
         #if os(Windows)
-        try concrete.startPrepared(url: url, devtools: config.security.devtools)
+            try concrete.startPrepared(url: url, devtools: config.security.devtools)
         #else
-        try concrete.start(url: url, devtools: config.security.devtools)
+            try concrete.start(url: url, devtools: config.security.devtools)
         #endif
 
         let platform = try Kalsae.makePlatform()
@@ -275,7 +280,7 @@ public final class KSApp {
         // 알림 백엔드를 트레이 아이콘과 연결해 토스트가 상주 아이콘을
         // 경유해 울리도록 한다. 윈도우즈 외 플랫폼에서는 노옵.
         #if os(Windows)
-        bindNotificationsToTray(platform: platform)
+            bindNotificationsToTray(platform: platform)
         #endif
 
         // 내장 `__ks.window/shell/clipboard/app/environment` 명령을 등록해
@@ -286,24 +291,24 @@ public final class KSApp {
         // 모든 플랫폼: autostart 백엔드. config에 `autostart` 섹션이 있을 때만 활성화.
         let autostartBackend: (any KSAutostartBackend)? = {
             #if os(Windows)
-            guard let autostartCfg = config.autostart else { return nil }
-            return KSWindowsAutostartBackend(
-                identifier: config.app.identifier,
-                args: autostartCfg.args)
+                guard let autostartCfg = config.autostart else { return nil }
+                return KSWindowsAutostartBackend(
+                    identifier: config.app.identifier,
+                    args: autostartCfg.args)
             #elseif os(macOS)
-            guard config.autostart != nil else { return nil }
-            return KSMacAutostartBackend()
+                guard config.autostart != nil else { return nil }
+                return KSMacAutostartBackend()
             #elseif os(Linux)
-            guard config.autostart != nil else { return nil }
-            return KSLinuxAutostartBackend(identifier: config.app.identifier)
+                guard config.autostart != nil else { return nil }
+                return KSLinuxAutostartBackend(identifier: config.app.identifier)
             #elseif os(iOS)
-            guard config.autostart != nil else { return nil }
-            return KSiOSAutostartBackend()
+                guard config.autostart != nil else { return nil }
+                return KSiOSAutostartBackend()
             #elseif os(Android)
-            guard config.autostart != nil else { return nil }
-            return KSAndroidAutostartBackend()
+                guard config.autostart != nil else { return nil }
+                return KSAndroidAutostartBackend()
             #else
-            return nil
+                return nil
             #endif
         }()
 
@@ -312,19 +317,19 @@ public final class KSApp {
             guard let dlc = config.deepLink else { return nil }
             let b: any KSDeepLinkBackend
             #if os(Windows)
-            b = KSWindowsDeepLinkBackend(identifier: config.app.identifier)
+                b = KSWindowsDeepLinkBackend(identifier: config.app.identifier)
             #elseif os(macOS)
-            KSMacDeepLinkBackend.installAppleEventHandler()
-            b = KSMacDeepLinkBackend(identifier: config.app.identifier)
+                KSMacDeepLinkBackend.installAppleEventHandler()
+                b = KSMacDeepLinkBackend(identifier: config.app.identifier)
             #elseif os(Linux)
-            b = KSLinuxDeepLinkBackend(identifier: config.app.identifier)
+                b = KSLinuxDeepLinkBackend(identifier: config.app.identifier)
             #elseif os(iOS)
-            b = KSiOSDeepLinkBackend(identifier: config.app.identifier)
+                b = KSiOSDeepLinkBackend(identifier: config.app.identifier)
             #elseif os(Android)
-            b = KSAndroidDeepLinkBackend(identifier: config.app.identifier)
-            KSAndroidDeepLinkBackend.knownSchemes = Set(dlc.schemes.map { $0.lowercased() })
+                b = KSAndroidDeepLinkBackend(identifier: config.app.identifier)
+                KSAndroidDeepLinkBackend.knownSchemes = Set(dlc.schemes.map { $0.lowercased() })
             #else
-            return nil
+                return nil
             #endif
             if dlc.autoRegisterOnLaunch {
                 for s in dlc.schemes {
@@ -355,13 +360,14 @@ public final class KSApp {
             deepLink: deepLinkPair,
             appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
 
-        let app = KSApp(config: config, registry: registry,
-                        platform: platform, host: wrapper,
-                        deepLinkBackend: builtDeepLinkBackend)
+        let app = KSApp(
+            config: config, registry: registry,
+            platform: platform, host: wrapper,
+            deepLinkBackend: builtDeepLinkBackend)
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.
         #if os(Windows) || os(Linux)
-        subscribeMenuRouter(app: app)
+            subscribeMenuRouter(app: app)
         #endif
 
         return app
@@ -424,15 +430,15 @@ public final class KSApp {
     /// Linux에서는 `GtkApplication` 종료를 요청한다.
     nonisolated public func quit() {
         #if os(Windows)
-        host.requestQuit()
+            host.requestQuit()
         #elseif os(macOS)
-        host.requestQuit()
+            host.requestQuit()
         #elseif os(Linux)
-        host.requestQuit()
+            host.requestQuit()
         #elseif os(iOS)
-        host.requestQuit()
+            host.requestQuit()
         #elseif os(Android)
-        host.requestQuit()
+            host.requestQuit()
         #endif
     }
 

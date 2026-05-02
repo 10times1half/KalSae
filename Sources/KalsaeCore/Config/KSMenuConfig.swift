@@ -1,22 +1,25 @@
-import Foundation
-
 /// 앱 메뉴(macOS), 창 메뉴(Windows), 트레이 메뉴, 컨텍스트 메뉴에 사용되는
 /// 선언적 메뉴 트리.
+import Foundation
+
+/// 단일 메뉴 항목.
+/// 리프 액션, 서브메뉴, 구분선 중 하나다.
+
+/// 알림 런타임 설정.
 public struct KSMenuConfig: Codable, Sendable, Equatable {
     /// 앱 전역 메뉴 트리.
     public var appMenu: [KSMenuItem]?
     /// 창별 메뉴 트리.
     public var windowMenu: [KSMenuItem]?
 
-    public init(appMenu: [KSMenuItem]? = nil,
-                windowMenu: [KSMenuItem]? = nil) {
+    public init(
+        appMenu: [KSMenuItem]? = nil,
+        windowMenu: [KSMenuItem]? = nil
+    ) {
         self.appMenu = appMenu
         self.windowMenu = windowMenu
     }
 }
-
-/// 단일 메뉴 항목.
-/// 리프 액션, 서브메뉴, 구분선 중 하나다.
 public struct KSMenuItem: Codable, Sendable, Equatable {
     public enum Kind: String, Codable, Sendable {
         case action
@@ -41,14 +44,16 @@ public struct KSMenuItem: Codable, Sendable, Equatable {
     /// 이 항목이 클릭될 때 실행되는 `@KSCommand` ID(또는 이벤트 이름).
     public var command: String?
 
-    public init(kind: Kind,
-                id: String? = nil,
-                label: String? = nil,
-                accelerator: String? = nil,
-                enabled: Bool = true,
-                checked: Bool? = nil,
-                submenu: [KSMenuItem]? = nil,
-                command: String? = nil) {
+    public init(
+        kind: Kind,
+        id: String? = nil,
+        label: String? = nil,
+        accelerator: String? = nil,
+        enabled: Bool = true,
+        checked: Bool? = nil,
+        submenu: [KSMenuItem]? = nil,
+        command: String? = nil
+    ) {
         self.kind = kind
         self.id = id
         self.label = label
@@ -63,24 +68,30 @@ public struct KSMenuItem: Codable, Sendable, Equatable {
         KSMenuItem(kind: .separator)
     }
 
-    public static func action(id: String,
-                              label: String,
-                              accelerator: String? = nil,
-                              command: String? = nil) -> KSMenuItem {
-        KSMenuItem(kind: .action,
-                   id: id,
-                   label: label,
-                   accelerator: accelerator,
-                   command: command)
+    public static func action(
+        id: String,
+        label: String,
+        accelerator: String? = nil,
+        command: String? = nil
+    ) -> KSMenuItem {
+        KSMenuItem(
+            kind: .action,
+            id: id,
+            label: label,
+            accelerator: accelerator,
+            command: command)
     }
 
-    public static func submenu(id: String,
-                               label: String,
-                               items: [KSMenuItem]) -> KSMenuItem {
-        KSMenuItem(kind: .submenu,
-                   id: id,
-                   label: label,
-                   submenu: items)
+    public static func submenu(
+        id: String,
+        label: String,
+        items: [KSMenuItem]
+    ) -> KSMenuItem {
+        KSMenuItem(
+            kind: .submenu,
+            id: id,
+            label: label,
+            submenu: items)
     }
 
     // 선택 필드를 모든 `Optional`로 선언하지 않고도 JSON에서 생략할 수
@@ -103,8 +114,6 @@ public struct KSMenuItem: Codable, Sendable, Equatable {
         self.command = try c.decodeIfPresent(String.self, forKey: .command)
     }
 }
-
-/// 알림 런타임 설정.
 public struct KSNotificationConfig: Codable, Sendable, Equatable {
     /// Windows에서 앱 식별성이 있는 토스트를 표시할 때 필요하다.
     /// `nil`이면 `KSAppInfo.identifier`로 폴백한다.

@@ -1,8 +1,9 @@
-﻿import Testing
 import Foundation
-@testable import KalsaeCore
+import Testing
 
 /// Validates that the repo's sample config parses and validates cleanly.
+@testable import KalsaeCore
+
 @Suite("Sample config")
 struct KSSampleConfigTests {
     @Test("Examples/kalsae.sample.json parses and validates")
@@ -17,15 +18,15 @@ struct KSSampleConfigTests {
     @Test("commandAllowlist is carried through decode")
     func allowlist() throws {
         let json = #"""
-        {
-          "app": { "name": "D", "version": "0", "identifier": "x" },
-          "build": { "frontendDist": "d", "devServerURL": "x" },
-          "windows": [
+            {
+            "app": { "name": "D", "version": "0", "identifier": "x" },
+            "build": { "frontendDist": "d", "devServerURL": "x" },
+            "windows": [
             { "label": "main", "title": "A", "width": 100, "height": 100 }
-          ],
-          "security": { "commandAllowlist": ["a", "b"] }
-        }
-        """#
+            ],
+            "security": { "commandAllowlist": ["a", "b"] }
+            }
+            """#
         let cfg = try KSConfigLoader.decode(Data(json.utf8))
         #expect(cfg.security.commandAllowlist == ["a", "b"])
     }

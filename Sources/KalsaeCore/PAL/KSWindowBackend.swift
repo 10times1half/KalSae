@@ -1,16 +1,7 @@
+/// 단일 윈돈우에 요청된 시각적 테마 변형.
 public import Foundation
 
-/// 단일 윈돈우에 요청된 시각적 테마 변형.
-public enum KSWindowTheme: String, Codable, Sendable, CaseIterable {
-    case light, dark, system
-}
-
 /// 픽셀 단위 2D 크기.
-public struct KSSize: Codable, Sendable, Equatable {
-    public var width: Int
-    public var height: Int
-    public init(width: Int, height: Int) { self.width = width; self.height = height }
-}
 
 // MARK: - Sub-protocols (Phase 3 split)
 //
@@ -25,6 +16,39 @@ public struct KSSize: Codable, Sendable, Equatable {
 // 책임 영역만 허약하게 모킹할 수 있다(`any KSWindowGeometry`).
 
 /// Window creation, identification, visibility, and webview attachment.
+
+/// 위치와 크기 조작.
+
+/// 시각적/표시 상태: 제목, 최소화/최대화, 테마, 데코레이션.
+
+/// 네이티브 윈돈우를 생성하고 추적하고 조작한다.
+///
+/// `KSWindowLifecycle`, `KSWindowGeometry`, `KSWindowState`를
+/// 합성한 refinement이다. 백엔드는 이 단일 프로토콜을 철헌하고;
+/// 일부 슬라이스만 필요한 소비자(예: 테스트)는
+/// 더 좌은 결합을 위해 `any KSWindowGeometry`로 타입 소거할 수 있다.
+///
+/// 아직 구현되지 않은 메서드는 `KSError(code: .unsupportedPlatform)`를
+/// 던지는 기본 구현을 상속한다.
+
+// MARK: - Default implementations
+//
+// Phase-3에서 세 하위 프로토콜로 분할되었으므로, 기본 구현도 의미
+// 단위로 따라 분할한다. 기존 플랫폼 스텁(`NotImplementedBackend`)이나
+// 부분 구현 백엔드(예: 향후 macOS/Linux)에서 미구현 메서드는 그대로
+// `unsupportedPlatform`을 던진다.
+
+public enum KSWindowTheme: String, Codable, Sendable, CaseIterable {
+    case light, dark, system
+}
+public struct KSSize: Codable, Sendable, Equatable {
+    public var width: Int
+    public var height: Int
+    public init(width: Int, height: Int) {
+        self.width = width
+        self.height = height
+    }
+}
 public protocol KSWindowLifecycle: Sendable {
     /// `config`에 따라 새 윈돈우를 생성한다. `config.visible == true`가 아닌
     /// 한 반환시 보이는 상태를 보장하지 않는다.
@@ -49,8 +73,6 @@ public protocol KSWindowLifecycle: Sendable {
     /// 임베디드 WebView의 현재 문서를 다시 로드한다.
     func reload(_ handle: KSWindowHandle) async throws(KSError)
 }
-
-/// 위치와 크기 조작.
 public protocol KSWindowGeometry: Sendable {
     func setSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError)
     func setPosition(_ handle: KSWindowHandle, x: Int, y: Int) async throws(KSError)
@@ -60,8 +82,6 @@ public protocol KSWindowGeometry: Sendable {
     func setMaxSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError)
     func center(_ handle: KSWindowHandle) async throws(KSError)
 }
-
-/// 시각적/표시 상태: 제목, 최소화/최대화, 테마, 데코레이션.
 public protocol KSWindowState: Sendable {
     func setTitle(_ handle: KSWindowHandle, title: String) async throws(KSError)
     func minimize(_ handle: KSWindowHandle) async throws(KSError)
@@ -99,61 +119,75 @@ public protocol KSWindowState: Sendable {
     /// 값은 PNG로 처리된다.
     func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data
 }
-
-/// 네이티브 윈돈우를 생성하고 추적하고 조작한다.
-///
-/// `KSWindowLifecycle`, `KSWindowGeometry`, `KSWindowState`를
-/// 합성한 refinement이다. 백엔드는 이 단일 프로토콜을 철헌하고;
-/// 일부 슬라이스만 필요한 소비자(예: 테스트)는
-/// 더 좌은 결합을 위해 `any KSWindowGeometry`로 타입 소거할 수 있다.
-///
-/// 아직 구현되지 않은 메서드는 `KSError(code: .unsupportedPlatform)`를
-/// 던지는 기본 구현을 상속한다.
 public protocol KSWindowBackend:
     KSWindowLifecycle, KSWindowGeometry, KSWindowState
 {}
-
-// MARK: - Default implementations
-//
-// Phase-3에서 세 하위 프로토콜로 분할되었으므로, 기본 구현도 의미
-// 단위로 따라 분할한다. 기존 플랫폼 스텁(`NotImplementedBackend`)이나
-// 부분 구현 백엔드(예: 향후 macOS/Linux)에서 미구현 메서드는 그대로
-// `unsupportedPlatform`을 던진다.
-
 @inline(__always)
 private func _unsupportedThrow(_ op: String) throws(KSError) -> Never {
-    throw KSError(code: .unsupportedPlatform,
-                  message: "KSWindowBackend.\(op) is not implemented on this platform.")
+    throw KSError(
+        code: .unsupportedPlatform,
+        message: "KSWindowBackend.\(op) is not implemented on this platform.")
 }
-
 extension KSWindowLifecycle {
     public func reload(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("reload") }
 }
-
 extension KSWindowGeometry {
-    public func setPosition(_ handle: KSWindowHandle, x: Int, y: Int) async throws(KSError) { try _unsupportedThrow("setPosition") }
-    public func getPosition(_ handle: KSWindowHandle) async throws(KSError) -> KSPoint { try _unsupportedThrow("getPosition") }
+    public func setPosition(_ handle: KSWindowHandle, x: Int, y: Int) async throws(KSError) {
+        try _unsupportedThrow("setPosition")
+    }
+    public func getPosition(_ handle: KSWindowHandle) async throws(KSError) -> KSPoint {
+        try _unsupportedThrow("getPosition")
+    }
     public func getSize(_ handle: KSWindowHandle) async throws(KSError) -> KSSize { try _unsupportedThrow("getSize") }
-    public func setMinSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError) { try _unsupportedThrow("setMinSize") }
-    public func setMaxSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError) { try _unsupportedThrow("setMaxSize") }
+    public func setMinSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError) {
+        try _unsupportedThrow("setMinSize")
+    }
+    public func setMaxSize(_ handle: KSWindowHandle, width: Int, height: Int) async throws(KSError) {
+        try _unsupportedThrow("setMaxSize")
+    }
     public func center(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("center") }
 }
-
 extension KSWindowState {
     public func minimize(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("minimize") }
     public func maximize(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("maximize") }
     public func restore(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("restore") }
-    public func toggleMaximize(_ handle: KSWindowHandle) async throws(KSError) { try _unsupportedThrow("toggleMaximize") }
-    public func isMinimized(_ handle: KSWindowHandle) async throws(KSError) -> Bool { try _unsupportedThrow("isMinimized") }
-    public func isMaximized(_ handle: KSWindowHandle) async throws(KSError) -> Bool { try _unsupportedThrow("isMaximized") }
-    public func isFullscreen(_ handle: KSWindowHandle) async throws(KSError) -> Bool { try _unsupportedThrow("isFullscreen") }
-    public func setFullscreen(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setFullscreen") }
-    public func setAlwaysOnTop(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setAlwaysOnTop") }
-    public func setTheme(_ handle: KSWindowHandle, theme: KSWindowTheme) async throws(KSError) { try _unsupportedThrow("setTheme") }
-    public func setBackgroundColor(_ handle: KSWindowHandle, rgba: UInt32) async throws(KSError) { try _unsupportedThrow("setBackgroundColor") }
-    public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) { try _unsupportedThrow("setCloseInterceptor") }
-    public func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError) { try _unsupportedThrow("setZoomFactor") }
-    public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double { try _unsupportedThrow("getZoomFactor") }
-    public func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError) { try _unsupportedThrow("showPrintUI") }
-    public func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data { try _unsupportedThrow("capturePreview") }
+    public func toggleMaximize(_ handle: KSWindowHandle) async throws(KSError) {
+        try _unsupportedThrow("toggleMaximize")
+    }
+    public func isMinimized(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
+        try _unsupportedThrow("isMinimized")
+    }
+    public func isMaximized(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
+        try _unsupportedThrow("isMaximized")
+    }
+    public func isFullscreen(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
+        try _unsupportedThrow("isFullscreen")
+    }
+    public func setFullscreen(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) {
+        try _unsupportedThrow("setFullscreen")
+    }
+    public func setAlwaysOnTop(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) {
+        try _unsupportedThrow("setAlwaysOnTop")
+    }
+    public func setTheme(_ handle: KSWindowHandle, theme: KSWindowTheme) async throws(KSError) {
+        try _unsupportedThrow("setTheme")
+    }
+    public func setBackgroundColor(_ handle: KSWindowHandle, rgba: UInt32) async throws(KSError) {
+        try _unsupportedThrow("setBackgroundColor")
+    }
+    public func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError) {
+        try _unsupportedThrow("setCloseInterceptor")
+    }
+    public func setZoomFactor(_ handle: KSWindowHandle, factor: Double) async throws(KSError) {
+        try _unsupportedThrow("setZoomFactor")
+    }
+    public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double {
+        try _unsupportedThrow("getZoomFactor")
+    }
+    public func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError) {
+        try _unsupportedThrow("showPrintUI")
+    }
+    public func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data {
+        try _unsupportedThrow("capturePreview")
+    }
 }

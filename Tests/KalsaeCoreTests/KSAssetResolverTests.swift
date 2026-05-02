@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSAssetResolver")
@@ -29,14 +30,17 @@ struct KSAssetResolverTests {
             .appendingPathComponent("KSAssetResolverTests-\(UUID().uuidString)")
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
 
-        try Self.writeWithRetry("<!doctype html><title>Hi</title>",
+        try Self.writeWithRetry(
+            "<!doctype html><title>Hi</title>",
             to: root.appendingPathComponent("index.html"))
-        try Self.writeWithRetry("body{}",
+        try Self.writeWithRetry(
+            "body{}",
             to: root.appendingPathComponent("app.css"))
 
         let subdir = root.appendingPathComponent("sub")
         try fm.createDirectory(at: subdir, withIntermediateDirectories: true)
-        try Self.writeWithRetry("export const n = 1;",
+        try Self.writeWithRetry(
+            "export const n = 1;",
             to: subdir.appendingPathComponent("m.js"))
         return root
     }
@@ -105,30 +109,31 @@ struct KSAssetResolverTests {
     // MARK: - 심링크 이스케이프 가드 (macOS / Linux 전용)
 
     #if !os(Windows)
-    @Test("Symlink pointing outside root is rejected with fsScopeDenied")
-    func symlinkOutsideRoot() throws {
-        let fm = FileManager.default
-        let root = try makeFixture()
+        @Test("Symlink pointing outside root is rejected with fsScopeDenied")
+        func symlinkOutsideRoot() throws {
+            let fm = FileManager.default
+            let root = try makeFixture()
 
-        // 리솔버 루트 밖에 대상 파일을 만든다.
-        let secret = fm.temporaryDirectory
-            .appendingPathComponent("symlink-secret-\(UUID().uuidString).txt")
-        try "secret-content".write(to: secret, atomically: false, encoding: .utf8)
-        defer { try? fm.removeItem(at: secret) }
+            // 리솔버 루트 밖에 대상 파일을 만든다.
+            let secret = fm.temporaryDirectory
+                .appendingPathComponent("symlink-secret-\(UUID().uuidString).txt")
+            try "secret-content".write(to: secret, atomically: false, encoding: .utf8)
+            defer { try? fm.removeItem(at: secret) }
 
-        // 비밀 파일을 가리키는 심링크를 루트 안에 만든다.
-        let link = root.appendingPathComponent("evil.txt")
-        try fm.createSymbolicLink(at: link, withDestinationURL: secret)
-        defer { try? fm.removeItem(at: link) }
+            // 비밀 파일을 가리키는 심링크를 루트 안에 만든다.
+            let link = root.appendingPathComponent("evil.txt")
+            try fm.createSymbolicLink(at: link, withDestinationURL: secret)
+            defer { try? fm.removeItem(at: link) }
 
-        let r = KSAssetResolver(root: root)
-        do {
-            _ = try r.resolve(path: "evil.txt")
-            Issue.record("Expected fsScopeDenied but resolve() succeeded")
-        } catch {
-            #expect(error.code == .fsScopeDenied,
-                "Expected fsScopeDenied, got \(error.code)")
+            let r = KSAssetResolver(root: root)
+            do {
+                _ = try r.resolve(path: "evil.txt")
+                Issue.record("Expected fsScopeDenied but resolve() succeeded")
+            } catch {
+                #expect(
+                    error.code == .fsScopeDenied,
+                    "Expected fsScopeDenied, got \(error.code)")
+            }
         }
-    }
     #endif
 }

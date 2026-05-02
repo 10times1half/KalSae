@@ -1,17 +1,18 @@
 import SwiftDiagnostics
-import SwiftSyntax
-
 /// `@KSCommand`이 발행하는 진단 카테고리. 정구조화된 ID로
 /// 컴파일러 오류로 표면되어 필요시 개별적으로 억제할 수 있고
 /// IDE가 특정 빠른 수정 제공자로 라우팅할 수 있다.
+import SwiftSyntax
+
+/// `@KSCommand`이 발행하는 Fix-it.
 enum KSCommandDiagnostic: String, DiagnosticMessage {
-    case notAFunction          = "ksmacro.not_a_function"
-    case emptyName             = "ksmacro.empty_name"
-    case nonLiteralName        = "ksmacro.non_literal_name"
-    case tooManyArguments      = "ksmacro.too_many_arguments"
-    case inoutParameter        = "ksmacro.inout_parameter"
-    case variadicParameter     = "ksmacro.variadic_parameter"
-    case staticOnNonType       = "ksmacro.static_on_non_type"
+    case notAFunction = "ksmacro.not_a_function"
+    case emptyName = "ksmacro.empty_name"
+    case nonLiteralName = "ksmacro.non_literal_name"
+    case tooManyArguments = "ksmacro.too_many_arguments"
+    case inoutParameter = "ksmacro.inout_parameter"
+    case variadicParameter = "ksmacro.variadic_parameter"
+    case staticOnNonType = "ksmacro.static_on_non_type"
 
     var diagnosticID: MessageID {
         MessageID(domain: "Kalsae.Macro.KSCommand", id: rawValue)
@@ -34,12 +35,11 @@ enum KSCommandDiagnostic: String, DiagnosticMessage {
         case .variadicParameter:
             return "@KSCommand functions cannot have variadic parameters; declare an array parameter instead."
         case .staticOnNonType:
-            return "@KSCommand may only annotate free or static functions; instance methods need an explicit registry binding."
+            return
+                "@KSCommand may only annotate free or static functions; instance methods need an explicit registry binding."
         }
     }
 }
-
-/// `@KSCommand`이 발행하는 Fix-it.
 enum KSCommandFixIt: FixItMessage {
     case removeArgument
     case replaceVariadicWithArray
@@ -47,11 +47,13 @@ enum KSCommandFixIt: FixItMessage {
     var fixItID: MessageID {
         switch self {
         case .removeArgument:
-            return MessageID(domain: "Kalsae.Macro.KSCommand",
-                             id: "fixit.remove_argument")
+            return MessageID(
+                domain: "Kalsae.Macro.KSCommand",
+                id: "fixit.remove_argument")
         case .replaceVariadicWithArray:
-            return MessageID(domain: "Kalsae.Macro.KSCommand",
-                             id: "fixit.replace_variadic_with_array")
+            return MessageID(
+                domain: "Kalsae.Macro.KSCommand",
+                id: "fixit.replace_variadic_with_array")
         }
     }
 

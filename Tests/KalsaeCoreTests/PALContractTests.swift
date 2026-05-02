@@ -1,5 +1,9 @@
-import Testing
 import Foundation
+import Testing
+
+/// Minimal reference implementation for the contract suite. Stores text
+/// and image bytes in actor state. Production backends should pass the
+/// **same** contract test (the contract is the spec).
 @testable import KalsaeCore
 
 // MARK: - PAL Contract Tests
@@ -18,9 +22,25 @@ import Foundation
 
 // MARK: - Reference in-memory clipboard
 
-/// Minimal reference implementation for the contract suite. Stores text
-/// and image bytes in actor state. Production backends should pass the
-/// **same** contract test (the contract is the spec).
+// MARK: - Clipboard contract
+
+/// Contract suite for `KSClipboardBackend`. Pass any factory closure
+/// that yields a fresh, empty backend; the assertions below exercise
+/// the read/write/clear/hasFormat invariants.
+
+// MARK: - Default extension contract
+
+/// Verifies the source-compatible defaults on the bare protocol throw
+/// `unsupportedPlatform` so platforms that haven't shipped a real
+/// backend don't silently succeed.
+
+// MARK: - Shell backend default-extension contract
+
+// MARK: - Notification backend contract
+
+/// Records every `post` call so tests can assert the exact sequence the
+/// backend received. Permission requests resolve to `true`.
+
 actor InMemoryClipboard: KSClipboardBackend {
     private var text: String?
     private var image: Data?
@@ -46,18 +66,12 @@ actor InMemoryClipboard: KSClipboardBackend {
 
     func hasFormat(_ format: String) async -> Bool {
         switch format {
-        case "text":  return text != nil
+        case "text": return text != nil
         case "image": return image != nil
-        default:      return false
+        default: return false
         }
     }
 }
-
-// MARK: - Clipboard contract
-
-/// Contract suite for `KSClipboardBackend`. Pass any factory closure
-/// that yields a fresh, empty backend; the assertions below exercise
-/// the read/write/clear/hasFormat invariants.
 struct KSClipboardBackendContract {
     let make: @Sendable () async -> any KSClipboardBackend
 
@@ -115,7 +129,6 @@ struct KSClipboardBackendContract {
         #expect(hasUnknown == false, "unknown format names must yield false")
     }
 }
-
 @Suite("PAL/Clipboard contract — in-memory reference")
 struct ClipboardInMemoryContractTests {
     @Test("Reference impl satisfies the contract")
@@ -126,16 +139,9 @@ struct ClipboardInMemoryContractTests {
         try await contract.runAll()
     }
 }
-
-// MARK: - Default extension contract
-
-/// Verifies the source-compatible defaults on the bare protocol throw
-/// `unsupportedPlatform` so platforms that haven't shipped a real
-/// backend don't silently succeed.
 private struct UnimplementedClipboard: KSClipboardBackend {
     // 의도적으로 기본 익스텐션에 모든 책임을 위임한다.
 }
-
 @Suite("PAL/Clipboard contract — default extension")
 struct ClipboardDefaultExtensionTests {
     @Test("Default readText throws unsupportedPlatform")
@@ -169,11 +175,7 @@ struct ClipboardDefaultExtensionTests {
         #expect(b == false)
     }
 }
-
-// MARK: - Shell backend default-extension contract
-
 private struct UnimplementedShell: KSShellBackend {}
-
 @Suite("PAL/Shell contract — default extension")
 struct ShellDefaultExtensionTests {
     @Test("Default openExternal throws unsupportedPlatform")
@@ -198,11 +200,6 @@ struct ShellDefaultExtensionTests {
         }
     }
 }
-
-// MARK: - Notification backend contract
-
-/// Records every `post` call so tests can assert the exact sequence the
-/// backend received. Permission requests resolve to `true`.
 actor RecordingNotificationBackend: KSNotificationBackend {
     private(set) var posted: [KSNotification] = []
     private(set) var cancelled: [String] = []
@@ -221,7 +218,6 @@ actor RecordingNotificationBackend: KSNotificationBackend {
         cancelled.append(id)
     }
 }
-
 @Suite("PAL/Notification contract — recording reference")
 struct NotificationRecordingContractTests {
     @Test("post stores notifications in order")

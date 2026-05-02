@@ -1,8 +1,12 @@
-import Foundation
-
 /// `Kalsae.json`의 루트 스키마.
 ///
 /// 참조 문서는 `Examples/Kalsae.sample.json`을 참고하라.
+import Foundation
+
+// MARK: - 앱 메타데이터
+
+// MARK: - 빌드 / 개발 서버
+
 public struct KSConfig: Codable, Sendable, Equatable {
     /// 앱 이름, 버전, 식별자 등 기본 메타데이터.
     public var app: KSAppInfo
@@ -64,9 +68,6 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.deepLink = try c.decodeIfPresent(KSDeepLinkConfig.self, forKey: .deepLink)
     }
 }
-
-// MARK: - 앱 메타데이터
-
 public struct KSAppInfo: Codable, Sendable, Equatable {
     /// 사용자에게 표시되는 애플리케이션 이름.
     public var name: String
@@ -79,11 +80,13 @@ public struct KSAppInfo: Codable, Sendable, Equatable {
     /// 선택적 작성자 목록.
     public var authors: [String]?
 
-    public init(name: String,
-                version: String,
-                identifier: String,
-                description: String? = nil,
-                authors: [String]? = nil) {
+    public init(
+        name: String,
+        version: String,
+        identifier: String,
+        description: String? = nil,
+        authors: [String]? = nil
+    ) {
         self.name = name
         self.version = version
         self.identifier = identifier
@@ -91,9 +94,6 @@ public struct KSAppInfo: Codable, Sendable, Equatable {
         self.authors = authors
     }
 }
-
-// MARK: - 빌드 / 개발 서버
-
 public struct KSBuildConfig: Codable, Sendable, Equatable {
     /// 빌드된 프론트엔드 번들의 상대 경로 (프로젝트 루트 기준).
     /// 릴리스 빌드에서 Swift 리소스로 포함된다.
@@ -105,10 +105,12 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
     /// CLI가 `frontendDist`를 생성하기 위해 실행하는 명령어.
     public var buildCommand: String?
 
-    public init(frontendDist: String = "dist",
-                devServerURL: String = "http://localhost:5173",
-                devCommand: String? = nil,
-                buildCommand: String? = nil) {
+    public init(
+        frontendDist: String = "dist",
+        devServerURL: String = "http://localhost:5173",
+        devCommand: String? = nil,
+        buildCommand: String? = nil
+    ) {
         self.frontendDist = frontendDist
         self.devServerURL = devServerURL
         self.devCommand = devCommand

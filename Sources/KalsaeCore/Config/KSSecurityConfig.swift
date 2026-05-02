@@ -1,10 +1,28 @@
-import Foundation
-
 /// `Kalsae.json`에 선언되는 보안 정책.
 ///
 /// Kalsae는 이를 런타임에 강제한다. 특히 명령 허용 목록은
 /// JS 코드가 Swift에 도달할 수 있는 유일한 경로이며,
 /// 암묵적인 opt-out은 없다.
+import Foundation
+
+/// Tauri 스타일 파일시스템 범위.
+/// 경로는 플랫폼 레이어가 해석하는 `$APP`, `$HOME`, `$DOCS`, `$TEMP`
+/// 플레이스홀더를 지원한다.
+
+/// `__ks.shell.*` 명령군에 대한 권한 범위.
+/// 각 동작은 독립적으로 제어되어, 예를 들어 JS 프론트엔드가
+/// "클립보드 읽기"에서 "임의 파일 삭제"로 권한을 확장하지 못하게 한다.
+///
+/// 기본값은 Wails 스타일의 "기본적으로 안전" 정책을 따른다.
+/// `openExternalSchemes`는 `http`, `https`, `mailto`만 허용하고,
+/// `showItemInFolder`와 `moveToTrash`는 허용된다.
+
+/// `__ks.notification.*` 명령군에 대한 권한 범위.
+/// 각 동작은 독립적으로 제어되어, 예를 들어 사용자가 거부한 뒤에도
+/// JS 프론트엔드가 조용히 토스트를 남발하지 못하게 한다.
+///
+/// 기본값은 "기본적으로 안전" 정책을 따른다.
+/// `post`, `cancel`, `requestPermission`이 모두 허용된다.
 public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// `ks://` 스킴 핸들러가 제공하는 기본 HTTP 응답 헤더에 주입되는
     /// Content Security Policy.
@@ -128,10 +146,6 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
 
     public static let `default` = KSSecurityConfig()
 }
-
-/// Tauri 스타일 파일시스템 범위.
-/// 경로는 플랫폼 레이어가 해석하는 `$APP`, `$HOME`, `$DOCS`, `$TEMP`
-/// 플레이스홀더를 지원한다.
 public struct KSFSScope: Codable, Sendable, Equatable {
     /// 글롭 스타일 허용 패턴.
     public var allow: [String]
@@ -143,14 +157,6 @@ public struct KSFSScope: Codable, Sendable, Equatable {
         self.deny = deny
     }
 }
-
-/// `__ks.shell.*` 명령군에 대한 권한 범위.
-/// 각 동작은 독립적으로 제어되어, 예를 들어 JS 프론트엔드가
-/// "클립보드 읽기"에서 "임의 파일 삭제"로 권한을 확장하지 못하게 한다.
-///
-/// 기본값은 Wails 스타일의 "기본적으로 안전" 정책을 따른다.
-/// `openExternalSchemes`는 `http`, `https`, `mailto`만 허용하고,
-/// `showItemInFolder`와 `moveToTrash`는 허용된다.
 public struct KSShellScope: Codable, Sendable, Equatable {
     /// `openExternal`에 허용되는 URL 스킴.
     /// `nil`은 "스킴 제한 없음"(모든 URL 허용)을 뜻하고,
@@ -188,10 +194,12 @@ public struct KSShellScope: Codable, Sendable, Equatable {
         } else {
             self.openExternalSchemes = ["http", "https", "mailto"]
         }
-        self.showItemInFolder = try c.decodeIfPresent(
-            Bool.self, forKey: .showItemInFolder) ?? true
-        self.moveToTrash = try c.decodeIfPresent(
-            Bool.self, forKey: .moveToTrash) ?? true
+        self.showItemInFolder =
+            try c.decodeIfPresent(
+                Bool.self, forKey: .showItemInFolder) ?? true
+        self.moveToTrash =
+            try c.decodeIfPresent(
+                Bool.self, forKey: .moveToTrash) ?? true
     }
 
     /// `scheme`이(대소문자 무시) `openExternalSchemes`에 의해 허용되면 `true`를 반환한다.
@@ -201,13 +209,6 @@ public struct KSShellScope: Codable, Sendable, Equatable {
         return openExternalSchemes.contains { $0.lowercased() == lower }
     }
 }
-
-/// `__ks.notification.*` 명령군에 대한 권한 범위.
-/// 각 동작은 독립적으로 제어되어, 예를 들어 사용자가 거부한 뒤에도
-/// JS 프론트엔드가 조용히 토스트를 남발하지 못하게 한다.
-///
-/// 기본값은 "기본적으로 안전" 정책을 따른다.
-/// `post`, `cancel`, `requestPermission`이 모두 허용된다.
 public struct KSNotificationScope: Codable, Sendable, Equatable {
     /// `__ks.notification.post` 허용 여부.
     public var post: Bool
@@ -236,7 +237,8 @@ public struct KSNotificationScope: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.post = try c.decodeIfPresent(Bool.self, forKey: .post) ?? true
         self.cancel = try c.decodeIfPresent(Bool.self, forKey: .cancel) ?? true
-        self.requestPermission = try c.decodeIfPresent(
-            Bool.self, forKey: .requestPermission) ?? true
+        self.requestPermission =
+            try c.decodeIfPresent(
+                Bool.self, forKey: .requestPermission) ?? true
     }
 }

@@ -1,6 +1,6 @@
-﻿public import Foundation
-
 /// WKWebView / WebView2 / WebKitGTK를 추상화한다.
+public import Foundation
+
 public protocol KSWebViewBackend: Sendable {
     /// 절대 URL을 로드한다. 릴리스 빌드에서는 보통 스킴
     /// 핸들러가 제공하는 `ks://localhost/...` URL이다.

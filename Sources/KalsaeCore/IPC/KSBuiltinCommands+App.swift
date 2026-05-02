@@ -24,10 +24,10 @@ extension KSBuiltinCommands {
             switch args.level {
             case "trace": webLog.trace("\(args.message)")
             case "debug": webLog.debug("\(args.message)")
-            case "info":  webLog.info("\(args.message)")
-            case "warn":  webLog.warning("\(args.message)")
+            case "info": webLog.info("\(args.message)")
+            case "warn": webLog.warning("\(args.message)")
             case "error": webLog.error("\(args.message)")
-            default:      webLog.info("\(args.message)")
+            default: webLog.info("\(args.message)")
             }
             return Empty()
         }

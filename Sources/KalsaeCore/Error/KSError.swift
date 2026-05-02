@@ -1,11 +1,13 @@
-﻿import Foundation
-internal import Logging
-
+import Foundation
 /// Kalsae 전체에서 사용되는 통합 Codable 오류 타입.
 ///
 /// 모든 `@KSCommand` 함수는 `async throws(KSError)`로 선언되어
 /// 오류가 `{ code, message, data? }`로 JS 프론트엔드에 그대로
 /// 직렬화될 수 있다.
+internal import Logging
+
+// MARK: - 편의 생성자
+
 public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConvertible {
     /// 안정적인 기계 판독 가능 식별자. 프론트엔드 코드가 이를 기준으로 분기할 수 있다.
     public let code: Code
@@ -18,10 +20,12 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
     /// 텔레메트리로 누출되지 않는다.
     public let sourceLocation: SourceLocation?
 
-    public init(code: Code,
-                message: String,
-                data: Payload? = nil,
-                sourceLocation: SourceLocation? = nil) {
+    public init(
+        code: Code,
+        message: String,
+        data: Payload? = nil,
+        sourceLocation: SourceLocation? = nil
+    ) {
         self.code = code
         self.message = message
         self.data = data
@@ -161,64 +165,73 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         }
     }
 }
-
-// MARK: - 편의 생성자
-
 extension KSError {
     public static func configNotFound(_ path: String) -> KSError {
-        KSError(code: .configNotFound,
-                message: "Kalsae.json not found at \(path)",
-                data: .string(path))
+        KSError(
+            code: .configNotFound,
+            message: "Kalsae.json not found at \(path)",
+            data: .string(path))
     }
 
     public static func configInvalid(_ reason: String) -> KSError {
-        KSError(code: .configInvalid,
-                message: "Invalid Kalsae.json: \(reason)")
+        KSError(
+            code: .configInvalid,
+            message: "Invalid Kalsae.json: \(reason)")
     }
 
     public static func unsupportedPlatform(_ detail: String = "") -> KSError {
-        KSError(code: .unsupportedPlatform,
-                message: detail.isEmpty
-                    ? "This platform is not supported."
-                    : "Unsupported platform: \(detail)")
+        KSError(
+            code: .unsupportedPlatform,
+            message: detail.isEmpty
+                ? "This platform is not supported."
+                : "Unsupported platform: \(detail)")
     }
 
     public static func commandNotAllowed(_ name: String) -> KSError {
-        KSError(code: .commandNotAllowed,
-                message: "Command '\(name)' is not in the allowlist.",
-                data: .string(name))
+        KSError(
+            code: .commandNotAllowed,
+            message: "Command '\(name)' is not in the allowlist.",
+            data: .string(name))
     }
 
     public static func rateLimited(_ name: String) -> KSError {
-        KSError(code: .rateLimited,
-                message: "Command '\(name)' rate-limit exceeded.",
-                data: .string(name))
+        KSError(
+            code: .rateLimited,
+            message: "Command '\(name)' rate-limit exceeded.",
+            data: .string(name))
     }
 
     public static func commandNotFound(_ name: String) -> KSError {
-        KSError(code: .commandNotFound,
-                message: "Command '\(name)' is not registered.",
-                data: .string(name))
+        KSError(
+            code: .commandNotFound,
+            message: "Command '\(name)' is not registered.",
+            data: .string(name))
     }
 
-    public static func `internal`(_ reason: String,
-                                  file: String = #fileID,
-                                  line: Int = #line,
-                                  function: String = #function) -> KSError {
-        KSError(code: .internal, message: reason,
-                sourceLocation: SourceLocation(
-                    file: file, line: line, function: function))
+    public static func `internal`(
+        _ reason: String,
+        file: String = #fileID,
+        line: Int = #line,
+        function: String = #function
+    ) -> KSError {
+        KSError(
+            code: .internal, message: reason,
+            sourceLocation: SourceLocation(
+                file: file, line: line, function: function))
     }
 
     /// 클립보드 디코딩 실패를 위한 소스 위치 편의 생성자.
-    public static func clipboardDecodeFailed(_ reason: String,
-                                             file: String = #fileID,
-                                             line: Int = #line,
-                                             function: String = #function) -> KSError {
-        KSError(code: .clipboardDecodeFailed,
-                message: "Clipboard decode failed: \(reason)",
-                sourceLocation: SourceLocation(
-                    file: file, line: line, function: function))
+    public static func clipboardDecodeFailed(
+        _ reason: String,
+        file: String = #fileID,
+        line: Int = #line,
+        function: String = #function
+    ) -> KSError {
+        KSError(
+            code: .clipboardDecodeFailed,
+            message: "Clipboard decode failed: \(reason)",
+            sourceLocation: SourceLocation(
+                file: file, line: line, function: function))
     }
 
     /// 셸 실행 실패(CLI Packager 등)를 위한 소스 위치 편의 생성자.

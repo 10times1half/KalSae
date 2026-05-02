@@ -1,11 +1,11 @@
-public import Foundation
-
 /// 시스템 클립보드 읽기/쓰기.
 ///
 /// 이 프로토콜은 의도적으로 최소화되어 있다 — 일반 텍스트와 원시
 /// 이미지 바이트를 넘는 형식은 이후 단계에서 추가된다. 메서드는
 /// async이므로 구현이 UI 스레드로 홉할 수 있다(Win32의 `OpenClipboard`,
 /// AppKit의 `NSPasteboard`, GDK의 `gdk_clipboard_*`).
+public import Foundation
+
 public protocol KSClipboardBackend: Sendable {
     /// UTF-8 일반 텍스트를 읽는다. 클립보드가 비어 있거나 알 수 없는
     /// 비텍스트 형식인 경우 `nil`을 반환한다.
@@ -29,12 +29,12 @@ public protocol KSClipboardBackend: Sendable {
     /// `"files"`. 알 수 없는 형식은 `false`를 반환한다.
     func hasFormat(_ format: String) async -> Bool
 }
-
 extension KSClipboardBackend {
     @inline(__always)
     private func _unsupportedThrow(_ op: String) throws(KSError) -> Never {
-        throw KSError(code: .unsupportedPlatform,
-                      message: "KSClipboardBackend.\(op) is not implemented on this platform.")
+        throw KSError(
+            code: .unsupportedPlatform,
+            message: "KSClipboardBackend.\(op) is not implemented on this platform.")
     }
 
     public func readText() async throws(KSError) -> String? { try _unsupportedThrow("readText") }

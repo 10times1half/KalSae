@@ -1,9 +1,9 @@
-﻿import ArgumentParser
+import ArgumentParser
 import Foundation
 import KalsaeCLICore
+/// `kalsae build` — 릴리스 (또는 `--debug`일 때는 디버그) 옵션으로 프로젝트를 빌드한다.
 import KalsaeCore
 
-/// `kalsae build` — 릴리스 (또는 `--debug`일 때는 디버그) 옵션으로 프로젝트를 빌드한다.
 struct BuildCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "build",
@@ -19,20 +19,24 @@ struct BuildCommand: ParsableCommand {
     @Flag(name: .long, help: "Produce a redistributable package after building.")
     var package: Bool = false
 
-    @Option(name: .long,
-            help: "WebView2 runtime distribution policy: evergreen | fixed | auto.")
+    @Option(
+        name: .long,
+        help: "WebView2 runtime distribution policy: evergreen | fixed | auto.")
     var webview2: String = "evergreen"
 
-    @Option(name: .long,
-            help: "Target architecture for the package: x64 | arm64 | x86.")
+    @Option(
+        name: .long,
+        help: "Target architecture for the package: x64 | arm64 | x86.")
     var arch: String = "x64"
 
-    @Option(name: .long,
-            help: "Path to MicrosoftEdgeWebview2Setup.exe (Evergreen bootstrapper).")
+    @Option(
+        name: .long,
+        help: "Path to MicrosoftEdgeWebview2Setup.exe (Evergreen bootstrapper).")
     var bootstrapper: String? = nil
 
-    @Option(name: .long,
-            help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
+    @Option(
+        name: .long,
+        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
     var config: String? = nil
 
     @Option(name: .long, help: "Override frontend dist directory.")
@@ -50,12 +54,14 @@ struct BuildCommand: ParsableCommand {
     @Flag(name: .long, help: "Allow build to continue when frontend dist is missing or empty.")
     var allowMissingDist: Bool = false
 
-    @Flag(name: .long, inversion: .prefixedNo,
-          help: "Sync frontend dist into Sources/<target>/Resources before swift build.")
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help: "Sync frontend dist into Sources/<target>/Resources before swift build.")
     var syncResources: Bool = true
 
-    @Flag(name: .long, inversion: .prefixedNo,
-          help: "Automatically run Scripts/fetch-webview2.ps1 when WebView2 SDK is missing (Windows only).")
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help: "Automatically run Scripts/fetch-webview2.ps1 when WebView2 SDK is missing (Windows only).")
     var autoFetchWebView2: Bool = true
 
     @Option(name: .long, help: "WebView2 SDK version to fetch when auto-fetching (default: latest).")
@@ -185,10 +191,12 @@ struct BuildCommand: ParsableCommand {
         try shell(commandLine: raw, in: cwd.path)
     }
 
-    private func validateFrontendDist(config: KSConfig,
-                                      configURL: URL,
-                                      cwd: URL,
-                                      fm: FileManager) throws {
+    private func validateFrontendDist(
+        config: KSConfig,
+        configURL: URL,
+        cwd: URL,
+        fm: FileManager
+    ) throws {
         let distURL = KSBuildPlan.resolveDistURL(
             config: config,
             configURL: configURL,
@@ -216,56 +224,60 @@ struct BuildCommand: ParsableCommand {
 
     private func validateWebView2Preconditions(cwd: URL, fm: FileManager) throws {
         #if os(Windows)
-        let loaderLib = webView2LoaderURL(cwd: cwd)
-        if fm.fileExists(atPath: loaderLib.path) { return }
+            let loaderLib = webView2LoaderURL(cwd: cwd)
+            if fm.fileExists(atPath: loaderLib.path) { return }
 
-        guard autoFetchWebView2 else {
-            throw ValidationError(
-                "Missing WebView2 static loader at \(loaderLib.path). Run .\\Scripts\\fetch-webview2.ps1 from the project root, or omit --no-auto-fetch-web-view2 to let kalsae fetch it automatically.")
-        }
+            guard autoFetchWebView2 else {
+                throw ValidationError(
+                    "Missing WebView2 static loader at \(loaderLib.path). Run .\\Scripts\\fetch-webview2.ps1 from the project root, or omit --no-auto-fetch-web-view2 to let kalsae fetch it automatically."
+                )
+            }
 
-        let fetchScript = cwd
-            .appendingPathComponent("Scripts")
-            .appendingPathComponent("fetch-webview2.ps1")
-        guard fm.fileExists(atPath: fetchScript.path) else {
-            throw ValidationError(
-                "WebView2 SDK missing at \(loaderLib.path) and fetch script not found at \(fetchScript.path).")
-        }
+            let fetchScript =
+                cwd
+                .appendingPathComponent("Scripts")
+                .appendingPathComponent("fetch-webview2.ps1")
+            guard fm.fileExists(atPath: fetchScript.path) else {
+                throw ValidationError(
+                    "WebView2 SDK missing at \(loaderLib.path) and fetch script not found at \(fetchScript.path).")
+            }
 
-        let shellName: String
-        if findExecutable(named: "pwsh") != nil {
-            shellName = "pwsh"
-        } else if findExecutable(named: "powershell") != nil {
-            shellName = "powershell"
-        } else {
-            throw ValidationError(
-                "WebView2 SDK missing at \(loaderLib.path) and PowerShell was not found in PATH.")
-        }
+            let shellName: String
+            if findExecutable(named: "pwsh") != nil {
+                shellName = "pwsh"
+            } else if findExecutable(named: "powershell") != nil {
+                shellName = "powershell"
+            } else {
+                throw ValidationError(
+                    "WebView2 SDK missing at \(loaderLib.path) and PowerShell was not found in PATH.")
+            }
 
-        var args = [
-            "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", fetchScript.path,
-            "-ProjectRoot", cwd.path,
-        ]
-        let ver = webview2SdkVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !ver.isEmpty, ver.lowercased() != "latest" {
-            args += ["-Version", ver]
-        }
+            var args = [
+                "-NoProfile", "-ExecutionPolicy", "Bypass",
+                "-File", fetchScript.path,
+                "-ProjectRoot", cwd.path,
+            ]
+            let ver = webview2SdkVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !ver.isEmpty, ver.lowercased() != "latest" {
+                args += ["-Version", ver]
+            }
 
-        print("⬇️  WebView2 SDK not found — running Scripts/fetch-webview2.ps1...")
-        try shell(command: shellName, arguments: args, in: cwd.path)
+            print("⬇️  WebView2 SDK not found — running Scripts/fetch-webview2.ps1...")
+            try shell(command: shellName, arguments: args, in: cwd.path)
 
-        guard fm.fileExists(atPath: loaderLib.path) else {
-            throw ValidationError(
-                "fetch-webview2.ps1 completed but WebView2 static loader is still missing at \(loaderLib.path).")
-        }
+            guard fm.fileExists(atPath: loaderLib.path) else {
+                throw ValidationError(
+                    "fetch-webview2.ps1 completed but WebView2 static loader is still missing at \(loaderLib.path).")
+            }
         #endif
     }
 
-    private func syncFrontendResourcesIfNeeded(config: KSConfig,
-                                               configURL: URL,
-                                               cwd: URL,
-                                               fm: FileManager) throws {
+    private func syncFrontendResourcesIfNeeded(
+        config: KSConfig,
+        configURL: URL,
+        cwd: URL,
+        fm: FileManager
+    ) throws {
         guard syncResources else { return }
 
         let distURL = KSBuildPlan.resolveDistURL(
@@ -275,7 +287,8 @@ struct BuildCommand: ParsableCommand {
             distOverride: dist)
 
         let executableName = target ?? config.app.name
-        let resourcesURL = cwd
+        let resourcesURL =
+            cwd
             .appendingPathComponent("Sources")
             .appendingPathComponent(executableName)
             .appendingPathComponent("Resources")

@@ -1,13 +1,13 @@
-import Testing
 import SwiftSyntax
 import SwiftSyntaxMacros
 import SwiftSyntaxMacrosTestSupport
+import Testing
+
 @testable import KalsaeMacrosPlugin
 
 private let macros: [String: Macro.Type] = [
-    "KSCommand": KSCommandMacro.self,
+    "KSCommand": KSCommandMacro.self
 ]
-
 @Suite("KSCommandMacro diagnostics")
 struct KSCommandMacroDiagnosticsTests {
 
@@ -19,8 +19,8 @@ struct KSCommandMacroDiagnosticsTests {
             struct Greet {}
             """,
             expandedSource: """
-            struct Greet {}
-            """,
+                struct Greet {}
+                """,
             diagnostics: [
                 .init(
                     message: "@KSCommand can only be applied to function declarations.",
@@ -37,8 +37,8 @@ struct KSCommandMacroDiagnosticsTests {
             func go() {}
             """#,
             expandedSource: """
-            func go() {}
-            """,
+                func go() {}
+                """,
             diagnostics: [
                 .init(
                     message: "@KSCommand registry name must not be empty.",
@@ -58,8 +58,8 @@ struct KSCommandMacroDiagnosticsTests {
             func go() {}
             """,
             expandedSource: """
-            func go() {}
-            """,
+                func go() {}
+                """,
             diagnostics: [
                 .init(
                     message: "@KSCommand requires a plain string literal name (no interpolation).",
@@ -79,11 +79,12 @@ struct KSCommandMacroDiagnosticsTests {
             func tagged(items: String...) {}
             """,
             expandedSource: """
-            func tagged(items: String...) {}
-            """,
+                func tagged(items: String...) {}
+                """,
             diagnostics: [
                 .init(
-                    message: "@KSCommand functions cannot have variadic parameters; declare an array parameter instead.",
+                    message:
+                        "@KSCommand functions cannot have variadic parameters; declare an array parameter instead.",
                     line: 2, column: 13,
                     fixIts: [
                         .init(message: "Replace the variadic parameter with an array parameter.")

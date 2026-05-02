@@ -1,11 +1,11 @@
-﻿public import Foundation
-
 /// `@KSCommand`으로 노출된 함수들의 스레드 안전 레지스트리.
 ///
 /// `@KSCommand` 매크로는 `register(into:)` 호출을 생성해 타입 지워진
 /// 핸들러를 여기에 추가한다. 런타임에 IPC 파이프라인은 invoke 메시지를
 /// 핸들러로 해석하고, 인자를 디코딩하며, 명령을 실행하고, 결과(또는
 /// `KSError`)를 인코딩해 반환한다.
+public import Foundation
+
 public actor KSCommandRegistry {
     public typealias Handler = @Sendable (Data) async -> Result<Data, KSError>
 
@@ -37,7 +37,8 @@ public actor KSCommandRegistry {
         guard let limit = rateLimit else { return true }
         let now = ContinuousClock.now
         let elapsed = lastRefillTime.duration(to: now)
-        let seconds = Double(elapsed.components.seconds)
+        let seconds =
+            Double(elapsed.components.seconds)
             + Double(elapsed.components.attoseconds) * 1e-18
         tokens = min(Double(limit.burst), tokens + seconds * Double(limit.rate))
         lastRefillTime = now

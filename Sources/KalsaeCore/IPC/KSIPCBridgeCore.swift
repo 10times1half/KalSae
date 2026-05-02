@@ -1,8 +1,4 @@
 public import Foundation
-internal import Logging
-
-// MARK: - 와이어 타입 (플랫폼 간 공유)
-
 /// JS로부터의 와이어 수준 인바운드 IPC 페이로드. `KSRuntimeJS.source`의
 /// `__KS_.invoke` / `emit` 봉투를 미러링한다.
 ///
@@ -11,6 +7,30 @@ internal import Logging
 ///
 /// KalsaeCore 내부 — 브리지가 와이어 형상을 소유하며; 소비자는
 /// `KSIPCMessage`와 `KSCommandRegistry` API만 본다.
+internal import Logging
+
+// MARK: - 와이어 타입 (플랫폼 간 공유)
+
+/// 구조를 잃지 않고 임의의 페이로드를 왕복하는 데 사용되는
+/// 최소 "any JSON" 타입. 내부 — 인바운드 `payload` 필드를 보존하기 위해
+/// `KSIPCWireInbound`에서만 사용된다.
+
+// MARK: - 브리지 코어
+
+/// 플랫폼 독립적 IPC 브리지: 인바운드 프레임을 디코딩하고,
+/// `invoke`를 `KSCommandRegistry`로 디스패치하며, 응답을 인코딩하고,
+/// 아웃바운드 `event` 프레임을 방출한다.
+///
+/// 각 플랫폼은 두 개의 클로저를 제공한다:
+/// - `post`: JS 측에 JSON 문자열을 보내는 방법 (UI 스레드 전용).
+/// - `hop`:  임의 스레드에서 UI 스레드의 `@MainActor` 클로저를
+///   스케줄링하는 방법. macOS에서는 AppKit의 런루프가 `MainActor`
+///   실행기를 펌프하므로 단순 `Task { @MainActor }`로 가능하지만,
+///   Windows에서는 `PostMessageW(WM_KS_JOB)`로, Linux에서는
+///   `g_idle_add`로 감싸야 한다.
+
+/// `emit`에서 사용되는 타입 지워진 인코더블 래퍼. 내부 — 앱은
+/// `any Encodable`을 `emit(_:payload:)`에 직접 전달한다.
 internal struct KSIPCWireInbound: Decodable, Sendable {
     enum Kind: String, Decodable, Sendable { case invoke, event }
     let kind: Kind
@@ -35,10 +55,6 @@ internal struct KSIPCWireInbound: Decodable, Sendable {
         }
     }
 }
-
-/// 구조를 잃지 않고 임의의 페이로드를 왕복하는 데 사용되는
-/// 최소 "any JSON" 타입. 내부 — 인바운드 `payload` 필드를 보존하기 위해
-/// `KSIPCWireInbound`에서만 사용된다.
 internal enum KSAnyJSON: Codable, Sendable {
     case null
     case bool(Bool)
@@ -50,13 +66,29 @@ internal enum KSAnyJSON: Codable, Sendable {
     init(from decoder: any Decoder) throws {
         // Codable 프로토콜 — untyped throws (변경 불가)
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null; return }
-        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
-        if let d = try? c.decode(Double.self) { self = .double(d); return }
-        if let s = try? c.decode(String.self) { self = .string(s); return }
-        if let a = try? c.decode([KSAnyJSON].self) { self = .array(a); return }
+        if c.decodeNil() {
+            self = .null
+            return
+        }
+        if let b = try? c.decode(Bool.self) {
+            self = .bool(b)
+            return
+        }
+        if let d = try? c.decode(Double.self) {
+            self = .double(d)
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            self = .string(s)
+            return
+        }
+        if let a = try? c.decode([KSAnyJSON].self) {
+            self = .array(a)
+            return
+        }
         if let o = try? c.decode([String: KSAnyJSON].self) {
-            self = .object(o); return
+            self = .object(o)
+            return
         }
         throw DecodingError.dataCorruptedError(
             in: c, debugDescription: "Unknown JSON value")
@@ -75,20 +107,6 @@ internal enum KSAnyJSON: Codable, Sendable {
         }
     }
 }
-
-// MARK: - 브리지 코어
-
-/// 플랫폼 독립적 IPC 브리지: 인바운드 프레임을 디코딩하고,
-/// `invoke`를 `KSCommandRegistry`로 디스패치하며, 응답을 인코딩하고,
-/// 아웃바운드 `event` 프레임을 방출한다.
-///
-/// 각 플랫폼은 두 개의 클로저를 제공한다:
-/// - `post`: JS 측에 JSON 문자열을 보내는 방법 (UI 스레드 전용).
-/// - `hop`:  임의 스레드에서 UI 스레드의 `@MainActor` 클로저를
-///   스케줄링하는 방법. macOS에서는 AppKit의 런루프가 `MainActor`
-///   실행기를 펌프하므로 단순 `Task { @MainActor }`로 가능하지만,
-///   Windows에서는 `PostMessageW(WM_KS_JOB)`로, Linux에서는
-///   `g_idle_add`로 감싸야 한다.
 @MainActor
 public final class KSIPCBridgeCore {
     public typealias PostJSON = @MainActor (String) throws(KSError) -> Void
@@ -167,12 +185,14 @@ public final class KSIPCBridgeCore {
         let message: KSIPCMessage
         switch result {
         case .success(let data):
-            message = KSIPCMessage(kind: .response, id: id, payload: data,
-                                   isError: false)
+            message = KSIPCMessage(
+                kind: .response, id: id, payload: data,
+                isError: false)
         case .failure(let err):
             let encoded = (try? JSONEncoder().encode(err)) ?? Data("{}".utf8)
-            message = KSIPCMessage(kind: .response, id: id, payload: encoded,
-                                   isError: true)
+            message = KSIPCMessage(
+                kind: .response, id: id, payload: encoded,
+                isError: true)
         }
         do {
             let json = try Self.encodeForJS(message)
@@ -183,22 +203,26 @@ public final class KSIPCBridgeCore {
     }
 
     /// JS에 발사 후 망각 이벤트를 방출한다 (`window.__KS_.listen(name, cb)`).
-    public func emit(event name: String,
-                     payload: any Encodable) throws(KSError) {
+    public func emit(
+        event name: String,
+        payload: any Encodable
+    ) throws(KSError) {
         let payloadData: Data
         do {
             payloadData = try JSONEncoder().encode(KSAnyEncodable(payload))
         } catch {
-            throw KSError(code: .commandEncodeFailed,
-                          message: "emit(\(name)): \(error)")
+            throw KSError(
+                code: .commandEncodeFailed,
+                message: "emit(\(name)): \(error)")
         }
         let msg = KSIPCMessage(kind: .event, name: name, payload: payloadData)
         let json: String
         do {
             json = try Self.encodeForJS(msg)
         } catch {
-            throw KSError(code: .commandEncodeFailed,
-                          message: "emit(\(name)) encode: \(error)")
+            throw KSError(
+                code: .commandEncodeFailed,
+                message: "emit(\(name)) encode: \(error)")
         }
         try post(json)
     }
@@ -215,7 +239,8 @@ public final class KSIPCBridgeCore {
         if let id = msg.id { parts.append("\"id\":\(jsonString(id))") }
         if let name = msg.name { parts.append("\"name\":\(jsonString(name))") }
         if let payload = msg.payload,
-           let s = String(data: payload, encoding: .utf8) {
+            let s = String(data: payload, encoding: .utf8)
+        {
             parts.append("\"payload\":\(escapeJSONText(s))")
         } else {
             parts.append("\"payload\":null")
@@ -244,9 +269,6 @@ public final class KSIPCBridgeCore {
         return out
     }
 }
-
-/// `emit`에서 사용되는 타입 지워진 인코더블 래퍼. 내부 — 앱은
-/// `any Encodable`을 `emit(_:payload:)`에 직접 전달한다.
 internal struct KSAnyEncodable: Encodable {
     let base: any Encodable
     init(_ base: any Encodable) { self.base = base }

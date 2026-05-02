@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSAssetCache — LRU semantics")
@@ -146,13 +147,15 @@ struct KSAssetCacheTests {
         let iterations = 200
         let coldStart = DispatchTime.now()
         for _ in 0..<iterations { _ = try cold.resolve(path: "hot.bin") }
-        let coldNs = DispatchTime.now().uptimeNanoseconds
-                   - coldStart.uptimeNanoseconds
+        let coldNs =
+            DispatchTime.now().uptimeNanoseconds
+            - coldStart.uptimeNanoseconds
 
         let warmStart = DispatchTime.now()
         for _ in 0..<iterations { _ = try warm.resolve(path: "hot.bin") }
-        let warmNs = DispatchTime.now().uptimeNanoseconds
-                   - warmStart.uptimeNanoseconds
+        let warmNs =
+            DispatchTime.now().uptimeNanoseconds
+            - warmStart.uptimeNanoseconds
 
         // 캐시는 디스크보다 적어도 2× 빨라야 한다 — 보수적인 임계값.
         // CI 환경 변동을 흡수한다. CI 러너(특히 Windows)에서는 디스크 캐시가
@@ -162,13 +165,14 @@ struct KSAssetCacheTests {
         let isCI = ProcessInfo.processInfo.environment["CI"] != nil
         let isWindows: Bool = {
             #if os(Windows)
-            return true
+                return true
             #else
-            return false
+                return false
             #endif
         }()
         let multiplier: UInt64 = (isCI || isWindows) ? 1 : 2
-        #expect(warmNs * multiplier <= coldNs,
+        #expect(
+            warmNs * multiplier <= coldNs,
             "expected warm (\(warmNs) ns) to be ≥\(multiplier)× faster than cold (\(coldNs) ns)")
     }
 }

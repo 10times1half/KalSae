@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSError")
@@ -17,8 +18,9 @@ struct KSErrorTests {
 
     @Test("Payload encodes as raw JSON values")
     func payloadShape() throws {
-        let err = KSError(code: .ioFailed, message: "oops",
-                          data: .array([.int(1), .string("x")]))
+        let err = KSError(
+            code: .ioFailed, message: "oops",
+            data: .array([.int(1), .string("x")]))
         let data = try JSONEncoder().encode(err)
         let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let payload = obj?["data"] as? [Any]

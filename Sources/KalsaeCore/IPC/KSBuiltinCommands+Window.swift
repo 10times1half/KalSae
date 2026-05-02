@@ -119,12 +119,14 @@ extension KSBuiltinCommands {
             return Empty()
         }
         // Wails-style: 단일 RGBA 인자(0~255). 내부적으로 0xRRGGBBAA로 패킹.
-        await register(registry, "__ks.window.setBackgroundColor") { (args: BackgroundColorArg) throws(KSError) -> Empty in
+        await register(registry, "__ks.window.setBackgroundColor") {
+            (args: BackgroundColorArg) throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: args.window)
-            let rgba = (UInt32(args.r) << 24)
-                     | (UInt32(args.g) << 16)
-                     | (UInt32(args.b) << 8)
-                     |  UInt32(args.a)
+            let rgba =
+                (UInt32(args.r) << 24)
+                | (UInt32(args.g) << 16)
+                | (UInt32(args.b) << 8)
+                | UInt32(args.a)
             try await windows.setBackgroundColor(h, rgba: rgba)
             return Empty()
         }

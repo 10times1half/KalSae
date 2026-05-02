@@ -1,38 +1,43 @@
-﻿import Foundation
-
 /// 새 창에 요청되는 초기 표시 상태.
+import Foundation
+
+/// 일반 RGBA 색상(채널당 0-255).
+/// `__ks.window.setBackgroundColor`가 사용하는 JS 표면을 그대로 따른다.
+
+/// 창 배경에 요청되는 시스템 백드롭 종류.
+/// Windows 11(build 22621 이상)에서는 `DWMWA_SYSTEMBACKDROP_TYPE`에 매핑된다.
+/// 알 수 없는 값은 조용히 `auto`로 폴백한다.
+
+/// WebView 수준의 시각/런타임 재정의.
+/// 모든 필드를 선택적으로 두어, 이전 릴리스용 `Kalsae.json`도 계속 로드되게 한다.
+
+/// `Kalsae.json`에 미리 선언되거나 Window API로 런타임에 동적으로 생성되는
+/// 단일 창을 설명한다.
 public enum KSWindowStartState: String, Codable, Sendable, CaseIterable {
     case normal
     case maximized
     case minimized
     case fullscreen
 }
-
-/// 일반 RGBA 색상(채널당 0-255).
-/// `__ks.window.setBackgroundColor`가 사용하는 JS 표면을 그대로 따른다.
 public struct KSColorRGBA: Codable, Sendable, Equatable {
     public var r: Int
     public var g: Int
     public var b: Int
     public var a: Int
     public init(r: Int, g: Int, b: Int, a: Int = 255) {
-        self.r = r; self.g = g; self.b = b; self.a = a
+        self.r = r
+        self.g = g
+        self.b = b
+        self.a = a
     }
 }
-
-/// 창 배경에 요청되는 시스템 백드롭 종류.
-/// Windows 11(build 22621 이상)에서는 `DWMWA_SYSTEMBACKDROP_TYPE`에 매핑된다.
-/// 알 수 없는 값은 조용히 `auto`로 폴백한다.
 public enum KSWindowBackdrop: String, Codable, Sendable, CaseIterable {
-    case auto      // DWMSBT_AUTO            (0)
-    case none      // DWMSBT_NONE            (1)
-    case mica      // DWMSBT_MAINWINDOW      (2)
-    case acrylic   // DWMSBT_TRANSIENTWINDOW (3)
-    case tabbed    // DWMSBT_TABBEDWINDOW    (4)
+    case auto  // DWMSBT_AUTO            (0)
+    case none  // DWMSBT_NONE            (1)
+    case mica  // DWMSBT_MAINWINDOW      (2)
+    case acrylic  // DWMSBT_TRANSIENTWINDOW (3)
+    case tabbed  // DWMSBT_TABBEDWINDOW    (4)
 }
-
-/// WebView 수준의 시각/런타임 재정의.
-/// 모든 필드를 선택적으로 두어, 이전 릴리스용 `Kalsae.json`도 계속 로드되게 한다.
 public struct KSWebViewOptions: Codable, Sendable, Equatable {
     /// `true`이면 WebView2 컨트롤러가 투명한 기본 배경
     /// (`ICoreWebView2Controller2.DefaultBackgroundColor`)으로 렌더링된다.
@@ -81,9 +86,6 @@ public struct KSWebViewOptions: Codable, Sendable, Equatable {
         self.userDataPath = try c.decodeIfPresent(String.self, forKey: .userDataPath)
     }
 }
-
-/// `Kalsae.json`에 미리 선언되거나 Window API로 런타임에 동적으로 생성되는
-/// 단일 창을 설명한다.
 public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
     /// 안정적인 식별자. Tauri 스타일이며 멀티 윈도우 API와 창 간 이벤트 라우팅에 사용된다.
     public var label: String

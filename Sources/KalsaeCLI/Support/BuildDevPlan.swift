@@ -8,17 +8,19 @@ public enum KSBuildPlanError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .distNotFound(let path):
-            return "Frontend dist directory not found at \(path). Run your frontend build first or pass --allow-missing-dist."
+            return
+                "Frontend dist directory not found at \(path). Run your frontend build first or pass --allow-missing-dist."
         case .distEmpty(let path):
-            return "Frontend dist directory is empty at \(path). Run your frontend build first or pass --allow-missing-dist."
+            return
+                "Frontend dist directory is empty at \(path). Run your frontend build first or pass --allow-missing-dist."
         }
     }
 }
-
 public enum KSBuildPlan {
     public static func normalizedCommand(_ raw: String?) -> String? {
         guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !raw.isEmpty else {
+            !raw.isEmpty
+        else {
             return nil
         }
         return raw
@@ -32,19 +34,23 @@ public enum KSBuildPlan {
         return args
     }
 
-    public static func resolveDistURL(config: KSConfig,
-                                      configURL: URL,
-                                      cwd: URL,
-                                      distOverride: String?) -> URL {
+    public static func resolveDistURL(
+        config: KSConfig,
+        configURL: URL,
+        cwd: URL,
+        distOverride: String?
+    ) -> URL {
         if let distOverride {
             return URL(fileURLWithPath: distOverride, relativeTo: cwd)
         }
         return configURL.deletingLastPathComponent().appendingPathComponent(config.build.frontendDist)
     }
 
-    public static func validateFrontendDist(at distURL: URL,
-                                            allowMissingDist: Bool,
-                                            fm: FileManager = .default) throws {
+    public static func validateFrontendDist(
+        at distURL: URL,
+        allowMissingDist: Bool,
+        fm: FileManager = .default
+    ) throws {
         if allowMissingDist { return }
 
         var isDir: ObjCBool = false
@@ -52,16 +58,16 @@ public enum KSBuildPlan {
             throw KSBuildPlanError.distNotFound(distURL.path)
         }
 
-        let hasEntries = (try? fm.contentsOfDirectory(
-            at: distURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]))?.isEmpty == false
+        let hasEntries =
+            (try? fm.contentsOfDirectory(
+                at: distURL,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]))?.isEmpty == false
         guard hasEntries else {
             throw KSBuildPlanError.distEmpty(distURL.path)
         }
     }
 }
-
 public struct KSDevPlan: Sendable {
     public var devCommand: String?
     public var shouldWaitForDevServer: Bool
@@ -73,9 +79,11 @@ public struct KSDevPlan: Sendable {
         self.devServerURL = devServerURL
     }
 
-    public static func make(config: KSConfig?,
-                            skipDevCommand: Bool,
-                            noWaitDevServer: Bool) -> KSDevPlan {
+    public static func make(
+        config: KSConfig?,
+        skipDevCommand: Bool,
+        noWaitDevServer: Bool
+    ) -> KSDevPlan {
         let command: String? = {
             guard !skipDevCommand else { return nil }
             return KSBuildPlan.normalizedCommand(config?.build.devCommand)
@@ -91,8 +99,9 @@ public struct KSDevPlan: Sendable {
 
     private static func isRemoteURL(_ text: String?) -> Bool {
         guard let text,
-              let u = URL(string: text),
-              let scheme = u.scheme?.lowercased() else {
+            let u = URL(string: text),
+            let scheme = u.scheme?.lowercased()
+        else {
             return false
         }
         return scheme == "http" || scheme == "https"

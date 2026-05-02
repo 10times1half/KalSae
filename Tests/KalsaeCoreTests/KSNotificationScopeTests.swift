@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSNotificationScope")
@@ -32,15 +33,15 @@ struct KSNotificationScopeTests {
     @Test("Embedded notifications field round-trips inside KSSecurityConfig")
     func roundTripsInsideSecurity() throws {
         let json = #"""
-        {
-          "csp": "default-src 'self'",
-          "notifications": {
+            {
+            "csp": "default-src 'self'",
+            "notifications": {
             "post": true,
             "cancel": false,
             "requestPermission": true
-          }
-        }
-        """#
+            }
+            }
+            """#
         let sec = try JSONDecoder().decode(KSSecurityConfig.self, from: Data(json.utf8))
         #expect(sec.notifications.post)
         #expect(!sec.notifications.cancel)

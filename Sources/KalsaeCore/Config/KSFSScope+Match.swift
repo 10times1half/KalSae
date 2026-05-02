@@ -24,9 +24,11 @@ extension KSFSScope {
         public static func current(appDirectory: URL) -> ExpansionContext {
             let fm = FileManager.default
             let home = fm.homeDirectoryForCurrentUser.path
-            let docs = (try? fm.url(
-                for: .documentDirectory, in: .userDomainMask,
-                appropriateFor: nil, create: false).path)
+            let docs =
+                (try? fm.url(
+                    for: .documentDirectory, in: .userDomainMask,
+                    appropriateFor: nil, create: false
+                ).path)
                 ?? (home + "/Documents")
             let temp = NSTemporaryDirectory()
             return .init(app: appDirectory.path, home: home, docs: docs, temp: temp)
@@ -107,9 +109,9 @@ extension KSFSScope {
         rx += "$"
         // Windows에서는 대소문자를 구분하지 않고, 그 외 플랫폼에서는 구분한다.
         #if os(Windows)
-        let opts: NSRegularExpression.Options = [.caseInsensitive]
+            let opts: NSRegularExpression.Options = [.caseInsensitive]
         #else
-        let opts: NSRegularExpression.Options = []
+            let opts: NSRegularExpression.Options = []
         #endif
         guard let regex = try? NSRegularExpression(pattern: rx, options: opts) else {
             return false

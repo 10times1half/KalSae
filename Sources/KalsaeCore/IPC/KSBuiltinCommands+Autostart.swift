@@ -22,7 +22,8 @@ extension KSBuiltinCommands {
             try backend.disable()
             return Empty()
         }
-        await registerQuery(registry, "__ks.autostart.isEnabled") { (_: Empty) throws(KSError) -> AutostartIsEnabledResult in
+        await registerQuery(registry, "__ks.autostart.isEnabled") {
+            (_: Empty) throws(KSError) -> AutostartIsEnabledResult in
             AutostartIsEnabledResult(enabled: backend.isEnabled())
         }
     }

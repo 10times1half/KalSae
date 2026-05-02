@@ -1,8 +1,8 @@
-﻿import ArgumentParser
+import ArgumentParser
 import Foundation
+/// `Kalsae new <name>` ????Kalsae ?깆쓣 ?ㅼ??대뵫?쒕떎.
 import KalsaeCLICore
 
-/// `Kalsae new <name>` — 새 Kalsae 앱을 스케폴딩한다.
 struct NewCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "new",
@@ -33,8 +33,11 @@ struct NewCommand: ParsableCommand {
 
     func run() throws {
         guard name.first?.isLetter == true,
-              name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
-            throw ValidationError("'\(name)' is not a valid project name. Use letters, digits, hyphens or underscores, starting with a letter.")
+            name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
+        else {
+            throw ValidationError(
+                "'\(name)' is not a valid project name. Use letters, digits, hyphens or underscores, starting with a letter."
+            )
         }
 
         let dest = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
@@ -51,22 +54,23 @@ struct NewCommand: ParsableCommand {
         )
         try template.write(to: dest)
 
-        print("""
+        print(
+            """
 
-        ✔  Created \(name)/
+            ?? Created \(name)/
 
-           \(name)/
-           ├── Package.swift
-           └── Sources/\(name)/
-               ├── App.swift
-               └── Resources/
-                   ├── Kalsae.json
-                   └── index.html
+            \(name)/
+            ?쒋?? Package.swift
+            ?붴?? Sources/\(name)/
+            ?쒋?? App.swift
+            ?붴?? Resources/
+            ?쒋?? Kalsae.json
+            ?붴?? index.html
 
-        Next steps:
-           cd \(name)
-           Kalsae dev
+            Next steps:
+            cd \(name)
+            Kalsae dev
 
-        """)
+            """)
     }
 }

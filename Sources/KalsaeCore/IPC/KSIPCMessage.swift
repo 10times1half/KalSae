@@ -1,9 +1,9 @@
-﻿public import Foundation
-
 /// 네이티브 webview 브리지를 통해 Swift와 JS 간에 교환되는 와이어 수준 봉투.
 ///
 /// 형식은 의도적으로 Tauri의 v2 IPC를 미러링하여 등록된 명령에서 생성된
 /// TypeScript 타입이 인체공학적으로 유지되도록 한다.
+public import Foundation
+
 public struct KSIPCMessage: Codable, Sendable, Equatable {
     /// 봉투의 나머지 부분이 어떻게 해석될지 선택하는 판별자.
     public enum Kind: String, Codable, Sendable {
@@ -28,11 +28,13 @@ public struct KSIPCMessage: Codable, Sendable, Equatable {
     /// `true`일 때 `payload`가 `KSError`를 인코딩한다.
     public var isError: Bool?
 
-    public init(kind: Kind,
-                id: String? = nil,
-                name: String? = nil,
-                payload: Data? = nil,
-                isError: Bool? = nil) {
+    public init(
+        kind: Kind,
+        id: String? = nil,
+        name: String? = nil,
+        payload: Data? = nil,
+        isError: Bool? = nil
+    ) {
         self.kind = kind
         self.id = id
         self.name = name

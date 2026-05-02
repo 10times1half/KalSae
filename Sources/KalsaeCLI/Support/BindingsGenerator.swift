@@ -1,7 +1,3 @@
-import SwiftSyntax
-import SwiftParser
-public import Foundation
-
 /// `@KSCommand`-연동 함수와 Codable 타입을 포함하는 Swift 소스 파일에서
 /// TypeScript 바인딩을 생성한다.
 ///
@@ -15,6 +11,10 @@ public import Foundation
 ///   - `BindingsGenerator+Visitor.swift`: SwiftSyntax 워커
 ///   - `BindingsGenerator+TypeMapper.swift`: Swift→TS 타입 매핑
 ///   - `BindingsGenerator+Renderer.swift`: TypeScript 발행
+public import Foundation
+import SwiftParser
+import SwiftSyntax
+
 public enum KSBindingsGenerator {
     public struct Options: Sendable {
         public var sources: [URL]
@@ -48,8 +48,7 @@ public enum KSBindingsGenerator {
 
         for url in opts.sources {
             let text: String
-            do { text = try String(contentsOf: url, encoding: .utf8) }
-            catch { continue }
+            do { text = try String(contentsOf: url, encoding: .utf8) } catch { continue }
             let tree = Parser.parse(source: text)
             let v = Visitor()
             v.walk(tree)
@@ -69,9 +68,10 @@ public enum KSBindingsGenerator {
             withIntermediateDirectories: true)
         try ts.write(to: opts.output, atomically: false, encoding: .utf8)
 
-        return Report(commandCount: commands.count,
-                      typeCount: typeDecls.count,
-                      outputPath: opts.output.path)
+        return Report(
+            commandCount: commands.count,
+            typeCount: typeDecls.count,
+            outputPath: opts.output.path)
     }
 
     /// `root` 하위의 `*.swift` 파일을 재귀적으로 열거하며
@@ -79,9 +79,12 @@ public enum KSBindingsGenerator {
     public static func discoverSwiftFiles(under root: URL) -> [URL] {
         var out: [URL] = []
         let fm = FileManager.default
-        guard let it = fm.enumerator(at: root,
-                                     includingPropertiesForKeys: [.isDirectoryKey],
-                                     options: [.skipsHiddenFiles]) else { return [] }
+        guard
+            let it = fm.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])
+        else { return [] }
         for case let url as URL in it {
             let isDir = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             if isDir {

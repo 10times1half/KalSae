@@ -28,7 +28,8 @@ extension KSBuiltinCommands {
 
         @Sendable func gate(_ scheme: String) throws(KSError) {
             guard allowedSchemes.contains(scheme.lowercased()) else {
-                throw KSError(code: .commandNotAllowed,
+                throw KSError(
+                    code: .commandNotAllowed,
                     message: "deepLink scheme '\(scheme)' is not declared in config.deepLink.schemes",
                     data: .string(scheme))
             }
@@ -44,11 +45,13 @@ extension KSBuiltinCommands {
             try backend.unregister(scheme: args.scheme)
             return Empty()
         }
-        await registerQuery(registry, "__ks.deepLink.isRegistered") { (args: DeepLinkSchemeArg) throws(KSError) -> DeepLinkBoolResult in
+        await registerQuery(registry, "__ks.deepLink.isRegistered") {
+            (args: DeepLinkSchemeArg) throws(KSError) -> DeepLinkBoolResult in
             try gate(args.scheme)
             return DeepLinkBoolResult(value: backend.isRegistered(scheme: args.scheme))
         }
-        await registerQuery(registry, "__ks.deepLink.currentLaunchURLs") { (_: Empty) throws(KSError) -> DeepLinkURLsResult in
+        await registerQuery(registry, "__ks.deepLink.currentLaunchURLs") {
+            (_: Empty) throws(KSError) -> DeepLinkURLsResult in
             DeepLinkURLsResult(urls: backend.currentLaunchURLs(forSchemes: config.schemes))
         }
     }

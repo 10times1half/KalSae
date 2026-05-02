@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCore
 
 @Suite("KSIPCBridgeCore")
@@ -34,8 +35,9 @@ struct KSIPCBridgeCoreTests {
     @Test("encodeForJS inlines payload as raw JSON, not base64")
     func encodeInlinesPayload() throws {
         let payload = Data(#"{"a":1}"#.utf8)
-        let msg = KSIPCMessage(kind: .response, id: "x",
-                               payload: payload, isError: false)
+        let msg = KSIPCMessage(
+            kind: .response, id: "x",
+            payload: payload, isError: false)
         let json = try KSIPCBridgeCore.encodeForJS(msg)
         #expect(json.contains(#""payload":{"a":1}"#))
         #expect(json.contains(#""kind":"response""#))
