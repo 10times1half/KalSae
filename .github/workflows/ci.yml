@@ -147,10 +147,31 @@ jobs:
         shell: pwsh
         run: |
           swift build -c release --product kalsae-demo -Xswiftc -warnings-as-errors
+          swift build -c release --product kalsae       -Xswiftc -warnings-as-errors
 
+          $releaseDir = (Resolve-Path .build\release).Path
+          $demoExe    = Join-Path $releaseDir 'kalsae-demo.exe'
+          $demoRes    = Join-Path $releaseDir 'Kalsae_KalsaeDemo.resources'
+          $cliExe     = Join-Path $releaseDir 'kalsae.exe'
+          $loader     = Join-Path $releaseDir 'WebView2Loader.dll'
+
+          if (-not (Test-Path $demoExe)) { Write-Error "missing $demoExe"; exit 1 }
+          if (-not (Test-Path $demoRes)) { Write-Error "missing $demoRes"; exit 1 }
+          if (-not (Test-Path $cliExe))  { Write-Error "missing $cliExe";  exit 1 }
+
+          # kalsae-demo: exe 단독으로는 리소스 번들을 못 찾으므로 폴더째 zip.
+          New-Item -ItemType Directory -Force -Path dist\kalsae-demo | Out-Null
+          Copy-Item $demoExe dist\kalsae-demo\ -Force
+          Copy-Item $demoRes dist\kalsae-demo\ -Recurse -Force
+          if (Test-Path $loader) { Copy-Item $loader dist\kalsae-demo\ -Force }
+          Compress-Archive `
+            -Path dist\kalsae-demo\* `
+            -DestinationPath dist\kalsae-demo-windows-x64.zip `
+            -Force
+
+          # kalsae CLI는 단독 exe로도 동작.
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Copy-Item .build\release\kalsae-demo.exe dist\kalsae-demo.exe -Force
-          Compress-Archive -Path dist\kalsae-demo.exe -DestinationPath dist\kalsae-demo-windows-x64.zip -Force
+          Copy-Item $cliExe dist\kalsae.exe -Force
 
       - name: Run Unit Tests
         run: swift test -Xswiftc -warnings-as-errors
@@ -173,13 +194,13 @@ jobs:
             exit 1
           }
 
-          if (-not (Test-Path dist\kalsae-demo.exe)) {
-            Write-Error "Missing release asset: dist\\kalsae-demo.exe"
+          if (-not (Test-Path dist\kalsae.exe)) {
+            Write-Error "Missing release asset: dist\\kalsae.exe"
             exit 1
           }
 
           gh release upload $tag dist\kalsae-demo-windows-x64.zip --clobber
-          gh release upload $tag dist\kalsae-demo.exe --clobber
+          gh release upload $tag dist\kalsae.exe --clobber
 
       - name: Run Linux Platform Integration Tests
         if: runner.os == 'Linux'
