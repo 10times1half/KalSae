@@ -206,7 +206,8 @@ extern "C" int32_t KSImage_DIBToPNG(
     const uint8_t *srcPixels = dib_bytes + pixelOffset;
 
     // WIC bitmap을 만든다. 24-bpp는 BGR, 32-bpp는 BGRA로 가정.
-    const REFGUID fmt = (bpp == 24)
+    // REFGUID는 이미 `const GUID &` 매크로이므로 추가 const를 붙이지 않는다.
+    REFGUID fmt = (bpp == 24)
         ? GUID_WICPixelFormat24bppBGR
         : GUID_WICPixelFormat32bppBGRA;
 

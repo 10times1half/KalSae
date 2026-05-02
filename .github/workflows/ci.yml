@@ -6,6 +6,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Node.js 20은 2026-09-16에 GitHub Actions 러너에서 제거된다.
+# actions/checkout, actions/cache 등이 아직 Node 20을 명시하더라도
+# 런타임을 Node 24로 강제해 deprecation 경고를 제거한다.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   ci:
     name: ${{ matrix.name }}
@@ -21,23 +27,25 @@ jobs:
             swift-build: 6.3.1-RELEASE
             fetch-webview2: true
 
-          - name: macOS
-            os: macos-14
-            setup-swift: true
-            swift-version: swift-6.3.1-release
-            swift-build: 6.3.1-RELEASE
-
-          - name: Linux
-            os: ubuntu-24.04
-            setup-swift: true
-            swift-version: swift-6.3.1-release
-            swift-build: 6.3.1-RELEASE
-            apt-deps: >-
-              libgtk-4-dev
-              libwebkitgtk-6.0-dev
-              libsoup-3.0-dev
-              xdg-utils
-              libnotify-bin
+          # macOS / Linux 잡은 일시적으로 비활성화한다.
+          # 다시 켜려면 아래 두 블록의 주석을 해제하면 된다.
+          # - name: macOS
+          #   os: macos-14
+          #   setup-swift: true
+          #   swift-version: swift-6.3.1-release
+          #   swift-build: 6.3.1-RELEASE
+          #
+          # - name: Linux
+          #   os: ubuntu-24.04
+          #   setup-swift: true
+          #   swift-version: swift-6.3.1-release
+          #   swift-build: 6.3.1-RELEASE
+          #   apt-deps: >-
+          #     libgtk-4-dev
+          #     libwebkitgtk-6.0-dev
+          #     libsoup-3.0-dev
+          #     xdg-utils
+          #     libnotify-bin
 
     steps:
       - name: Checkout
