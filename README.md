@@ -6,14 +6,14 @@
 
 Kalsae lets you build desktop (and mobile) applications by combining a **native OS shell written in Swift** with a **web frontend** of your choice (Vite, Next.js, plain HTML — anything that produces static assets). It is in the same family as Tauri and Electron, but the host process is pure Swift 6 and the runtime stays small by reusing the OS web engine: **WebView2** on Windows, **WKWebView** on macOS/iOS, **WebKitGTK 6.0** on Linux, and **Android WebView** on Android.
 
-> ⚠️ **Experimental.** APIs may change. Windows and macOS are the most complete targets today; Linux is mostly complete (only tray and global accelerators remain stubs); iOS and Android are in early preview.
+> ⚠️ **Experimental.** APIs may change. Windows and macOS are the most complete targets today; Linux is feature-complete with some platform limitations (for example global hot-keys on Wayland and tray behavior on vanilla GNOME); iOS and Android are preview targets.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
 
 **Kalsae**는 **Swift로 작성된 네이티브 OS 셸**과 원하는 **웹 프론트엔드**(Vite, Next.js, 일반 HTML 등)를 결합해 데스크톱/모바일 앱을 만드는 프레임워크입니다. Tauri나 Electron과 같은 계열이지만, 호스트 프로세스는 순수 Swift 6이며 OS의 웹 엔진(Windows의 **WebView2**, macOS/iOS의 **WKWebView**, Linux의 **WebKitGTK 6.0**, Android의 **Android WebView**)을 그대로 재사용해 런타임 크기를 작게 유지합니다.
 
-> ⚠️ **실험적 단계입니다.** API는 변경될 수 있으며, Windows와 macOS가 가장 완성도가 높습니다. Linux는 트레이/글로벌 단축키만 스텁이며, iOS와 Android는 초기 프리뷰 단계입니다.
+> ⚠️ **실험적 단계입니다.** API는 변경될 수 있으며, Windows와 macOS가 가장 완성도가 높습니다. Linux는 기능 구현이 거의 완료되었지만(예: Wayland 글로벌 단축키, 순수 GNOME 트레이 동작 등) 플랫폼 제약이 일부 남아 있습니다. iOS와 Android는 프리뷰 단계입니다.
 
 </details>
 
@@ -45,9 +45,9 @@ Kalsae lets you build desktop (and mobile) applications by combining a **native 
 | Core IPC, Config, Macros | Stable | Production-ready |
 | **Windows** (Win32 + WebView2) | Stable | Full PAL (all features) |
 | **macOS** (AppKit + WKWebView) | Stable | Full PAL (all features) |
-| **Linux** (GTK4 + WebKitGTK 6.0) | Preview | Feature-complete except tray & global accelerators (stubs) |
-| **iOS** (UIKit + WKWebView) | Preview | PAL surfaces implemented; `run()` not wired yet |
-| **Android** (JNI + Android WebView) | Preview | PAL surfaces implemented; `run()` not wired yet |
+| **Linux** (GTK4 + WebKitGTK 6.0) | Preview | Full PAL with platform caveats (global hot-keys on Wayland, tray behavior on vanilla GNOME) |
+| **iOS** (UIKit + WKWebView) | Preview | PAL surfaces implemented; `run()` path available |
+| **Android** (JNI + Android WebView) | Preview | PAL surfaces implemented; `run()` is permanently unsupported (Activity lifecycle) |
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
@@ -57,9 +57,9 @@ Kalsae lets you build desktop (and mobile) applications by combining a **native 
 | 코어 IPC · 설정 · 매크로 | 안정 | 프로덕션 사용 가능 |
 | **Windows** (Win32 + WebView2) | 안정 | 전체 PAL (모든 기능) |
 | **macOS** (AppKit + WKWebView) | 안정 | 전체 PAL (모든 기능) |
-| **Linux** (GTK4 + WebKitGTK 6.0) | 프리뷰 | 트레이/글로벌 단축키 제외 기능 완성 |
-| **iOS** (UIKit + WKWebView) | 프리뷰 | PAL 구현됨; `run()` 미연결 |
-| **Android** (JNI + Android WebView) | 프리뷰 | PAL 구현됨; `run()` 미연결 |
+| **Linux** (GTK4 + WebKitGTK 6.0) | 프리뷰 | 전체 PAL 구현, 플랫폼 제약 일부 존재 (Wayland 글로벌 단축키, 순수 GNOME 트레이) |
+| **iOS** (UIKit + WKWebView) | 프리뷰 | PAL 구현됨; `run()` 경로 사용 가능 |
+| **Android** (JNI + Android WebView) | 프리뷰 | PAL 구현됨; `run()`은 Activity 라이프사이클 특성상 영구 미지원 |
 
 </details>
 
@@ -70,11 +70,34 @@ Kalsae lets you build desktop (and mobile) applications by combining a **native 
 ### Prerequisites
 
 - **Swift 6.0+** (typed throws, macros)
-- **Windows 10 1809+** with Visual Studio Build Tools (MSVC for the C++ shim). The WebView2 runtime is fetched automatically by [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1).
+- **Windows 10 1809+** with Visual Studio Build Tools (MSVC for the C++ shim). Before first build, run [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1) once to populate `Vendor/WebView2/`.
 - **macOS** 14+ (no extra deps)
 - **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
 - **iOS**: Xcode 15+ (Swift 6 toolchain)
 - **Android**: Android Studio, Android NDK 26+, Gradle 8+
+
+On Windows PowerShell, chain commands with `;` (not `&&`).
+
+### Build & Test
+
+```bash
+# Build everything
+swift build
+
+# Build demo executable only
+swift build --product kalsae-demo
+
+# Run full test suite
+swift test
+
+# Run a filtered test/suite
+swift test --filter "name"
+
+# Run sequentially (useful when temp-dir contention appears)
+swift test --no-parallel
+```
+
+Tests in this repository use **swift-testing** (`@Test`, `@Suite`, `#expect`), not XCTest.
 
 ### Try the bundled demo
 
@@ -100,11 +123,34 @@ kalsae build --package         # release build + WebView2 bundling
 ### 사전 요구사항
 
 - **Swift 6.0 이상** (typed throws, 매크로)
-- **Windows 10 1809 이상** + Visual Studio Build Tools (C++ shim용 MSVC). WebView2 런타임은 [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1)이 자동으로 받아옵니다.
+- **Windows 10 1809 이상** + Visual Studio Build Tools (C++ shim용 MSVC). 첫 빌드 전에 [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1)을 1회 실행해 `Vendor/WebView2/`를 준비하세요.
 - **macOS** 14 이상 (추가 의존성 없음)
 - **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
 - **iOS**: Xcode 15+ (Swift 6 툴체인)
 - **Android**: Android Studio, Android NDK 26+, Gradle 8+
+
+Windows PowerShell에서는 명령 체이닝 시 `&&` 대신 `;`를 사용하세요.
+
+### 빌드 & 테스트
+
+```bash
+# 전체 빌드
+swift build
+
+# 데모 실행 파일만 빌드
+swift build --product kalsae-demo
+
+# 전체 테스트
+swift test
+
+# 특정 테스트/스위트만 실행
+swift test --filter "name"
+
+# 순차 실행 (임시 디렉터리 경합 이슈 대응)
+swift test --no-parallel
+```
+
+이 저장소의 테스트 프레임워크는 XCTest가 아니라 **swift-testing** (`@Test`, `@Suite`, `#expect`)입니다.
 
 ### 데모 실행
 
@@ -123,6 +169,27 @@ cd MyDesktopApp
 kalsae dev                     # 개발 모드 실행
 kalsae build --package         # 릴리스 빌드 + WebView2 번들링
 ```
+
+</details>
+
+---
+
+## Documentation
+
+- [Architecture](Docs/ARCHITECTURE.md)
+- [CLI Guide](Docs/CLI.md)
+- [IPC Protocol](Docs/IPC.md)
+- [Security Model](Docs/SECURITY.md)
+- [Sample Config](Examples/kalsae.sample.json)
+
+<details>
+<summary>🇰🇷 한국어로 보기</summary>
+
+- [아키텍처](Docs/ARCHITECTURE.md)
+- [CLI 가이드](Docs/CLI.md)
+- [IPC 프로토콜](Docs/IPC.md)
+- [보안 모델](Docs/SECURITY.md)
+- [샘플 설정](Examples/kalsae.sample.json)
 
 </details>
 
@@ -604,20 +671,18 @@ try app.emit("custom:event", payload: ["key": "value"])
 
 ## Roadmap
 
-- Linux tray backend (AppIndicator3 / libayatana C shim)
-- Linux global accelerator backend (GTK shortcut controllers or Wayland protocol)
+- Linux global accelerator backend improvements (Wayland ecosystem dependent)
 - Multi-window orchestration
 - Auto-updater
-- Mobile (iOS/Android) — PAL surfaces implemented, `run()` wiring in progress
+- Mobile host ergonomics (iOS integration polish, Android host-side tooling)
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
 
-- Linux 트레이 백엔드 (AppIndicator3 / libayatana C shim)
-- Linux 글로벌 단축키 백엔드 (GTK shortcut controllers 또는 Wayland 프로토콜)
+- Linux 글로벌 단축키 개선 (Wayland 생태계 의존)
 - 다중 윈도우 오케스트레이션
 - 자동 업데이트
-- 모바일(iOS/Android) — PAL 구현 완료, `run()` 연결 진행 중
+- 모바일 호스트 경험 개선 (iOS 통합 완성도, Android 호스트 측 툴링)
 
 </details>
 
