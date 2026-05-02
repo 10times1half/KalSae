@@ -3,14 +3,13 @@ name: CI
 on:
   push:
     branches: [main]
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
 
-# Node.js 20은 2026-09-16에 GitHub Actions 러너에서 제거된다.
-# actions/checkout, actions/cache 등이 아직 Node 20을 명시하더라도
-# 런타임을 Node 24로 강제해 deprecation 경고를 제거한다.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+permissions:
+  contents: write
 
 jobs:
   ci:
@@ -26,6 +25,7 @@ jobs:
             swift-version: swift-6.3.1-release
             swift-build: 6.3.1-RELEASE
             fetch-webview2: true
+            apt-deps: ''
 
           # macOS / Linux 잡은 일시적으로 비활성화한다.
           # 다시 켜려면 아래 두 블록의 주석을 해제하면 된다.
@@ -49,7 +49,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Swift
         if: matrix.setup-swift
@@ -109,7 +109,7 @@ jobs:
           fi
 
       - name: Cache SwiftPM Build
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .build
           key: ${{ runner.os }}-swift-${{ hashFiles('Package.resolved') }}
@@ -122,8 +122,33 @@ jobs:
       - name: Build Demo Product
         run: swift build --product kalsae-demo -Xswiftc -warnings-as-errors
 
+      - name: Build Release Artifact (Windows tags)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          swift build -c release --product kalsae-demo -Xswiftc -warnings-as-errors
+
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item .build\release\kalsae-demo.exe dist\kalsae-demo.exe -Force
+          Compress-Archive -Path dist\kalsae-demo.exe -DestinationPath dist\kalsae-demo-windows-x64.zip -Force
+
       - name: Run Unit Tests
         run: swift test -Xswiftc -warnings-as-errors
+
+      - name: Publish GitHub Release Asset (Windows tags)
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = "${{ github.ref_name }}"
+
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title $tag --generate-notes
+          }
+
+          gh release upload $tag dist\kalsae-demo-windows-x64.zip --clobber
 
       - name: Run Linux Platform Integration Tests
         if: runner.os == 'Linux'
