@@ -215,7 +215,10 @@
                             cont.resume(returning: bytes)
                             return
                         }
-                        cont.resume(throwing: KSError(code: .internal, message: "capturePreview: could not encode image"))
+                        cont.resume(
+                            throwing: KSError(
+                                code: .internal,
+                                message: "capturePreview: could not encode image"))
                     }
                 }
             } catch {
