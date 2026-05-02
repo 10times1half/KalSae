@@ -56,7 +56,9 @@ public final class KSAndroidPlatform: KSPlatform, @unchecked Sendable {
     ) async throws(KSError) -> Never {
         _ = config
         try await configure(self)
-        throw KSError.unsupportedPlatform("KSAndroidPlatform.run is not wired yet")
+        throw KSError.unsupportedPlatform(
+            "KSAndroidPlatform.run() is permanently unsupported — Android lifecycle " +
+            "is JVM/Activity-controlled. Use KSApp.boot() + KSAndroidDemoHost instead.")
     }
 }
 

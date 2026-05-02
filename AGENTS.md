@@ -190,7 +190,6 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Deployment target: iOS 16 (via `Package.swift`).
 - PAL surfaces: windows, dialogs, menus, notifications (UNNotification), shell,
   clipboard, deep link.
-- **Not yet wired:** `KSiOSPlatform.run()` throws `KSError.unsupportedPlatform`.
 - WebView bridge: `WKWebView` + `WKUserContentController` message handler.
 
 ### Android
@@ -200,10 +199,12 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - JNI entry points in `Sources/KalsaePlatformAndroid/JNI/`.
 - PAL surfaces: windows, dialogs, menus, notifications (JNI bridge), shell,
   clipboard, deep link (JNI).
-- **Not yet wired:** `KSAndroidPlatform.run()` throws `unsupportedPlatform`.
+- **Permanently unsupported:** `KSAndroidPlatform.run()` always throws `unsupportedPlatform`
+  by design — Android lifecycle is JVM/Activity-controlled. Use `KSApp.boot()` +
+  `KSAndroidDemoHost` with Kotlin host instead.
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows/macOS = 풀 PAL. Linux = 풀 PAL (글로벌 단축키/트레이 서브메뉴는 Wayland 표준 부재로 스텁). iOS/Android = PAL 구현됨, `run()` 미연결._
+_🇰🇷 Windows/macOS = 풀 PAL. Linux = 풀 PAL (글로벌 단축키/트레이 서브메뉴는 Wayland 표준 부재로 스텁). iOS = PAL 구현 + `run()` 완전 연결. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델)._
 
 ---
 
