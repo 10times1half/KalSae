@@ -156,7 +156,7 @@ jobs:
         run: swift test -Xswiftc -warnings-as-errors
 
       - name: Publish GitHub Release Asset (Windows tags)
-        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
+        if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/') && always()
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -168,7 +168,18 @@ jobs:
             gh release create $tag --title $tag --generate-notes
           }
 
+          if (-not (Test-Path dist\kalsae-demo-windows-x64.zip)) {
+            Write-Error "Missing release asset: dist\\kalsae-demo-windows-x64.zip"
+            exit 1
+          }
+
+          if (-not (Test-Path dist\kalsae-demo.exe)) {
+            Write-Error "Missing release asset: dist\\kalsae-demo.exe"
+            exit 1
+          }
+
           gh release upload $tag dist\kalsae-demo-windows-x64.zip --clobber
+          gh release upload $tag dist\kalsae-demo.exe --clobber
 
       - name: Run Linux Platform Integration Tests
         if: runner.os == 'Linux'
