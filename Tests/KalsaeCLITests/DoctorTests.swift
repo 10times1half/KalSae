@@ -56,6 +56,18 @@ struct DoctorTests {
         #expect(report.infos.contains { $0.contains("Frontend dist is ready") })
     }
 
+    @Test("Reports warning for invalid JSON config")
+    func invalidJSONConfig() throws {
+        let root = try makeTempProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let configURL = root.appendingPathComponent("Kalsae.json")
+        try write("not valid json", to: configURL)
+
+        let report = KSDoctor.run(.init(projectRoot: root))
+        #expect(report.warnings.contains { $0.contains("Config") || $0.contains("config") || $0.contains("parse") || $0.contains("invalid") })
+    }
+
     @Test("Warns when swift-syntax cache remote is invalid")
     func invalidSwiftSyntaxRemote() throws {
         let root = try makeTempProject()

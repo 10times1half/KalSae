@@ -111,6 +111,25 @@ struct KSAssetCacheTests {
         #expect(s.misses == 4)
     }
 
+    @Test("clear() wipes all entries and resets byte count")
+    func clearWipesAll() throws {
+        let root = Self.tmpRoot()
+        for i in 0..<3 { Self.write(root, "c\(i).txt", bytes: 16) }
+        let cache = KSAssetCache()
+        let r = KSAssetResolver(root: root, cache: cache)
+
+        _ = try r.resolve(path: "c0.txt")
+        _ = try r.resolve(path: "c1.txt")
+        _ = try r.resolve(path: "c2.txt")
+        var s = cache.stats()
+        #expect(s.entries == 3)
+
+        cache.clear()
+        s = cache.stats()
+        #expect(s.entries == 0)
+        #expect(s.totalBytes == 0)
+    }
+
     @Test("Cached resolve is faster than uncached for repeated hits")
     func repeatHotPath() throws {
         let root = Self.tmpRoot()
@@ -138,8 +157,17 @@ struct KSAssetCacheTests {
         // 캐시는 디스크보다 적어도 2× 빨라야 한다 — 보수적인 임계값.
         // CI 환경 변동을 흡수한다. CI 러너(특히 Windows)에서는 디스크 캐시가
         // 이미 매우 빠르거나 측정 노이즈가 커서 비율이 흔들리므로 더 완화한다.
+        // Windows는 파일 시스템 캐시가 매우 빨라 cold/warm 차이가 2배까지
+        // 벌어지지 않으므로 multiplier를 1로 고정한다.
         let isCI = ProcessInfo.processInfo.environment["CI"] != nil
-        let multiplier: UInt64 = isCI ? 1 : 2
+        let isWindows: Bool = {
+            #if os(Windows)
+            return true
+            #else
+            return false
+            #endif
+        }()
+        let multiplier: UInt64 = (isCI || isWindows) ? 1 : 2
         #expect(warmNs * multiplier <= coldNs,
             "expected warm (\(warmNs) ns) to be ≥\(multiplier)× faster than cold (\(coldNs) ns)")
     }

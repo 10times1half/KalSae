@@ -55,4 +55,14 @@ struct KSFSScopeMatchTests {
         let c = ctx()
         #expect(!scope.permits(absolutePath: "/home/u/anything", in: c))
     }
+
+    @Test("Empty deny array does not affect allow matching")
+    func emptyDenyDoesNotBlock() {
+        let scope = KSFSScope(
+            allow: ["$DOCS/**"],
+            deny: [])
+        let c = ctx()
+        #expect(scope.permits(absolutePath: "/home/u/Documents/foo.txt", in: c))
+        #expect(scope.permits(absolutePath: "/home/u/Documents/sub/bar.txt", in: c))
+    }
 }

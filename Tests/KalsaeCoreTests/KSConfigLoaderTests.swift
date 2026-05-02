@@ -58,4 +58,25 @@ struct KSConfigLoaderTests {
             try KSConfigLoader.decode(Data(json.utf8))
         }
     }
+
+    @Test("load(from:) throws ioFailed for nonexistent file")
+    func loadNonexistentFile() {
+        let bogus = URL(fileURLWithPath: "/nonexistent/kalsae.json")
+        #expect(throws: KSError.self) {
+            try KSConfigLoader.load(from: bogus)
+        }
+    }
+
+    @Test("load(from:) throws on invalid UTF-8 data")
+    func loadInvalidUTF8() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalsae-config-badutf8-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        var invalidData = Data([0xFF, 0xFE, 0x00, 0x61])  // BOM이 아닌 임의 바이트
+        invalidData.append(Data("{}".utf8))
+        try invalidData.write(to: tmp, options: .atomic)
+        #expect(throws: KSError.self) {
+            try KSConfigLoader.load(from: tmp)
+        }
+    }
 }

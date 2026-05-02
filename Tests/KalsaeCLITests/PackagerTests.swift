@@ -122,6 +122,19 @@ struct PackagerZipTests {
         #expect(firstSize > 0 && secondSize > 0)
     }
 
+    @Test("createZip throws for nonexistent source directory")
+    func nonexistentSource() throws {
+        let src = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalsae-pkg-nonexistent-\(UUID().uuidString)")
+        let archive = FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalsae-pkg-nonexistent-\(UUID().uuidString).zip")
+        defer { try? FileManager.default.removeItem(at: archive) }
+
+        #expect(throws: (any Error).self) {
+            try KSPackager.createZip(from: src, to: archive)
+        }
+    }
+
     @Test("createZipAsync mirrors createZip outcome")
     func asyncVariant() async throws {
         let src = uniqueDir(suffix: "async")
