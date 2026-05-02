@@ -4,9 +4,9 @@
     public import KalsaeCore
     public import Foundation
 
-    // MARK: - Phase 1 데모 호스트
+    // MARK: - 데모 호스트
 
-    /// Phase 1 데모 실행 파일에서 사용하는 단일 윈도우 호스트.
+    /// 데모 실행 파일에서 사용하는 윈도우 호스트.
     @MainActor
     public final class KSWindowsDemoHost {
         public let registry: KSCommandRegistry
@@ -17,6 +17,7 @@
         public let bridge: WebView2Bridge
         private let webviewOptions: KSWebViewOptions?
         private let backdropType: KSWindowBackdrop?
+        private let windowTransparent: Bool
 
         public init(
             windowConfig: KSWindowConfig,
@@ -29,13 +30,27 @@
             try Win32App.shared.ensureCOMInitialized()
 
             self.registry = registry
+            // Mica / Acrylic / Tabbed 백드롭은 윈도우가 투명하지 않으면 보이지
+            // 않는다. 사용자가 `transparent`를 명시적으로 지정하지 않은 채
+            // 시각적 backdrop 만 요청한 경우 자동으로 `transparent=true` 로
+            // 승격하고 1회 경고 로그를 남긴다 (`auto`/`none`은 시각 효과가
+            // 없으므로 승격 대상이 아님).
+            var effectiveConfig = windowConfig
+            if !effectiveConfig.transparent,
+                let bd = effectiveConfig.webview?.backdropType,
+                bd == .mica || bd == .acrylic || bd == .tabbed
+            {
+                effectiveConfig.transparent = true
+                Self.warnBackdropAutoTransparentOnce(backdrop: bd)
+            }
             self.window = try Win32Window(
-                config: windowConfig,
+                config: effectiveConfig,
                 restoredState: restoredState)
-            self.webview = WebView2Host(label: windowConfig.label)
-            self.bridge = WebView2Bridge(host: webview, registry: registry, windowLabel: windowConfig.label)
-            self.webviewOptions = windowConfig.webview
-            self.backdropType = windowConfig.webview?.backdropType
+            self.webview = WebView2Host(label: effectiveConfig.label)
+            self.bridge = WebView2Bridge(host: webview, registry: registry, windowLabel: effectiveConfig.label)
+            self.webviewOptions = effectiveConfig.webview
+            self.backdropType = effectiveConfig.webview?.backdropType
+            self.windowTransparent = effectiveConfig.transparent
             // WndProc가 Win32 시스템 이벤트(WM_SIZE/WM_MOVE/WM_DPICHANGED 등)를
             // JS로 포워딩할 수 있도록 sink를 설치한다. 웹뷰가 아직 초기화되지
             // 않은 시점의 emit은 PostJSON에서 실패하지만 try?로 무시된다.
@@ -108,7 +123,7 @@
             webview.setDefaultContextMenusEnabled(enabled)
         }
 
-        // MARK: - Phase C4 라이프사이클 훅
+        // MARK: - 네이티브 라이프사이클 훅
 
         /// 네이티브 `WM_CLOSE` 콜백을 설정한다. 클로저는 UI 스레드에서 실행되며
         /// `true`를 반환하면 닫기를 취소한다. `nil`을 전달하면 제거된다.
@@ -139,7 +154,7 @@
 
         /// 웹뷰가 외부 파일 드롱을 직접 수락할지 토글한다.
         /// `false`이면 OS 파일 드롱이 호스트 윈도우의 드롱 타겟으로
-        /// 전달된다 (Phase 5-3에서 사용).
+        /// 전달된다.
         public func setAllowExternalDrop(_ allow: Bool) {
             webview.setAllowExternalDrop(allow)
         }
@@ -201,8 +216,8 @@
 
         /// 중앙집중식 지연 웹뷰 초기화. `KSWebViewOptions`에서 윈도우별 `userDataPath`
         /// 재정의를 가져온 후 콘트롤러가 사용 가능해지면 즉시 나머지
-        /// Phase C2 시각 설정 (`transparent`, `disablePinchZoom`,
-        /// `zoomFactor`, `backdropType`)을 적용한다. 멱등성 보장.
+        /// 시각 설정 (`transparent`, `disablePinchZoom`, `zoomFactor`,
+        /// `backdropType`)을 적용한다. 멱등성 보장.
         private func ensureWebViewInitialized(devtools: Bool) throws(KSError) {
             if webviewInitialized { return }
             guard let hwnd = window.hwnd else {
@@ -226,8 +241,19 @@
             if let backdrop = backdropType {
                 window.setSystemBackdrop(backdrop)
             }
-            guard let opts = webviewOptions else { return }
-            if opts.transparent {
+            // 윈도우 레벨 투명 또는 웹뷰 레벨 투명 중 하나라도 켜져 있으면
+            // 콘트롤러 기본 배경을 알파 0으로 설정한다. WS_EX_LAYERED 윈도우가
+            // 아닌 경우에도 WebView2 자체가 그리는 부분에는 적용되므로
+            // 멱등적으로 안전하다. 단, 투명이 실제로 보여지려면 웹 콘텐츠
+            // 자체가 불투명 배경을 그리지 않아야 한다 (`html, body { background:
+            // transparent }`).
+            guard let opts = webviewOptions else {
+                if windowTransparent {
+                    webview.setDefaultBackgroundColor(KSColorRGBA(r: 0, g: 0, b: 0, a: 0))
+                }
+                return
+            }
+            if opts.transparent || windowTransparent {
                 // 알파 0으로 설정해 WebView2 컨트롤러가 호스트 윈도우
                 // 배경을 더이상 가리지 않도록 한다. r/g/b는 0.
                 webview.setDefaultBackgroundColor(KSColorRGBA(r: 0, g: 0, b: 0, a: 0))
@@ -338,6 +364,21 @@
                 // 빈 성공 페이로드(KSBuiltinCommands.Empty와 동일).
                 return .success(Data("{}".utf8))
             }
+        }
+
+        // MARK: - 자동 승격 1회 경고
+
+        nonisolated(unsafe) private static var didWarnBackdropAutoTransparent = false
+        private static let backdropWarnLock = NSLock()
+
+        fileprivate static func warnBackdropAutoTransparentOnce(backdrop: KSWindowBackdrop) {
+            backdropWarnLock.lock()
+            defer { backdropWarnLock.unlock() }
+            guard !didWarnBackdropAutoTransparent else { return }
+            didWarnBackdropAutoTransparent = true
+            KSLog.logger("platform.windows.demohost").warning(
+                "backdropType=\(backdrop.rawValue) 효과를 보이게 하려면 윈도우가 투명해야 합니다. transparent=true 로 자동 승격합니다. 이 경고를 끄려면 KSWindowConfig.transparent 를 명시적으로 true 로 지정하세요."
+            )
         }
     }
 #endif

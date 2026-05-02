@@ -81,4 +81,36 @@ struct KSConfigLoaderTests {
             try KSConfigLoader.load(from: tmp)
         }
     }
+
+    @Test("transparent 필드 기본값은 false")
+    func transparentDefaultsFalse() throws {
+        let json = #"""
+            {
+            "app": { "name": "D", "version": "0", "identifier": "x" },
+            "build": { "frontendDist": "dist", "devServerURL": "x" },
+            "windows": [
+            { "label": "main", "title": "A", "width": 1, "height": 1 }
+            ],
+            "security": { "csp": "x", "fs": { "allow": [], "deny": [] }, "devtools": false }
+            }
+            """#
+        let config = try KSConfigLoader.decode(Data(json.utf8))
+        #expect(config.windows[0].transparent == false)
+    }
+
+    @Test("transparent=true 가 디코딩된다")
+    func transparentDecodesTrue() throws {
+        let json = #"""
+            {
+            "app": { "name": "D", "version": "0", "identifier": "x" },
+            "build": { "frontendDist": "dist", "devServerURL": "x" },
+            "windows": [
+            { "label": "main", "title": "A", "width": 1, "height": 1, "transparent": true }
+            ],
+            "security": { "csp": "x", "fs": { "allow": [], "deny": [] }, "devtools": false }
+            }
+            """#
+        let config = try KSConfigLoader.decode(Data(json.utf8))
+        #expect(config.windows[0].transparent == true)
+    }
 }

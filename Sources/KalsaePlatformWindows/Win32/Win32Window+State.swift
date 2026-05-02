@@ -6,8 +6,8 @@
     //
     // Win32Window의 윈도우 표시 상태(최소화/최대화/복원/AlwaysOnTop/중앙
     // 정렬/배경색)를 모은 확장. 메인 파일은 생성/소멸/포커스/크기 같은
-    // 핵심 라이프사이클에 집중하고, 이 확장은 Phase 1에서 도입한
-    // `KSWindowState` PAL 매핑 메서드들을 담당한다.
+    // 핵심 라이프사이클에 집중하고, 이 확장은 `KSWindowState` PAL
+    // 매핑 메서드들을 담당한다.
 
     extension Win32Window {
 
@@ -83,8 +83,8 @@
             // 우리는 RGBA(0xRRGGBBAA)를 받지만 Win32 `COLORREF`는 0x00BBGGRR
             // (alpha 무시). Wails 패리티: 알파 0/255만 의미가 있어 0이 아니면
             // 255처럼 취급. 알파=0(완전 투명)은 layered window가 필요하므로
-            // 솔리드 브러시로 폴백 — 향후 Phase C의 `transparent` 옵션에서
-            // 처리한다.
+            // 솔리드 브러시로 폴백 — `KSWindowConfig.transparent` 옵션에서
+            // 별도 처리 (v0.3 로드맵 항목).
             let r = UInt8((rgba >> 24) & 0xFF)
             let g = UInt8((rgba >> 16) & 0xFF)
             let b = UInt8((rgba >> 8) & 0xFF)

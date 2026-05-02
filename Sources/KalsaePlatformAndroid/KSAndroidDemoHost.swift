@@ -42,6 +42,11 @@
         ) throws(KSError) {
             self.registry = registry
             self.windowConfig = windowConfig
+            // `KSWindowConfig.transparent`는 Windows 전용 (v0.3 시점).
+            // Android 백엔드는 1회 경고 로그를 남기고 무시한다.
+            if windowConfig.transparent {
+                Self.warnTransparentOnce()
+            }
             self.webViewHost = KSAndroidWebViewHost()
             self.bridge = KSAndroidBridge(host: webViewHost, registry: registry, windowLabel: windowConfig.label)
             self.shellBackend = KSAndroidShellBackend()
@@ -141,6 +146,21 @@
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        }
+
+        // MARK: - 미구현 옵션 1회 경고
+
+        nonisolated(unsafe) private static var didWarnTransparent = false
+        nonisolated(unsafe) private static let warnLock = NSLock()
+
+        fileprivate static func warnTransparentOnce() {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnTransparent else { return }
+            didWarnTransparent = true
+            KSLog.logger("platform.android.demohost").warning(
+                "KSWindowConfig.transparent=true 는 Android에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다."
+            )
         }
     }
 #endif

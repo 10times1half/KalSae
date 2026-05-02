@@ -48,6 +48,13 @@
             if config.alwaysOnTop {
                 exStyle |= DWORD(WS_EX_TOPMOST)
             }
+            // 투명 윈도우 (Wails / Tauri 운용 패턴): WS_EX_LAYERED 플래그를
+            // 구성 단계에서 적용해 DWM이 웹뷰 콘트롤러의 알파 이하로 뒤의
+            // 데스크탑을 합성하도록 한다. WebView2 콘트롤러 기본 배경을 알파
+            // 0으로 맞춰주는 작업은 데모 호스트(`KSWindowsDemoHost`)이 담당한다.
+            if config.transparent {
+                exStyle |= DWORD(WS_EX_LAYERED)
+            }
 
             let hwnd = className.withUTF16Pointer { cls -> HWND? in
                 config.title.withUTF16Pointer { title -> HWND? in
@@ -70,12 +77,21 @@
                     message: "CreateWindowExW failed (GetLastError=\(GetLastError()))")
             }
             self.hwnd = hwnd
+            self.transparent = config.transparent
             Win32App.shared.register(self)
             KSWin32HandleRegistry.shared.register(label: config.label, hwnd: hwnd)
             KSWin32MainWindowTracker.shared.track(hwnd: hwnd)
             log.info("Created window '\(config.label)' hwnd=\(hwnd)")
 
-            // Phase C 옵션 적용 — 모두 보일러플레이트 Win32 호출.
+            // 투명 윈도우의 최종 확정: WS_EX_LAYERED 윈도우는 최소 한번 알파
+            // 속성을 설정해야 표시된다. 애플리케이션 단의 투명도는 항상 1.0 (255)
+            // 이고 실제 투명 해석은 WebView2 콘트롤러의 DefaultBackgroundColor
+            // 알파 값이 결정한다. 색상 키는 사용하지 않으므로 LWA_ALPHA만 전달.
+            if config.transparent {
+                _ = SetLayeredWindowAttributes(hwnd, 0, 255, DWORD(LWA_ALPHA))
+            }
+
+            // 윈도우 옵션 적용 — 모두 보일러플레이트 Win32 호출.
             if let bg = config.backgroundColor {
                 let rgba =
                     (UInt32(bg.r & 0xFF) << 24)
@@ -222,6 +238,13 @@
         /// Owned by this window — released in `dispose()`/WM_DESTROY.
         internal var backgroundBrush: HBRUSH?
 
+        /// `KSWindowConfig.transparent` mirror. When `true`, the window was
+        /// created with `WS_EX_LAYERED` and WM_ERASEBKGND skips the
+        /// background fill entirely so DWM can composite the desktop
+        /// behind the WebView2 controller (whose default background is
+        /// expected to be alpha-zero).
+        internal var transparent: Bool = false
+
         /// Sink invoked by `WNDPROC` to surface window/system events to the
         /// JS side. Demo host wires this to `WebView2Bridge.emit`. Optional —
         /// when `nil`, events are simply dropped.
@@ -242,7 +265,7 @@
         /// `WM_SIZE` so that we don't emit the same transition twice.
         internal var lastSizeState: Int32 = SIZE_RESTORED
 
-        // MARK: - Phase C4 native lifecycle hooks
+        // MARK: - native lifecycle hooks
         //
         // Optional Swift-level callbacks invoked from `WndProc` in addition
         // to the JS event emit. Set by the demo host on behalf of `KSApp`.

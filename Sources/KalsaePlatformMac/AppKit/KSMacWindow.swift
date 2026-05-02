@@ -39,6 +39,12 @@
             if config.center { window.center() }
             if config.alwaysOnTop { window.level = .floating }
 
+            // `KSWindowConfig.transparent`는 Windows 전용 (v0.3 시점). macOS
+            // 백엔드는 1회 경고 로그를 남기고 무시한다.
+            if config.transparent {
+                Self.warnTransparentOnce(log: log)
+            }
+
             self.nsWindow = window
             self.delegateProxy.owner = self
             window.delegate = delegateProxy
@@ -186,6 +192,21 @@
 
         fileprivate func handleDidResize() {
             dispatchStateSave()
+        }
+
+        // MARK: - 미구현 옵션 1회 경고
+
+        nonisolated(unsafe) private static var didWarnTransparent = false
+        nonisolated(unsafe) private static let warnLock = NSLock()
+
+        fileprivate static func warnTransparentOnce(log: Logger) {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnTransparent else { return }
+            didWarnTransparent = true
+            log.warning(
+                "KSWindowConfig.transparent=true 는 macOS에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다."
+            )
         }
     }
 

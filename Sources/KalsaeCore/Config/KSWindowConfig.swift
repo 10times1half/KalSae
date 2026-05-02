@@ -111,6 +111,16 @@ public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {
     /// `false`이면 커스텀 타이틀바에 적합한 무테 창이 된다.
     public var decorations: Bool
     /// 창 배경을 투명하게 할지 여부. 페이지도 불투명 배경을 그리지 않아야 한다.
+    ///
+    /// **플랫폼 지원:**
+    /// - **Windows**: 구현됨. `WS_EX_LAYERED` + WebView2 컨트롤러 알파 0
+    ///   조합으로 DWM이 데스크탑을 합성한다. `backgroundColor`를 명시적으로
+    ///   지정하면 알파 채널이 0이 아닌 한 합성 효과가 가려질 수 있다.
+    ///   `KSWebViewOptions.backdropType` 이 `mica` / `acrylic` / `tabbed`
+    ///   중 하나이고 본 값이 `false`이면 호스트가 자동으로 `true`로 승격하고
+    ///   1회 경고 로그를 남긴다 (시각 효과를 표시하기 위한 필수 조건).
+    /// - **macOS / Linux / iOS / Android**: 미구현 (v0.3 시점). `true`로
+    ///   설정해도 무시되며 첫 호출 시 경고 로그를 1회 남긴다.
     public var transparent: Bool
     /// 창이 전체 화면 모드로 시작하는지 여부.
     public var fullscreen: Bool

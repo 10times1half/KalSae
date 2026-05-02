@@ -152,6 +152,11 @@
                 return DefWindowProcW(hwnd, msg, wparam, lparam)
 
             case WM_ERASEBKGND:
+                // 투명 윈도우는 아무것도 그리지 않고 "처리됨" 반환.
+                // WS_EX_LAYERED 대상 아래로 DWM이 디스크탑을 합성하도록 한다.
+                if transparent {
+                    return 1
+                }
                 // 사용자 브러시가 설정된 경우 클라이언트 영역을 그 색으로
                 // 채우고 처리됨을 알린다(0이 아닌 값 반환). 미설정 시 기본
                 // 처리(클래스 브러시)에 위임한다.

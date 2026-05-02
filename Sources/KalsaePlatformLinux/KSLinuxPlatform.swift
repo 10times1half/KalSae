@@ -281,6 +281,11 @@
         ) throws(KSError) {
             self.registry = registry
             self.windowConfig = windowConfig
+            // `KSWindowConfig.transparent`는 Windows 전용 (v0.3 시점). Linux
+            // 백엔드는 1회 경고 로그를 남기고 무시한다.
+            if windowConfig.transparent {
+                Self.warnTransparentOnce()
+            }
             let appId = "app.Kalsae.\(windowConfig.label)"
             self.webview = GtkWebViewHost(
                 appId: appId,
@@ -456,6 +461,20 @@
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        }
+
+        // MARK: - 미구현 옵션 1회 경고
+
+        nonisolated(unsafe) private static var didWarnTransparent = false
+        nonisolated(unsafe) private static let warnLock = NSLock()
+
+        fileprivate static func warnTransparentOnce() {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnTransparent else { return }
+            didWarnTransparent = true
+            FileHandle.standardError.write(Data(
+                "[Kalsae][Linux] KSWindowConfig.transparent=true 는 Linux에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다.\n".utf8))
         }
     }
 

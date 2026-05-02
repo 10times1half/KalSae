@@ -34,6 +34,11 @@
         ) throws(KSError) {
             self.registry = registry
             self.windowConfig = windowConfig
+            // `KSWindowConfig.transparent`는 Windows 전용 (v0.3 시점).
+            // iOS 백엔드는 1회 경고 로그를 남기고 무시한다.
+            if windowConfig.transparent {
+                Self.warnTransparentOnce()
+            }
             // KSiOSHandleRegistry에 등록해 KSiOSWindowBackend.find(label:)에서 찾을 수 있게 한다.
             self._mainHandle = KSiOSHandleRegistry.shared.register(label: windowConfig.label)
             self.webViewHost = KSiOSWebViewHost(label: windowConfig.label)
@@ -152,6 +157,21 @@
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+        }
+
+        // MARK: - 미구현 옵션 1회 경고
+
+        nonisolated(unsafe) private static var didWarnTransparent = false
+        nonisolated(unsafe) private static let warnLock = NSLock()
+
+        fileprivate static func warnTransparentOnce() {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnTransparent else { return }
+            didWarnTransparent = true
+            KSLog.logger("platform.ios.demohost").warning(
+                "KSWindowConfig.transparent=true 는 iOS에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다."
+            )
         }
     }
 #endif

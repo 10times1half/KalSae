@@ -134,3 +134,43 @@ Each platform implements the `KSPlatform` protocol, which exposes:
 4. **NSLock over ad-hoc locks** — When `final class @unchecked Sendable` is needed, `NSLock` is preferred.
 5. **Virtual host serving** — Local assets served via `https://app.kalsae/` (Windows) or `ks://app/` (others) enables proper CSP headers.
 6. **`#if os()` gating** — Platform-specific code is conditionally compiled, never conditionally linked at runtime.
+
+## Window Visual Options
+
+### Transparent / layered windows (Windows only, v0.3+)
+
+`KSWindowConfig.transparent: Bool` enables a translucent host window so the
+WebView2 controller's alpha channel composites against the desktop or Mica
+background instead of an opaque solid fill.
+
+**Windows pipeline** (`KalsaePlatformWindows`):
+
+1. `Win32Window.init` adds `WS_EX_LAYERED` to `exStyle` before
+   `CreateWindowExW`.
+2. After creation, `SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA)` is
+   called once. The window-level alpha is left at 255 (opaque); actual
+   transparency is delegated to the WebView2 controller's
+   `DefaultBackgroundColor`.
+3. `WM_ERASEBKGND` returns `1` without painting so DWM can blend the desktop
+   behind the WebView.
+4. `KSWindowsDemoHost.applyVisualOptions` automatically calls
+   `setDefaultBackgroundColor(KSColorRGBA(0,0,0,0))` whenever
+   `windowConfig.transparent` is `true` (or `webview.transparent` is set).
+5. The web content itself must avoid opaque backgrounds
+   (`html, body { background: transparent; }`).
+
+**Interaction with `backgroundColor`**: an explicit, fully-opaque
+`backgroundColor` cancels the transparency effect. Document this in the host
+config when both fields are used.
+
+**Interaction with `KSWebViewOptions.backdropType`**: Mica / Acrylic /
+Tabbed backdrops require a transparent host window to be visible. When
+`backdropType` is one of those three and `transparent` is left at `false`,
+`KSWindowsDemoHost.init` auto-promotes `transparent` to `true` and emits a
+one-time warning. Set `transparent: true` explicitly in the config to
+silence the warning. `backdropType: auto` and `none` do not trigger the
+promotion since they have no visual effect.
+
+**Other platforms (macOS / Linux / iOS / Android)**: not implemented.
+Setting `transparent: true` logs a one-time warning at host construction
+time and is otherwise ignored.

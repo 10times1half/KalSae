@@ -1,6 +1,7 @@
 #if os(Windows)
     import Testing
     import Foundation
+    import WinSDK
     @testable import KalsaePlatformWindows
     import KalsaeCore
 
@@ -156,6 +157,45 @@
             window.close()
 
             #expect(!Win32App.shared.allWindows().contains { $0 === window })
+        }
+
+        /// `transparent: false` 인 경우 WS_EX_LAYERED 플래그가 설정되지 않는다.
+        @Test("transparent=false 윈도우는 WS_EX_LAYERED 가 꺼진다")
+        func transparentFalseHasNoLayeredFlag() throws {
+            let config = KSWindowConfig(
+                label: "ks-test-w32-\(UUID().uuidString.prefix(8).lowercased())",
+                title: "KS Win32 Test",
+                width: 320,
+                height: 240,
+                transparent: false,
+                visible: false)
+            let window = try Win32Window(config: config)
+            defer { window.close() }
+            #expect(window.transparent == false)
+
+            let hwnd = try #require(window.hwnd)
+            let exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+            #expect((exStyle & LONG_PTR(WS_EX_LAYERED)) == 0)
+        }
+
+        /// `transparent: true` 인 경우 WS_EX_LAYERED 가 켜져 있고
+        /// 알파가 설정되어 있다 (255 = 완전 불투명, WebView 알파에 위임).
+        @Test("transparent=true 윈도우는 WS_EX_LAYERED 플래그를 가진다")
+        func transparentTrueHasLayeredFlag() throws {
+            let config = KSWindowConfig(
+                label: "ks-test-w32-\(UUID().uuidString.prefix(8).lowercased())",
+                title: "KS Win32 Test (transparent)",
+                width: 320,
+                height: 240,
+                transparent: true,
+                visible: false)
+            let window = try Win32Window(config: config)
+            defer { window.close() }
+            #expect(window.transparent == true)
+
+            let hwnd = try #require(window.hwnd)
+            let exStyle = GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+            #expect((exStyle & LONG_PTR(WS_EX_LAYERED)) != 0)
         }
     }
 

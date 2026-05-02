@@ -52,8 +52,7 @@
         /// `CoInitializeEx(STA)` returns `RPC_E_CHANGED_MODE` and leaves the
         /// thread in MTA. We work around this by calling `CoUninitialize()`
         /// once to cancel that prior init, then requesting STA. This is safe
-        /// because the UI thread never actually needs MTA semantics for our
-        /// Phase 1 scope.
+        /// because the UI thread never actually needs MTA semantics here.
         func ensureCOMInitialized() throws(KSError) {
             guard !comInitialized else { return }
 
@@ -136,7 +135,7 @@
             var msg = MSG()
             // Swift WinSDK 오버레이는 GetMessageW를 Bool 반환으로 가져와
             // 드물게 발생하는 -1 에러 케이스를 `false`(WM_QUIT과 동일)로
-            // 단읽한다. Phase 1에서는 이 점을 수용한다.
+            // 단읽한다. 이 점을 수용한다.
             while GetMessageW(&msg, nil, 0, 0) {
                 if msg.message == UINT(WM_HOTKEY) {
                     hotKeyHandler?(Int32(msg.wParam))

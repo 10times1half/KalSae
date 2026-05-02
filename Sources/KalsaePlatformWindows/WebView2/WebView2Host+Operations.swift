@@ -130,7 +130,7 @@
             }
         }
 
-        // MARK: - Phase C2 visual / runtime tuning
+        // MARK: - visual / runtime tuning
 
         /// Sets the controller's default background colour. Pass `a == 0`
         /// (with a transparent host window) to make the WebView see-through.

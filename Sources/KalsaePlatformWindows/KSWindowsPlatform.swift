@@ -4,11 +4,11 @@
     public import KalsaeCore
     internal import Foundation
 
-    /// Windows 플랫폼 백엔드 (Win32 HWND + WebView2 COM, Phase 1).
+    /// Windows 플랫폼 백엔드 (Win32 HWND + WebView2 COM).
     ///
-    /// 의도적으로 업은 Phase 1 구현체: 엔드투엔드 IPC가 동작함을 검증할 수
-    /// 있는 기본 기능만 제공한다. 전체 PAL 커버리지 (다이얼로그, 트레이,
-    /// 메뉴, 알림, 스킴 핸들러)는 이후 단계에서 추가될 예정이다.
+    /// 전체 PAL 커버리지 완성: 윈도우, 다이얼로그, 트레이, 메뉴, 알림,
+    /// 클립보드, 셸, 액셀러레이터, 자동시작, 딥링크, 단일 인스턴스,
+    /// 윈도우 상태 영속화. 모든 PAL 서비스가 Win32에 완전히 연결되어 있다.
     // @unchecked: Win32 thread confinement (HWND affinity) — actor cannot model OS thread binding
     public final class KSWindowsPlatform: KSPlatform, @unchecked Sendable {
         public var name: String { "Windows (Win32 + WebView2)" }

@@ -28,6 +28,18 @@
       "center": true,
       "alwaysOnTop": false,
       "persistState": false
+    },
+    {
+      "label": "overlay",
+      "title": "Transparent overlay (Windows-only, v0.3)",
+      "width": 480,
+      "height": 320,
+      "resizable": true,
+      "decorations": false,
+      "transparent": true,
+      "visible": false,
+      "alwaysOnTop": true,
+      "webview": { "backdropType": "mica" }
     }
   ],
   "security": {

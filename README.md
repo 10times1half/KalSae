@@ -749,6 +749,7 @@ try app.emit("custom:event", payload: ["key": "value"])
 ## Roadmap
 
 - Linux global accelerator backend improvements (Wayland ecosystem dependent)
+- **Transparent / layered windows** (Windows first — Mica/Acrylic integration; macOS/Linux not yet planned)
 - Auto-updater
 - Mobile host ergonomics (iOS integration polish, Android host-side tooling)
 
@@ -756,6 +757,7 @@ try app.emit("custom:event", payload: ["key": "value"])
 <summary>🇰🇷 한국어로 보기</summary>
 
 - Linux 글로벌 단축키 개선 (Wayland 생태계 의존)
+- **투명/레이어드 윈도우** (Windows 우선 — Mica/Acrylic 통합; macOS/Linux는 추후)
 - 자동 업데이트
 - 모바일 호스트 경험 개선 (iOS 통합 완성도, Android 호스트 측 툴링)
 
