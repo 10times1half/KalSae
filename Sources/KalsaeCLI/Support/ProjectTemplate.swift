@@ -8,8 +8,41 @@
 /// 왜곡시킬 수 있는 편집기를 통해서도 정상적으로 라운드트립한다.
 public struct ProjectTemplate {
     public let name: String
+    public let frontend: String
+    public let packageManager: String
 
-    public init(name: String) { self.name = name }
+    public init(name: String, frontend: String = "vanilla", packageManager: String = "npm") {
+        self.name = name
+        self.frontend = frontend
+        self.packageManager = packageManager
+    }
+
+    private struct BuildDefaults {
+        let frontendDist: String
+        let devServerURL: String
+        let devCommand: String?
+        let buildCommand: String?
+    }
+
+    private var buildDefaults: BuildDefaults {
+        switch frontend.lowercased() {
+        case "react", "vue", "svelte":
+            let pm = packageManager.lowercased()
+            return BuildDefaults(
+                frontendDist: "dist",
+                devServerURL: "http://localhost:5173",
+                devCommand: "\(pm) run dev",
+                buildCommand: "\(pm) run build"
+            )
+        default:
+            return BuildDefaults(
+                frontendDist: "Resources",
+                devServerURL: "about:blank",
+                devCommand: nil,
+                buildCommand: nil
+            )
+        }
+    }
 
     /// 프로젝트 이름에서 유도된 역 DNS 번들 식별자.
     private var identifier: String {
@@ -60,19 +93,29 @@ public struct ProjectTemplate {
         for (resource, ext, dest) in mapping {
             let raw = try Self.loadTemplate(resource: resource, ext: ext)
             let content = substitute(raw)
-            try content.write(to: dest, atomically: true, encoding: .utf8)
+            // atomically: false — Windows에서 atomically: true는 같은 디렉터리에
+            // 임시 파일을 생성한 뒤 rename하므로 Defender/Indexer와 충돌해
+            // ERROR_SHARING_VIOLATION (Win32 32)이 발생한다.
+            try content.write(to: dest, atomically: false, encoding: .utf8)
         }
     }
 
     // MARK: - 치환
 
-    /// `{{NAME}}`와 `{{IDENTIFIER}}` 플레이스홀더를 안췀 문자열로 대체한다.
-    /// 새 플레이스홀더는 템플릿 파일과 함께 여기에 문서화해야 한다 —
-    /// CLI가 치환하는 유일한 장소다.
+    /// 플레이스홀더를 실제 값으로 대체한다.
+    /// `{{NAME}}`, `{{IDENTIFIER}}`, `{{FRONTEND_DIST}}`, `{{DEV_SERVER_URL}}`,
+    /// `{{DEV_COMMAND}}`, `{{BUILD_COMMAND}}` 를 처리한다.
     func substitute(_ raw: String) -> String {
-        raw
+        let b = buildDefaults
+        let devCommandJSON  = b.devCommand.map  { "\"\($0)\"" } ?? "null"
+        let buildCommandJSON = b.buildCommand.map { "\"\($0)\"" } ?? "null"
+        return raw
             .replacingOccurrences(of: "{{NAME}}", with: name)
             .replacingOccurrences(of: "{{IDENTIFIER}}", with: identifier)
+            .replacingOccurrences(of: "{{FRONTEND_DIST}}", with: b.frontendDist)
+            .replacingOccurrences(of: "{{DEV_SERVER_URL}}", with: b.devServerURL)
+            .replacingOccurrences(of: "{{DEV_COMMAND}}", with: devCommandJSON)
+            .replacingOccurrences(of: "{{BUILD_COMMAND}}", with: buildCommandJSON)
     }
 
     // MARK: - 리소스 로딩

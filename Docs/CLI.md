@@ -46,7 +46,12 @@ my-app/
 
 ### `kalsae dev`
 
-Build and run the project in development mode.
+Run the project in development mode.
+
+When `Kalsae.json` includes `build.devCommand`, the CLI starts that command first
+(for example `npm run dev`). By default, if `build.devServerURL` is an HTTP(S)
+URL, `kalsae dev` waits until the server is reachable before launching
+`swift run`.
 
 ```bash
 kalsae dev
@@ -58,12 +63,23 @@ kalsae dev --target my-app
 | Option | Description |
 |---|---|
 | `-t, --target <target>` | Executable target to run (required when `Package.swift` has multiple executables). |
+| `--config <path>` | Override path to `Kalsae.json` (default: `./Kalsae.json` or `./kalsae.json` when present). |
+| `--skip-dev-command` | Do not launch `build.devCommand` even when configured. |
+| `--no-wait-dev-server` | Skip readiness check for `build.devServerURL`. |
+| `--watch` | Watch `Sources/` and restart `swift run` on changes. |
+| `--watch-interval <seconds>` | Polling interval for `--watch` mode. Default: `1.0`. |
 
-This command runs `swift run [target]` under the hood.
+This command runs `swift run [target]` under the hood and cleans up the spawned
+dev command process when `swift run` exits.
 
 ### `kalsae build`
 
 Build the project for release (or debug).
+
+When `Kalsae.json` includes `build.buildCommand`, the CLI runs that command
+before `swift build` (for example `npm run build`). By default, `kalsae build`
+also validates that frontend dist exists and is not empty. By default it syncs
+frontend dist into `Sources/<target>/Resources` before `swift build`.
 
 ```bash
 kalsae build                    # Release build
@@ -83,6 +99,8 @@ kalsae build --target my-app    # Specific target
 | `--bootstrapper <path>` | Path to `MicrosoftEdgeWebview2Setup.exe` (Evergreen bootstrapper). |
 | `--config <path>` | Override path to `Kalsae.json` (default: `./Kalsae.json` or `./kalsae.json`). |
 | `--dist <path>` | Override frontend dist directory. |
+| `--allow-missing-dist` | Allow build to continue even if frontend dist is missing or empty. |
+| `--no-sync-resources` | Skip syncing frontend dist into `Sources/<target>/Resources`. |
 | `--icon <path>` | Override icon path (`.ico`). |
 | `--zip` | Produce a portable `.zip` alongside the package directory. |
 | `--output <path>` | Override package output directory. |
@@ -147,6 +165,38 @@ export async function greet(name: string): Promise<{ greeting: string }> {
 }
 ```
 
+### `kalsae doctor`
+
+Check common environment and project issues.
+
+```bash
+kalsae doctor
+kalsae doctor --strict
+kalsae doctor --json
+```
+
+**Options:**
+
+| Option | Description |
+|---|---|
+| `--config <path>` | Override path to `Kalsae.json` (default: `./Kalsae.json` or `./kalsae.json`). |
+| `--strict` | Exit with non-zero status when warnings are found. |
+| `--json` | Print machine-readable JSON output. |
+
+Current checks include:
+
+1. Config file discovery and decode.
+2. Frontend dist existence and non-empty state.
+3. WebView2 static loader availability on Windows.
+4. swift-syntax cache shape under `.build/repositories`.
+
+When swift-syntax cache looks unhealthy, doctor prints these recovery commands:
+
+```powershell
+Remove-Item -Recurse -Force .build\repositories\swift-syntax-*
+swift package resolve --disable-dependency-cache
+```
+
 ## Configuration File
 
 The CLI looks for `Kalsae.json` (or `kalsae.json`) in the project root directory. See `Examples/kalsae.sample.json` for a complete reference.
@@ -158,6 +208,10 @@ When using the CLI on Windows:
 - Use PowerShell 5.1 or 7.
 - Chain commands with `;` — **never** `&&`.
 - Working directory should be the project root.
+- For WebView2 setup, use `Scripts/fetch-webview2.ps1`. When installing into a
+  different consumer project root, pass `-ProjectRoot <path>`.
+- Use `-DryRun` to verify computed install paths without network/download.
+- For a quick path-resolution check, run `Scripts/smoke-fetch-webview2.ps1`.
 
 ## Exit Codes
 

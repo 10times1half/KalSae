@@ -106,7 +106,7 @@ public enum KSPackager {
         // 2. 사이드카 manifest (DPI 인식, asInvoker).
         let manifestURL = opts.output.appendingPathComponent("\(exeName).manifest")
         try renderManifest(opts: opts).write(to: manifestURL,
-                                             atomically: true,
+                                             atomically: false,
                                              encoding: .utf8)
 
         // 3. Kalsae.json 설정.

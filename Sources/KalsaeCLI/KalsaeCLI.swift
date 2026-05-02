@@ -7,6 +7,12 @@ struct KalsaeCLI: ParsableCommand {
         commandName: "Kalsae",
         abstract: "Kalsae desktop-app project tooling.",
         version: "0.1.0",
-        subcommands: [NewCommand.self, DevCommand.self, BuildCommand.self, GenerateCommand.self]
+        subcommands: [
+            NewCommand.self,
+            DevCommand.self,
+            BuildCommand.self,
+            DoctorCommand.self,
+            GenerateCommand.self,
+        ]
     )
 }

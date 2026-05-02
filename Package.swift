@@ -175,6 +175,7 @@ let package = Package(
         .target(
             name: "KalsaeCLICore",
             dependencies: [
+                "KalsaeCore",
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftParser", package: "swift-syntax"),
             ],

@@ -70,7 +70,7 @@ Kalsae lets you build desktop (and mobile) applications by combining a **native 
 ### Prerequisites
 
 - **Swift 6.0+** (typed throws, macros)
-- **Windows 10 1809+** with Visual Studio Build Tools (MSVC for the C++ shim). Before first build, run [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1) once to populate `Vendor/WebView2/`.
+- **Windows 10 1809+** with Visual Studio Build Tools (MSVC for the C++ shim). `kalsae build` fetches the WebView2 SDK automatically on first use. For `swift build` directly, run [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1) once to populate `Vendor/WebView2/`.
 - **macOS** 14+ (no extra deps)
 - **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
 - **iOS**: Xcode 15+ (Swift 6 toolchain)
@@ -111,10 +111,36 @@ swift run kalsae-demo
 ### Scaffold a new app
 
 ```bash
+# Vanilla (default) — no frontend build tooling
 kalsae new MyDesktopApp
+
+# With a frontend framework preset
+kalsae new MyDesktopApp --frontend react
+kalsae new MyDesktopApp --frontend react --package-manager pnpm
+kalsae new MyDesktopApp --frontend vue  --package-manager yarn
+# Supported presets: vanilla | react | vue | svelte
+# Supported package managers: npm (default) | pnpm | yarn
+
 cd MyDesktopApp
 kalsae dev                     # run with hot iteration
 kalsae build --package         # release build + WebView2 bundling
+```
+
+On Windows, `kalsae build` automatically runs `Scripts/fetch-webview2.ps1` when
+the WebView2 SDK is missing (`--no-auto-fetch-web-view2` disables this).
+
+### Add Kalsae as a SwiftPM dependency
+
+If release tags are not available yet, use the `main` branch explicitly:
+
+```swift
+.package(url: "https://github.com/Kalsae/Kalsae.git", branch: "main")
+```
+
+When semver tags are published, prefer a version requirement:
+
+```swift
+.package(url: "https://github.com/Kalsae/Kalsae.git", from: "0.1.0")
 ```
 
 <details>
@@ -123,7 +149,7 @@ kalsae build --package         # release build + WebView2 bundling
 ### 사전 요구사항
 
 - **Swift 6.0 이상** (typed throws, 매크로)
-- **Windows 10 1809 이상** + Visual Studio Build Tools (C++ shim용 MSVC). 첫 빌드 전에 [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1)을 1회 실행해 `Vendor/WebView2/`를 준비하세요.
+- **Windows 10 1809 이상** + Visual Studio Build Tools (C++ shim용 MSVC). `kalsae build` 사용 시 WebView2 SDK를 자동으로 fetch합니다. `swift build`를 직접 사용하는 경우에는 [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1)을 1회 실행해 `Vendor/WebView2/`를 준비하세요.
 - **macOS** 14 이상 (추가 의존성 없음)
 - **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
 - **iOS**: Xcode 15+ (Swift 6 툴체인)
@@ -164,7 +190,16 @@ swift run kalsae-demo
 ### 새 프로젝트 만들기
 
 ```bash
+# Vanilla (기본) — 별도 프론트엔드 빌드 도구 없음
 kalsae new MyDesktopApp
+
+# 프론트엔드 프레임워크 프리셋 지정
+kalsae new MyDesktopApp --frontend react
+kalsae new MyDesktopApp --frontend react --package-manager pnpm
+kalsae new MyDesktopApp --frontend vue  --package-manager yarn
+# 지원 프리셋: vanilla | react | vue | svelte
+# 지원 패키지 매니저: npm (기본) | pnpm | yarn
+
 cd MyDesktopApp
 kalsae dev                     # 개발 모드 실행
 kalsae build --package         # 릴리스 빌드 + WebView2 번들링
@@ -181,6 +216,45 @@ kalsae build --package         # 릴리스 빌드 + WebView2 번들링
 - [IPC Protocol](Docs/IPC.md)
 - [Security Model](Docs/SECURITY.md)
 - [Sample Config](Examples/kalsae.sample.json)
+
+## Troubleshooting
+
+### Windows: WebView2 loader not found during link
+
+If you see `WebView2LoaderStatic.lib` link errors, ensure the SDK is installed in
+your app project's own `Vendor/WebView2` directory:
+
+```powershell
+.\Scripts\fetch-webview2.ps1
+```
+
+If you run the script from a different checkout, target your app root explicitly:
+
+```powershell
+.\Scripts\fetch-webview2.ps1 -ProjectRoot C:\Path\To\YourApp
+```
+
+To verify resolved installation paths without downloading from NuGet:
+
+```powershell
+.\Scripts\fetch-webview2.ps1 -ProjectRoot C:\Path\To\YourApp -DryRun
+```
+
+You can also run the built-in smoke check:
+
+```powershell
+.\Scripts\smoke-fetch-webview2.ps1
+```
+
+### swift-syntax dependency cache looks broken
+
+If SwiftPM repeatedly fails to resolve `swift-syntax` with a cache mismatch,
+clear the local cache snapshot and resolve again:
+
+```powershell
+Remove-Item -Recurse -Force .build\repositories\swift-syntax-*
+swift package resolve --disable-dependency-cache
+```
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
@@ -230,6 +304,7 @@ Top-level sections: `app`, `build`, `windows[]`, `security`, optional `tray`, `m
 최소한의 `Kalsae.json` 예시는 위와 같습니다. 최상위 섹션은 `app`, `build`, `windows[]`, `security`이며 선택적으로 `tray`, `menu`, `notifications`, `autostart`, `deepLink`를 지정할 수 있습니다. 전체 예시는 [Examples/kalsae.sample.json](Examples/kalsae.sample.json), 스키마 소스는 [Sources/KalsaeCore/Config/](Sources/KalsaeCore/Config/)를 참고하세요.
 
 `security` 섹션은 다음 항목으로 앱을 보호합니다:
+
 - `commandAllowlist` — JS에서 호출 가능한 명령 화이트리스트(`null`이면 등록된 모든 명령 허용)
 - `fs.allow` / `fs.deny` — 파일시스템 접근 글롭 패턴 (`$APP`, `$HOME`, `$DOCS`, `$TEMP` 매크로 사용 가능)
 - `csp` — Content-Security-Policy 헤더와 `<meta>` 태그로 주입
@@ -457,8 +532,9 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | Command | Description |
 |---|---|
 | `kalsae new <name>` | Scaffold a new project (Package.swift, App.swift, sample `index.html`) |
-| `kalsae dev [--target NAME]` | Run with `swift run`; optionally pick an executable target |
-| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config FILE] [--icon PATH] [--output DIR] [--zip]` | Release build, optional packaging with WebView2 runtime |
+| `kalsae dev [--target NAME] [--config FILE] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval SECONDS]` | Run with `swift run`; optionally start `build.devCommand`, wait for `build.devServerURL`, and auto-restart on source changes |
+| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config FILE] [--dist PATH] [--allow-missing-dist] [--no-sync-resources] [--icon PATH] [--output DIR] [--zip]` | Integrated frontend+Swift build with dist validation/sync, optional packaging with WebView2 runtime |
+| `kalsae doctor [--config FILE] [--strict] [--json]` | Diagnose common local issues (config/dist/WebView2/swift-syntax cache) |
 | `kalsae generate bindings [--out FILE] [--module NAME] [inputs...]` | Emit TypeScript types for `@KSCommand` functions |
 
 Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
@@ -469,8 +545,9 @@ Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
 | 명령어 | 설명 |
 |---|---|
 | `kalsae new <name>` | 새 프로젝트 생성 (Package.swift, App.swift, 샘플 `index.html`) |
-| `kalsae dev [--target 이름]` | `swift run` 래핑; 실행 타깃 선택 가능 |
-| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config 파일] [--icon 경로] [--output 디렉터리] [--zip]` | 릴리스 빌드 및 WebView2 런타임 포함 패키징 |
+| `kalsae dev [--target 이름] [--config 파일] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval 초]` | `swift run` 래핑; `build.devCommand` 자동 실행, `build.devServerURL` 대기, 소스 변경 시 자동 재시작 옵션 제공 |
+| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config 파일] [--dist 경로] [--allow-missing-dist] [--no-sync-resources] [--icon 경로] [--output 디렉터리] [--zip]` | 프론트엔드+Swift 통합 빌드(검증/리소스 동기화 포함) 및 WebView2 런타임 포함 패키징 |
+| `kalsae doctor [--config 파일] [--strict] [--json]` | 로컬 환경 이슈 진단 (config/dist/WebView2/swift-syntax 캐시) |
 | `kalsae generate bindings [--out 파일] [--module 이름] [입력...]` | `@KSCommand` 함수의 TypeScript 타입 생성 |
 
 소스: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/)

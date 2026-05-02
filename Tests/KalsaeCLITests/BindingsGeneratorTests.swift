@@ -85,7 +85,7 @@ struct BindingsRendererTests {
             .appendingPathComponent("bindings-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let input = dir.appendingPathComponent("Source.swift")
-        try src.write(to: input, atomically: true, encoding: .utf8)
+        try src.write(to: input, atomically: false, encoding: .utf8)
         let output = dir.appendingPathComponent("out.ts")
         return (input, output)
     }
@@ -211,8 +211,8 @@ struct BindingsRendererTests {
 
         let a = dir.appendingPathComponent("A.swift")
         let b = dir.appendingPathComponent("B.swift")
-        try "struct Pt: Codable { let x: Int }".write(to: a, atomically: true, encoding: .utf8)
-        try "struct Pt: Codable { let y: String }".write(to: b, atomically: true, encoding: .utf8)
+        try "struct Pt: Codable { let x: Int }".write(to: a, atomically: false, encoding: .utf8)
+        try "struct Pt: Codable { let y: String }".write(to: b, atomically: false, encoding: .utf8)
         let output = dir.appendingPathComponent("out.ts")
 
         let r = try KSBindingsGenerator.run(makeOptions(sources: [a, b], output: output))

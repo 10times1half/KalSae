@@ -7,17 +7,42 @@
 # Usage:
 #   .\Scripts\fetch-webview2.ps1              # latest stable
 #   .\Scripts\fetch-webview2.ps1 -Version 1.0.2792.45
+#   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp
+#   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp -Destination Vendor/WebView2
+#   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp -DryRun
 #
 [CmdletBinding()]
 param(
     [string]$Version = "latest",
-    [string]$Destination = "Vendor/WebView2"
+    [string]$Destination = "Vendor/WebView2",
+    [string]$ProjectRoot = "",
+    [switch]$DryRun
 )
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$dest     = Join-Path $repoRoot $Destination
+$installRootRaw = if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    [string]$repoRoot
+} elseif ([System.IO.Path]::IsPathRooted($ProjectRoot)) {
+    $ProjectRoot
+} else {
+    Join-Path (Get-Location) $ProjectRoot
+}
+$installRoot = [System.IO.Path]::GetFullPath($installRootRaw)
+$dest = Join-Path $installRoot $Destination
+
+if ($DryRun) {
+    Write-Host "[DryRun] repoRoot    : $repoRoot"
+    Write-Host "[DryRun] installRoot : $installRoot"
+    Write-Host "[DryRun] destination : $dest"
+    if ($Version -eq 'latest') {
+        Write-Host "[DryRun] version     : latest (NuGet query skipped)"
+    } else {
+        Write-Host "[DryRun] version     : $Version"
+    }
+    return
+}
 
 if ($Version -eq 'latest') {
     Write-Host "Querying NuGet for the latest Microsoft.Web.WebView2 version..."

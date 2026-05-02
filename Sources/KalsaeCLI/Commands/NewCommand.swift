@@ -9,11 +9,29 @@ struct NewCommand: ParsableCommand {
         abstract: "Scaffold a new Kalsae application."
     )
 
+    enum FrontendPreset: String, ExpressibleByArgument, CaseIterable {
+        case vanilla
+        case react
+        case vue
+        case svelte
+    }
+
+    enum PackageManager: String, ExpressibleByArgument, CaseIterable {
+        case npm
+        case pnpm
+        case yarn
+    }
+
     @Argument(help: "Application name (used as the directory, target and window title).")
     var name: String
 
+    @Option(name: .long, help: "Frontend preset: vanilla | react | vue | svelte (default: vanilla).")
+    var frontend: FrontendPreset = .vanilla
+
+    @Option(name: .long, help: "Package manager for dev/build commands: npm | pnpm | yarn (default: npm).")
+    var packageManager: PackageManager = .npm
+
     func run() throws {
-        // 기본 이름 검증 — Swift 식별자 접두사로 적합해야 한다.
         guard name.first?.isLetter == true,
               name.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" }) else {
             throw ValidationError("'\(name)' is not a valid project name. Use letters, digits, hyphens or underscores, starting with a letter.")
@@ -26,7 +44,11 @@ struct NewCommand: ParsableCommand {
             throw ValidationError("Directory '\(name)' already exists.")
         }
 
-        let template = ProjectTemplate(name: name)
+        let template = ProjectTemplate(
+            name: name,
+            frontend: frontend.rawValue,
+            packageManager: packageManager.rawValue
+        )
         try template.write(to: dest)
 
         print("""

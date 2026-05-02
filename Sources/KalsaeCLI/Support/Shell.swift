@@ -5,11 +5,13 @@ public import Foundation
 public enum ShellError: Error, CustomStringConvertible {
     case commandNotFound(String)
     case nonZeroExit(Int32)
+    case shellUnavailable
 
     public var description: String {
         switch self {
         case .commandNotFound(let cmd): return "'\(cmd)' not found in PATH."
         case .nonZeroExit(let code):    return "Process exited with code \(code)."
+        case .shellUnavailable:         return "No supported shell executable found."
         }
     }
 }
@@ -59,4 +61,55 @@ public func shell(command: String, arguments: [String] = [], in directory: Strin
     let status = process.terminationStatus
     if status != 0 { throw ShellError.nonZeroExit(status) }
     return status
+}
+
+/// `command`를 `arguments`와 함께 백그라운드 실행하고 `Process` 핸들을 반환한다.
+public func spawn(command: String, arguments: [String] = [], in directory: String? = nil) throws -> Process {
+    guard let url = findExecutable(named: command) else {
+        throw ShellError.commandNotFound(command)
+    }
+    let process = Process()
+    process.executableURL = url
+    process.arguments = arguments
+    if let directory {
+        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+    }
+    try process.run()
+    return process
+}
+
+/// 셸에서 단일 커맨드 라인을 실행하고 종료를 기다린다.
+@discardableResult
+public func shell(commandLine: String, in directory: String? = nil) throws -> Int32 {
+    let process = try makeShellProcess(commandLine: commandLine, in: directory)
+    try process.run()
+    process.waitUntilExit()
+    let status = process.terminationStatus
+    if status != 0 { throw ShellError.nonZeroExit(status) }
+    return status
+}
+
+/// 셸에서 단일 커맨드 라인을 백그라운드 실행하고 `Process` 핸들을 반환한다.
+public func spawn(commandLine: String, in directory: String? = nil) throws -> Process {
+    let process = try makeShellProcess(commandLine: commandLine, in: directory)
+    try process.run()
+    return process
+}
+
+private func makeShellProcess(commandLine: String, in directory: String?) throws -> Process {
+    let process = Process()
+#if os(Windows)
+    let shellURL = findExecutable(named: "pwsh") ?? findExecutable(named: "powershell")
+    guard let shellURL else { throw ShellError.shellUnavailable }
+    process.executableURL = shellURL
+    process.arguments = ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", commandLine]
+#else
+    guard let shellURL = findExecutable(named: "sh") else { throw ShellError.shellUnavailable }
+    process.executableURL = shellURL
+    process.arguments = ["-lc", commandLine]
+#endif
+    if let directory {
+        process.currentDirectoryURL = URL(fileURLWithPath: directory)
+    }
+    return process
 }

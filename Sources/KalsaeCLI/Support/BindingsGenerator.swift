@@ -67,7 +67,7 @@ public enum KSBindingsGenerator {
         try FileManager.default.createDirectory(
             at: opts.output.deletingLastPathComponent(),
             withIntermediateDirectories: true)
-        try ts.write(to: opts.output, atomically: true, encoding: .utf8)
+        try ts.write(to: opts.output, atomically: false, encoding: .utf8)
 
         return Report(commandCount: commands.count,
                       typeCount: typeDecls.count,

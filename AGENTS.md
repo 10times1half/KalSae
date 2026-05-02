@@ -46,7 +46,7 @@ swift test --no-parallel
 
 | OS | Required setup |
 |---|---|
-| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); run `./Scripts/fetch-webview2.ps1` once to populate `Vendor/WebView2/` |
+| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); `kalsae build` fetches the WebView2 SDK automatically. For bare `swift build`, run `./Scripts/fetch-webview2.ps1` once to populate `Vendor/WebView2/` |
 | macOS 14+ | none |
 | Linux | `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev` |
 | iOS | Xcode 15+ (Swift 6 toolchain) |
@@ -57,7 +57,7 @@ swift test --no-parallel
   **never** `&&`.
 - Working directory is `C:\Projects\Kalsae`.
 
-_🇰🇷 `swift build` / `swift test`. Windows는 `./Scripts/fetch-webview2.ps1` 먼저._
+_🇰🇷 `swift build` / `swift test`. `kalsae build`는 WebView2를 자동 fetch함. bare `swift build` 사용 시만 `./Scripts/fetch-webview2.ps1` 먼저 실행._
 _🇰🇷 PowerShell 체이닝은 `;`만 사용 (`&&` 금지)._
 
 ---
