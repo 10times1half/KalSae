@@ -1,7 +1,7 @@
 #if os(macOS)
     internal import AppKit
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// `KSDialogBackend`의 macOS 구현체.
     public struct KSMacDialogBackend: KSDialogBackend, Sendable {
@@ -20,7 +20,7 @@
                 if let dir = options.defaultDirectory { panel.directoryURL = dir }
                 if !options.filters.isEmpty { applyFilters(options.filters, to: panel) }
                 let nsParent = resolveParent(parent)
-                let response = nsParent != nil ? panel.beginSheetModal(for: nsParent!) : panel.runModal()
+                let response = nsParent != nil ? await panel.beginSheetModal(for: nsParent!) : panel.runModal()
                 return response == .OK ? panel.urls : []
             }
             return urls
@@ -58,7 +58,7 @@
                 panel.allowsMultipleSelection = false
                 if let dir = options.defaultDirectory { panel.directoryURL = dir }
                 let nsParent = resolveParent(parent)
-                let response = nsParent != nil ? panel.beginSheetModal(for: nsParent!) : panel.runModal()
+                let response = nsParent != nil ? await panel.beginSheetModal(for: nsParent!) : panel.runModal()
                 return response == .OK ? panel.url : nil
             }
         }
@@ -101,7 +101,7 @@
                 let nsParent = resolveParent(parent)
                 let response =
                     nsParent != nil
-                    ? alert.beginSheetModal(for: nsParent!)
+                    ? await alert.beginSheetModal(for: nsParent!)
                     : alert.runModal()
 
                 switch response {

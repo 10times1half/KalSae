@@ -1,7 +1,7 @@
 #if os(macOS)
     internal import AppKit
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// macOS 딥링크 / 커스텀 URL 스킴 기능.
     ///
@@ -22,7 +22,7 @@
         @MainActor
         public static func installAppleEventHandler() {
             NSAppleEventManager.shared().setEventHandler(
-                NSApp,
+                NSApp!,
                 andSelector: #selector(KSMacAppleEventRouter.handleGetURLEvent(_:with:)),
                 forEventClass: AEEventClass(kInternetEventClass),
                 andEventID: AEEventID(kAEGetURL))

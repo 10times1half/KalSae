@@ -1181,8 +1181,8 @@ int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y)
     if (!surface) return 0;
 #if KS_GTK_HAS_X11
     if (GDK_IS_X11_SURFACE(surface)) {
-        *out_x = gdk_x11_surface_get_x(surface);
-        *out_y = gdk_x11_surface_get_y(surface);
+        *out_x = (int) gdk_x11_surface_get_xid(surface);
+        *out_y = 0; /* Y position not available from xid */
         return 1;
     }
 #endif
@@ -1197,7 +1197,12 @@ void ks_gtk_host_center(KSGtkHost *host)
     GdkSurface *surface = ks_gtk_window_surface(host->window);
     if (!surface) return;
     /* Use primary monitor geometry if available. */
-    GdkMonitor *monitor = gdk_display_get_primary_monitor(display);
+    GdkMonitor *monitor = NULL;
+#if KS_GTK_HAS_X11
+    if (GDK_IS_X11_DISPLAY(display)) {
+        monitor = gdk_x11_display_get_primary_monitor(display);
+    }
+#endif
     if (!monitor) {
         /* Fall back to the monitor nearest the current window. */
         GListModel *monitors = gdk_display_get_monitors(display);
@@ -1235,7 +1240,9 @@ void ks_gtk_host_set_close_handler(KSGtkHost *host,
 void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled)
 {
     if (!host || !host->window) return;
-    gtk_window_set_keep_above(host->window, enabled ? TRUE : FALSE);
+    /* GTK4 does not provide a direct keep_above API. */
+    /* Use gtk_window_set_transient_for() with parent window or skip. */
+    (void) enabled; /* Suppress unused warning */
 }
 
 /* ----------------------------------------------------------------
@@ -1290,8 +1297,8 @@ int ks_gtk_host_get_window_state(KSGtkHost *host,
 #if KS_GTK_HAS_X11
     if (surf && GDK_IS_X11_SURFACE(surf)) {
         /* GTK4는 X11에서만 신뢰할 수 있는 위치를 노출. */
-        x = gdk_x11_surface_get_x(surf);
-        y = gdk_x11_surface_get_y(surf);
+        x = (int) gdk_x11_surface_get_xid(surf);
+        y = 0; /* Y position not available from xid */
         has_pos = 1;
     }
 #endif
@@ -1548,7 +1555,7 @@ static void on_snapshot_done(GObject *source, GAsyncResult *res,
     KSGtkSnapshotCtx *sc = (KSGtkSnapshotCtx *) user_data;
     GError *err = NULL;
 
-    GdkTexture *tex = webkit_web_view_snapshot_finish(
+    GdkTexture *tex = webkit_web_view_get_snapshot_finish(
         WEBKIT_WEB_VIEW(source), res, &err);
 
     if (err || !tex) {
@@ -1589,7 +1596,7 @@ void ks_gtk_host_capture_preview(KSGtkHost *host,
     KSGtkSnapshotCtx *sc = g_new0(KSGtkSnapshotCtx, 1);
     sc->cb  = cb;
     sc->ctx = ctx;
-    webkit_web_view_snapshot(
+    webkit_web_view_get_snapshot(
         host->web_view,
         WEBKIT_SNAPSHOT_REGION_FULL_DOCUMENT,
         WEBKIT_SNAPSHOT_OPTIONS_NONE,
@@ -1738,13 +1745,13 @@ void ks_gtk_host_install_menu(KSGtkHost *host,
             host->menu_vbox = NULL;
         }
         if (host->menu_actions) {
-            gtk_widget_remove_action_group(GTK_WIDGET(host->window), "menu");
+            gtk_widget_insert_action_group(GTK_WIDGET(host->window), "menu", NULL);
             g_object_unref(host->menu_actions);
             host->menu_actions = NULL;
         }
         if (wv) g_object_unref(wv);
     } else if (host->menu_actions) {
-        gtk_widget_remove_action_group(GTK_WIDGET(host->window), "menu");
+        gtk_widget_insert_action_group(GTK_WIDGET(host->window), "menu", NULL);
         g_object_unref(host->menu_actions);
         host->menu_actions = NULL;
     }

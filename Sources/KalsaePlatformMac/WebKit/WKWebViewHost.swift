@@ -150,7 +150,7 @@
 
         // MARK: - 확장 PAL 인터페이스
 
-        public func setBackgroundColor(_ color: NSColor) {
+        internal func setBackgroundColor(_ color: NSColor) {
             webView.setValue(false, forKey: "drawsBackground")
             webView.setValue(color, forKey: "backgroundColor")
         }
@@ -197,13 +197,14 @@
                             cont.resume(throwing: KSError(code: .internal, message: "capturePreview: nil image"))
                             return
                         }
-                        let format: NSBitmapImageRep.FileType = format == 1 ? .jpeg : .png
+                        let formatFileType: NSBitmapImageRep.FileType = format == 1 ? .jpeg : .png
+                        let formatUInt = formatFileType.rawValue
                         let props: [NSBitmapImageRep.PropertyKey: Any] =
                             format == 1
                             ? [.compressionFactor: 0.9]
                             : [:]
                         if let data = image.representations.first as? NSBitmapImageRep {
-                            if let bytes = data.representation(using: format, properties: props) {
+                            if let bytes = data.representation(using: formatUInt, properties: props) {
                                 cont.resume(returning: bytes)
                                 return
                             }
