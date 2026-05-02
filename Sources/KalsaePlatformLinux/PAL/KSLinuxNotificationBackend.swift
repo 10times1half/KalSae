@@ -1,7 +1,7 @@
 #if os(Linux)
     internal import Glibc
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Linux implementation of `KSNotificationBackend` using `notify-send`.
     ///
@@ -49,7 +49,7 @@
             let ok = await runProcess("notify-send", args: args)
             if !ok {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxNotificationBackend: notify-send failed for \"\(notification.title)\"")
             }
         }

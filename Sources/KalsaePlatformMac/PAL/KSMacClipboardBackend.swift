@@ -38,7 +38,7 @@
 
         public func clear() async throws(KSError) {
             await MainActor.run {
-                NSPasteboard.general.clearContents()
+                _ = NSPasteboard.general.clearContents()
             }
         }
 

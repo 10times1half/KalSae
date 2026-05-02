@@ -1,5 +1,5 @@
 #if os(Linux)
-    public import KalsaeCore
+    internal import KalsaeCore
 
     @MainActor
     internal final class KSLinuxHandleRegistry {

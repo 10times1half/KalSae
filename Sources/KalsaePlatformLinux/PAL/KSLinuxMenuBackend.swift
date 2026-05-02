@@ -2,7 +2,6 @@
     internal import CKalsaeGtk
     internal import Glibc
     public import KalsaeCore
-    public import Foundation
 
     /// Linux implementation of `KSMenuBackend` using GMenuModel +
     /// GtkPopoverMenuBar (window menu) and GtkPopoverMenu (context menu).

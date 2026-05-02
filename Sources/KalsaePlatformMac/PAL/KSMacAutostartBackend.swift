@@ -1,7 +1,6 @@
 #if os(macOS)
     internal import ServiceManagement
     public import KalsaeCore
-    public import Foundation
 
     /// SMAppService (macOS 13+)를 사용하는 `KSAutostartBackend`의 macOS 구현체.
     public struct KSMacAutostartBackend: KSAutostartBackend, Sendable {

@@ -198,7 +198,6 @@
                             return
                         }
                         let formatFileType: NSBitmapImageRep.FileType = format == 1 ? .jpeg : .png
-                        let formatUInt = formatFileType.rawValue
                         let props: [NSBitmapImageRep.PropertyKey: Any] =
                             format == 1
                             ? [.compressionFactor: 0.9]

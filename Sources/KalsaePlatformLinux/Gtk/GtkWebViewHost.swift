@@ -86,7 +86,7 @@
     @MainActor
     public final class GtkWebViewHost {
         /// ?븍뜇?억쭗?C ?紐꾨뮞??????? C ??깆뵠?됰슢??뵳???筌롫뗄???룐뫂遊????살쟿???癒곕늄?紐꾩뵠筌왖筌?        /// nonisolated ??묐쓠(e.g. `postJob`)?癒?퐣 ??????怨? ??뚮선????
-        nonisolated(unsafe) fileprivate var hostPtr: OpaquePointer?
+        nonisolated(unsafe) internal var hostPtr: OpaquePointer?
 
         private let log: Logger = KSLog.logger("platform.linux.webview")
         private var inbound: ((String) -> Void)?
@@ -263,29 +263,35 @@
         public func capturePreview(format: Int32) async throws(KSError) -> Data {
             // @unchecked: GTK callback box (read-only post-init) ??passed as opaque context to C
             final class SnapshotBox: @unchecked Sendable {
-                var cont: CheckedContinuation<Data, Error>?
+                var cont: CheckedContinuation<Data, any Error>?
             }
             let box = SnapshotBox()
-            let data: Data = try await withCheckedThrowingContinuation { cont in
-                box.cont = cont
-                let um = Unmanaged.passRetained(box)
-                ks_gtk_host_capture_preview(
-                    hostPtr,
-                    format,
-                    { bytes, len, ctx in
-                        let b = Unmanaged<SnapshotBox>.fromOpaque(ctx!).takeRetainedValue()
-                        if let bytes, len > 0 {
-                            b.cont?.resume(returning: Data(bytes: bytes, count: len))
-                        } else {
-                            b.cont?.resume(
-                                throwing: KSError(
-                                    code: .webviewInitFailed,
-                                    message: "capturePreview: snapshot failed"))
-                        }
-                    },
-                    um.toOpaque())
+            do {
+                let data: Data = try await withCheckedThrowingContinuation {
+                    (cont: CheckedContinuation<Data, any Error>) in
+                    box.cont = cont
+                    let um = Unmanaged.passRetained(box)
+                    ks_gtk_host_capture_preview(
+                        hostPtr,
+                        format,
+                        { bytes, len, ctx in
+                            let b = Unmanaged<SnapshotBox>.fromOpaque(ctx!).takeRetainedValue()
+                            if let bytes, len > 0 {
+                                b.cont?.resume(returning: Data(bytes: bytes, count: len))
+                            } else {
+                                b.cont?.resume(
+                                    throwing: KSError(
+                                        code: .webviewInitFailed,
+                                        message: "capturePreview: snapshot failed"))
+                            }
+                        },
+                        um.toOpaque())
+                }
+                return data
+            } catch {
+                throw error as? KSError
+                    ?? KSError(code: .internal, message: "\(error)")
             }
-            return data
         }
 
         /// `root`?癒?퐣 ?癒?????볥궗??롫즲嚥?`ks://` ??쎄땀 ?紐껊굶??? 獄쏅뗄???븍립??

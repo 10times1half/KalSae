@@ -1,6 +1,20 @@
 #if os(macOS)
     internal import AppKit
     public import KalsaeCore
+    public import Foundation
+
+    extension Result where Failure == KSError {
+        /// Typed-throws unwrap. `Result.get()` rethrows untyped, which loses
+        /// the `throws(KSError)` contract of our PAL functions; this helper
+        /// preserves it.
+        @inline(__always)
+        fileprivate func unwrap() throws(KSError) -> Success {
+            switch self {
+            case .success(let v): return v
+            case .failure(let e): throw e
+            }
+        }
+    }
 
     /// macOS implementation of `KSWindowBackend`.
     ///
@@ -83,13 +97,23 @@
         }
 
         public func webView(for handle: KSWindowHandle) async throws(KSError) -> any KSWebViewBackend {
-            let w = try await resolve(handle)
-            guard let host = w.webviewHost else {
-                throw KSError(
-                    code: .webviewInitFailed,
-                    message: "WebView not initialised for window '\(handle.label)'")
+            let result: Result<WKWebViewHost, KSError> = await MainActor.run {
+                do {
+                    let w = try self.window(for: handle)
+                    guard let host = w.webviewHost else {
+                        return .failure(
+                            KSError(
+                                code: .webviewInitFailed,
+                                message: "WebView not initialised for window '\(handle.label)'"))
+                    }
+                    return .success(host)
+                } catch {
+                    return .failure(
+                        error as? KSError
+                            ?? KSError(code: .internal, message: "\(error)"))
+                }
             }
-            return host
+            return try result.unwrap()
         }
 
         public func all() async -> [KSWindowHandle] {
@@ -205,11 +229,6 @@
         }
 
         // MARK: - Internals
-
-        @MainActor
-        private func resolve(_ handle: KSWindowHandle) throws(KSError) -> KSMacWindow {
-            try window(for: handle)
-        }
 
         private func runMain(
             _ handle: KSWindowHandle,

@@ -363,9 +363,9 @@
 
         // MARK: - Phase 3 라이프사이클 훅
 
-        private var onBeforeCloseSwift: (@MainActor () -> Bool)?
-        private var onSuspendSwift: (@MainActor () -> Void)?
-        private var onResumeSwift: (@MainActor () -> Void)?
+        fileprivate var onBeforeCloseSwift: (@MainActor () -> Bool)?
+        fileprivate var onSuspendSwift: (@MainActor () -> Void)?
+        fileprivate var onResumeSwift: (@MainActor () -> Void)?
         /// C 클로즈 핸들러 트램폴린의 미소유 포인터가 유효하도록 유지함.
         private var closeHandlerBox: CloseHandlerBox?
         /// D-Bus 전원 트램폴린의 미소유 포인터가 유효하도록 유지함.
