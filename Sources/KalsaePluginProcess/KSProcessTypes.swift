@@ -1,5 +1,4 @@
 import Foundation
-public import KalsaeCore
 
 // MARK: - 공개 타입
 
