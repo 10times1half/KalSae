@@ -111,16 +111,16 @@ struct KSInvocationContextTests {
     }
 
     @Test("withValue propagates label to inner scope")
-    func propagatesLabel() async {
-        let label = await KSInvocationContext.$windowLabel.withValue("main") {
+    func propagatesLabel() {
+        let label = KSInvocationContext.$windowLabel.withValue("main") {
             KSInvocationContext.windowLabel
         }
         #expect(label == "main")
     }
 
     @Test("label is nil outside withValue scope")
-    func nilOutsideScope() async {
-        await KSInvocationContext.$windowLabel.withValue("scoped") {
+    func nilOutsideScope() {
+        KSInvocationContext.$windowLabel.withValue("scoped") {
             _ = KSInvocationContext.windowLabel
         }
         #expect(KSInvocationContext.windowLabel == nil)
@@ -143,7 +143,7 @@ struct KSInvocationContextTests {
     @Test("withValue inside detached task sets label correctly")
     func withValueInDetachedTask() async {
         let captured = await Task.detached {
-            await KSInvocationContext.$windowLabel.withValue("injected") {
+            KSInvocationContext.$windowLabel.withValue("injected") {
                 KSInvocationContext.windowLabel
             }
         }.value
