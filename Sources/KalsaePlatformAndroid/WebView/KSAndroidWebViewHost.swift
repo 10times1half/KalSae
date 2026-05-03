@@ -101,12 +101,12 @@
     ///
     /// The IPC flow is:
     /// ```
-    /// JS  ?? __KS_bridge.postMessage(json)
-    ///     ?? JNI @JavascriptInterface ??Swift onInboundMessage(json)
-    ///     ?? KSAndroidBridge.handleInbound(json)
-    ///     ?? KSIPCBridgeCore dispatches command
-    ///     ?? sendResponse  ?? postJSON(json)
-    ///     ?? JNI evaluateJavascript  ?? JS window.__KS_receive(msg)
+    /// JS  → __KS_bridge.postMessage(json)
+    ///     → JNI @JavascriptInterface → Swift onInboundMessage(json)
+    ///     → KSAndroidBridge.handleInbound(json)
+    ///     → KSIPCBridgeCore dispatches command
+    ///     → sendResponse → postJSON(json)
+    ///     → JNI evaluateJavascript → JS window.__KS_receive(msg)
     /// ```
     @MainActor
     public final class KSAndroidWebViewHost {
@@ -133,13 +133,13 @@
         }
         private var _onLoadURL: ((String) -> Void)?
 
-        // MARK: - Inbound (Kotlin ??Swift)
+        // MARK: - Inbound (Kotlin → Swift)
 
         private var inboundHandler: ((String) -> Void)?
         nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
 
         /// Kotlin calls this from the `@JavascriptInterface` method.
-        /// Thread-safe ??the Android WebView may call this off the main thread.
+        /// Thread-safe — the Android WebView may call this off the main thread.
         nonisolated public func onInboundMessage(_ json: String) {
             Task { @MainActor [weak self] in
                 self?.inboundHandler?(json)
@@ -203,7 +203,7 @@
 
         public func openDevTools() throws(KSError) {
             // Enable in debug builds via WebView.setWebContentsDebuggingEnabled(true)
-            // ??that call must be made from Kotlin before WebView creation.
+            // — that call must be made from Kotlin before WebView creation.
         }
     }
 
@@ -221,7 +221,7 @@
                     "evaluateJavaScript: Android evaluateJS bridge not installed")
             }
             handler(source)
-            return nil  // Return value collection requires a JNI callback ??deferred.
+            return nil  // Return value collection requires a JNI callback — deferred.
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
@@ -251,7 +251,7 @@
         public func setContentSecurityPolicy(_ csp: String) async throws(KSError) {
             lock.withLock { _csp = csp }
             // CSP enforcement on Android is applied via meta-tag injection in
-            // documentStartScript() ??done automatically by KSAndroidBridge.
+            // documentStartScript() — done automatically by KSAndroidBridge.
         }
 
         public func openDevTools() async throws(KSError) {

@@ -19,8 +19,12 @@
                 panel.canChooseDirectories = false
                 if let dir = options.defaultDirectory { panel.directoryURL = dir }
                 if !options.filters.isEmpty { applyFilters(options.filters, to: panel) }
-                let nsParent = resolveParent(parent)
-                let response = nsParent != nil ? await panel.beginSheetModal(for: nsParent!) : panel.runModal()
+                let response: NSApplication.ModalResponse
+                if let nsParent = resolveParent(parent) {
+                    response = await panel.beginSheetModal(for: nsParent)
+                } else {
+                    response = panel.runModal()
+                }
                 return response == .OK ? panel.urls : []
             }
             return urls
@@ -57,8 +61,12 @@
                 panel.canChooseDirectories = true
                 panel.allowsMultipleSelection = false
                 if let dir = options.defaultDirectory { panel.directoryURL = dir }
-                let nsParent = resolveParent(parent)
-                let response = nsParent != nil ? await panel.beginSheetModal(for: nsParent!) : panel.runModal()
+                let response: NSApplication.ModalResponse
+                if let nsParent = resolveParent(parent) {
+                    response = await panel.beginSheetModal(for: nsParent)
+                } else {
+                    response = panel.runModal()
+                }
                 return response == .OK ? panel.url : nil
             }
         }
@@ -98,11 +106,12 @@
                     alert.addButton(withTitle: "Cancel")
                 }
 
-                let nsParent = resolveParent(parent)
-                let response =
-                    nsParent != nil
-                    ? await alert.beginSheetModal(for: nsParent!)
-                    : alert.runModal()
+                let response: NSApplication.ModalResponse
+                if let nsParent = resolveParent(parent) {
+                    response = await alert.beginSheetModal(for: nsParent)
+                } else {
+                    response = alert.runModal()
+                }
 
                 switch response {
                 case .alertFirstButtonReturn: return options.buttons == .yesNo ? .yes : .ok

@@ -1,7 +1,10 @@
 #if os(macOS)
-    /// `WKUserContentController.addUserScript`瑜??듯빐 紐⑤뱺 ?꾨젅?꾩뿉 二쇱엯?섎뒗 JavaScript.
-    /// `KalsaePlatformWindows.KSRuntimeJS`??Windows ?고??꾧낵 ?좎궗?섏?留?    /// ?꾩넚 諛⑹떇???ㅻⅤ怨?(`webkit.messageHandlers.ks.postMessage` ???    /// `window.chrome.webview.postMessage`) ?묐떟怨??대깽?몃? ?꾨떖?섍린 ?꾪빐
-    /// ?ㅼ씠?곕툕 痢≪씠 `evaluateJavaScript`濡??몄텧?섎뒗 `__kb_receive` ?⑥닔瑜?    /// ?몄텧?쒕떎.
+    /// `WKUserContentController.addUserScript`를 통해 모든 프레임에 주입되는 JavaScript.
+    /// `KalsaePlatformWindows.KSRuntimeJS`와 Windows 버전과 구조가 같지만
+    /// 통신 방식만 다르다(`webkit.messageHandlers.ks.postMessage` 대신
+    /// `window.chrome.webview.postMessage`). 플랫폼 간 차이를
+    /// 추상화하기 위해 `evaluateJavaScript`로 전달하는 `__kb_receive` 함수를
+    /// 노출한다.
     internal enum KSRuntimeJS {
         static let source: String = #"""
                         (function () {
@@ -73,8 +76,8 @@
               window.__KS_ = KB;
               if (!window.Kalsae) window.Kalsae = KB;
 
-              // ?ㅼ씠?곕툕 履쎌뿉?쒕쭔 ?곕뒗 ?? ?섏씠吏 JS媛 ?고??꾩쓣 媛?ν븯湲??대졄?꾨줉
-              // ?숆껐??`KB` 媛앹껜 諛뽰뿉 ?묐떎.
+              // 플랫폼 측에 전달되는 모든 JS가 이 함수를 사용할 수 있다고 가정하므로
+              // `KB` 객체 생성 후에 배치한다.
               window.__KS_receive = handleInbound;
             })();
             """#

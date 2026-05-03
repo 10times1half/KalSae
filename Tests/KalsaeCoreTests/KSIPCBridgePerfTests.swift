@@ -33,7 +33,8 @@ struct KSIPCBridgePerfTests {
             try? await block()
         }
         let elapsed = clock.now - start
-        let ns = UInt64(elapsed.components.seconds) * 1_000_000_000
+        let ns =
+            UInt64(elapsed.components.seconds) * 1_000_000_000
             + UInt64(elapsed.components.attoseconds / 1_000_000_000)
         return ns / UInt64(iterations)
     }
@@ -53,7 +54,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] encodeForJS small  : \(nsPerCall) ns/call (\(iterations) iters)")
     }
@@ -72,7 +73,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] encodeForJS 1KB    : \(nsPerCall) ns/call (\(iterations) iters)")
     }
@@ -91,7 +92,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] encodeForJS 100KB  : \(nsPerCall) ns/call (\(iterations) iters)")
     }
@@ -121,7 +122,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] roundTrip small    : \(nsPerCall) ns/call (\(iterations) iters, posts=\(posts.count))")
     }
@@ -149,7 +150,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] roundTrip 1KB      : \(nsPerCall) ns/call (\(iterations) iters)")
     }
@@ -186,7 +187,7 @@ struct KSIPCBridgePerfTests {
         let elapsed = ContinuousClock.now - start
         let nsPerCall =
             (UInt64(elapsed.components.seconds) * 1_000_000_000
-            + UInt64(elapsed.components.attoseconds / 1_000_000_000))
+                + UInt64(elapsed.components.attoseconds / 1_000_000_000))
             / UInt64(iterations)
         print("[Perf] emit               : \(nsPerCall) ns/call (\(iterations) iters, posts=\(posts.count))")
     }

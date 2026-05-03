@@ -407,8 +407,8 @@
         public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
             onSuspendSwift = cb
             ensurePowerBox()
-            if cb != nil {
-                let ctx = Unmanaged.passUnretained(powerBox!).toOpaque()
+            if cb != nil, let pb = powerBox {
+                let ctx = Unmanaged.passUnretained(pb).toOpaque()
                 ks_gtk_host_set_on_suspend(
                     webview.hostPtr,
                     linuxSuspendTrampoline, ctx)
@@ -420,8 +420,8 @@
         public func setOnResume(_ cb: (@MainActor () -> Void)?) {
             onResumeSwift = cb
             ensurePowerBox()
-            if cb != nil {
-                let ctx = Unmanaged.passUnretained(powerBox!).toOpaque()
+            if cb != nil, let pb = powerBox {
+                let ctx = Unmanaged.passUnretained(pb).toOpaque()
                 ks_gtk_host_set_on_resume(
                     webview.hostPtr,
                     linuxResumeTrampoline, ctx)

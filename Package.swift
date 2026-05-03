@@ -16,6 +16,7 @@ let package = Package(
         .library(name: "Kalsae", targets: ["Kalsae"]),
         .library(name: "KalsaeCore", targets: ["KalsaeCore"]),
         .library(name: "KalsaeMacros", targets: ["KalsaeMacros"]),
+        .library(name: "KalsaePluginProcess", targets: ["KalsaePluginProcess"]),
         .executable(name: "kalsae-demo", targets: ["KalsaeDemo"]),
         .executable(name: "kalsae", targets: ["KalsaeCLI"]),
     ],
@@ -282,6 +283,18 @@ let package = Package(
                 "KalsaeCore",
             ],
             path: "Tests/KalsaePlatformAndroidTests",
+            swiftSettings: commonSwiftSettings
+        ),
+        .target(
+            name: "KalsaePluginProcess",
+            dependencies: ["KalsaeCore"],
+            path: "Sources/KalsaePluginProcess",
+            swiftSettings: commonSwiftSettings
+        ),
+        .testTarget(
+            name: "KalsaePluginProcessTests",
+            dependencies: ["KalsaePluginProcess", "KalsaeCore"],
+            path: "Tests/KalsaePluginProcessTests",
             swiftSettings: commonSwiftSettings
         ),
     ]

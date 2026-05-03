@@ -119,9 +119,9 @@ public final class KSIPCBridgeCore {
             // payload 키 부재 → nil, null → Data("null"), 그 외 → 직렬화 bytes.
             let pd: Data?
             switch top["payload"] {
-            case .none:                         pd = nil
+            case .none: pd = nil
             case .some(let v) where v is NSNull: pd = Data("null".utf8)
-            case .some(let v):                  pd = Self.rawJSONBytes(v)
+            case .some(let v): pd = Self.rawJSONBytes(v)
             }
             onEvent?(name, pd)
         default:
@@ -140,7 +140,7 @@ public final class KSIPCBridgeCore {
         }
         // 스칼라(숫자·문자열·불리언): 1-원소 배열로 감싸 직렬화 후 [ ] 제거.
         guard let wrapped = try? JSONSerialization.data(withJSONObject: [value]),
-              wrapped.count >= 2
+            wrapped.count >= 2
         else { return Data("null".utf8) }
         return Data(wrapped[1..<wrapped.count - 1])
     }
@@ -203,7 +203,7 @@ public final class KSIPCBridgeCore {
         var out = String()
         out.reserveCapacity(128)
         out.append("{\"kind\":\"")
-        out.append(msg.kind.rawValue)   // enum rawValue는 ASCII 안전 토큰
+        out.append(msg.kind.rawValue)  // enum rawValue는 ASCII 안전 토큰
         out.append("\"")
         if let id = msg.id {
             out.append(",\"id\":")
@@ -246,7 +246,7 @@ public final class KSIPCBridgeCore {
                 let h = String(u.value, radix: 16)
                 if h.count < 2 { out.append("0") }
                 out.append(h)
-            case 0x2F where out.last == "<":   // </ → <\/ (XSS 방지)
+            case 0x2F where out.last == "<":  // </ → <\/ (XSS 방지)
                 out.append("\\/")
             case 0x2028: out.append("\\u2028")  // LS (JS line terminator)
             case 0x2029: out.append("\\u2029")  // PS (JS line terminator)
@@ -261,7 +261,7 @@ public final class KSIPCBridgeCore {
     private static func appendJSEscapedRaw(into out: inout String, _ s: String) {
         for u in s.unicodeScalars {
             switch u.value {
-            case 0x2F where out.last == "<":   // </ → <\/ (XSS 방지)
+            case 0x2F where out.last == "<":  // </ → <\/ (XSS 방지)
                 out.append("\\/")
             case 0x2028: out.append("\\u2028")
             case 0x2029: out.append("\\u2029")

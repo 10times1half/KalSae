@@ -118,6 +118,28 @@ public protocol KSWindowState: Sendable {
     /// `format == 0`이면 PNG, `format == 1`이면 JPEG를 반환한다. 다른
     /// 값은 PNG로 처리된다.
     func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data
+
+    // MARK: - Display enumeration
+
+    /// 현재 연결된 모든 디스플레이를 열거한다.
+    func listDisplays() async throws(KSError) -> [KSDisplayInfo]
+
+    /// `handle`이 위치한 디스플레이를 반환한다.
+    /// 창이 여러 모니터에 걸쳐 있을 경우 가장 많은 면적을 포함하는 디스플레이를 반환한다.
+    func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo
+
+    // MARK: - Taskbar integration
+
+    /// 작업 표시줄의 버튼에 진행 상태를 표시한다.
+    /// 지원하지 않는 플랫폼에서는 no-op (기본 구현).
+    func setTaskbarProgress(_ handle: KSWindowHandle, progress: KSTaskbarProgress) async throws(KSError)
+
+    /// 작업 표시줄 버튼 위에 오버레이 아이콘을 표시한다.
+    /// `iconPath == nil`이면 기존 오버레이 아이콘을 제거한다.
+    /// 지원하지 않는 플랫폼에서는 no-op (기본 구현).
+    func setOverlayIcon(
+        _ handle: KSWindowHandle, iconPath: String?, description: String?
+    ) async throws(KSError)
 }
 public protocol KSWindowBackend:
     KSWindowLifecycle, KSWindowGeometry, KSWindowState
@@ -190,4 +212,22 @@ extension KSWindowState {
     public func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data {
         try _unsupportedThrow("capturePreview")
     }
+
+    // MARK: - Display enumeration defaults (throw)
+
+    public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
+        try _unsupportedThrow("listDisplays")
+    }
+    public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
+        try _unsupportedThrow("currentDisplay")
+    }
+
+    // MARK: - Taskbar integration defaults (no-op)
+
+    public func setTaskbarProgress(
+        _ handle: KSWindowHandle, progress: KSTaskbarProgress
+    ) async throws(KSError) {}
+    public func setOverlayIcon(
+        _ handle: KSWindowHandle, iconPath: String?, description: String?
+    ) async throws(KSError) {}
 }

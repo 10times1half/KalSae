@@ -4,9 +4,10 @@
     public import KalsaeCore
     public import Foundation
 
-    /// ?怨쀫춦筌띾뜆???????뽰젫??JS ?怨??? Windows/macOS ?怨??袁㏓궢 ??덉뵬??    /// ?④쑴鍮? `window.__KS_.invoke/listen/emit`.
-    /// ?袁⑸꽊: JS?萸냭ift??`window.webkit.messageHandlers.ks.postMessage(obj)`;
-    /// Swift?臾쿞??`window.__KS_receive(obj)` (evaluate_javascript嚥??紐꾪뀱).
+    /// Linux WebView에 주입되는 브리지 JavaScript. Windows/macOS와 동일한
+    /// 역할을 하지만 `window.__KS_.invoke/listen/emit`을 노출한다.
+    /// 통신: JS→Swift는 `window.webkit.messageHandlers.ks.postMessage(obj)`;
+    /// Swift→JS는 `window.__KS_receive(obj)` (evaluate_javascript로 전달).
     internal enum KSRuntimeJS {
         static let source: String = #"""
                                     (function () {
@@ -81,18 +82,20 @@
             """#
     }
 
-    /// `CKalsaeGtk`????????? Swift ??묐쓠. `KSGtkHost*`????????랁?    /// `GtkBridge`揶쎛 ?袁⑹뒄嚥???롫뮉 ?臾? ?紐낃숲??륁뵠??? ?紐꾪뀱??뺣뼄.
-    /// `WebView2Host` / `WKWebViewHost`?? ???臾볥립??
+    /// `CKalsaeGtk`를 감싸는 Swift 래퍼. `KSGtkHost*`를 소유하며
+    /// `GtkBridge`를 통해 IPC 코어와 연결된다. `WebView2Host` /
+    /// `WKWebViewHost`와 동일한 역할을 한다.
     @MainActor
     public final class GtkWebViewHost {
-        /// ?븍뜇?억쭗?C ?紐꾨뮞??????? C ??깆뵠?됰슢??뵳???筌롫뗄???룐뫂遊????살쟿???癒곕늄?紐꾩뵠筌왖筌?        /// nonisolated ??묐쓠(e.g. `postJob`)?癒?퐣 ??????怨? ??뚮선????
+        /// C 함수가 소유한 C opaque 포인터. hostPtr은 nonisolated 컨텍스트
+        /// (e.g. `postJob`)에서도 읽을 수 있어야 한다.
         nonisolated(unsafe) internal var hostPtr: OpaquePointer?
 
         private let log: Logger = KSLog.logger("platform.linux.webview")
         private var inbound: ((String) -> Void)?
 
-        /// C 筌롫뗄?놅쭪? ?紐껋삪??????븍뜇?억쭗??뚢뫂???쎈뱜 ????怨? ???퉸
-        /// ??Swift 揶쏆빘猿쒏에????툡??????덈즲嚥??醫???롫뮉 ??疫?獄쏅벡??
+        /// C 콜백 트램폴린에 self를 전달하기 위한 힙 할당 홀더.
+        /// Swift의 약한 참조를 통해 retain cycle을 방지한다.
         private var selfBox: SelfBox?
 
         public init(appId: String, title: String, width: Int, height: Int) {
@@ -261,7 +264,7 @@
         }
 
         public func capturePreview(format: Int32) async throws(KSError) -> Data {
-            // @unchecked: GTK callback box (read-only post-init) ??passed as opaque context to C
+            // @unchecked: GTK callback box (read-only post-init) — passed as opaque context to C
             final class SnapshotBox: @unchecked Sendable {
                 var cont: CheckedContinuation<Data, any Error>?
             }
@@ -294,13 +297,13 @@
             }
         }
 
-        /// `root`?癒?퐣 ?癒?????볥궗??롫즲嚥?`ks://` ??쎄땀 ?紐껊굶??? 獄쏅뗄???븍립??
-        /// `run()` ?袁⑸퓠 ?紐꾪뀱??곷튊 ??뺣뼄 ??WebKit?? ???뚢뫂???쎈뱜
-        /// ??밴쉐 ??뽯퓠筌???쎄땀 ?紐껊굶??? ?源낆쨯??뺣뼄.
+        /// `root`에서 에셋을 제공하도록 `ks://` 스킴 핸들러를 바인딩한다.
+        /// `run()` 이전에 호출해야 한다. WebKit의 스킴 핸들러는
+        /// 한 번 설정되면 교체할 수 없으므로 최초 한 번만 호출한다.
         public func setAssetRoot(_ root: URL) throws(KSError) {
             let resolver = KSAssetResolver(root: root)
             let box = ResolverBox(resolver: resolver)
-            // ??곸읈 ?귐듽뚩린袁? ?대Ŋ猿??뺣뼄. C 筌잛럩肉????μ뵬 ???숋쭕?鈺곕똻??
+            // 이전 박스를 해제한다. C 트램폴린이 더 이상 참조하지 않음을 보장한다.
             self.resolverBox?.release()
             let um = Unmanaged.passRetained(box)
             self.resolverBox = um
@@ -308,13 +311,13 @@
                 hostPtr, linuxSchemeResolverTrampoline, um.toOpaque())
         }
 
-        /// 筌뤴뫀諭??얜챷苑???뽰삂 ????쎈뻬??JS ??삳빍??ъ뱽 ??疫꿸퀣肉???곕떽???뺣뼄.
+        /// 모든 문서 시작 시 실행될 JS 스니펫을 대기열에 추가한다.
         public func addDocumentCreatedScript(_ script: String) throws(KSError) {
             ks_gtk_host_add_user_script(hostPtr, script)
         }
 
-        /// `ks://` ?臾먮뼗筌띾뜄??獄쏆뮉六??롫뮉 Content-Security-Policy ??삳쐭????쇱젟??뺣뼄.
-        /// `setAssetRoot`?? ??끸뵲?怨몄뵠筌? ??쎄땀 ?紐껊굶??? ?癒?????볥궗?????춳???怨몄뒠??뺣뼄.
+        /// `ks://` 응답에 적용할 Content-Security-Policy 헤더를 설정한다.
+        /// `setAssetRoot`보다 먼저 호출해야 스킴 핸들러가 생성될 때 적용된다.
         public func setResponseCSP(_ csp: String) throws(KSError) {
             ks_gtk_host_set_response_csp(hostPtr, csp)
         }
@@ -329,13 +332,13 @@
 
         // MARK: - Window state persistence
 
-        /// ??뽮쉐???袁⑸퓠 ?怨몄뒠??癰귣벊???怨밴묶???紐꾨뮞?紐꾨퓠 癰귣떯???뺣뼄.
-        /// `run()` ?紐꾪뀱 ??=activate 獄쏆뮇源????癒?춸 ???揶쎛 ??덈뼄.
-        /// Wayland?癒?퐣 ?袁⑺뒄???뚮똾猷뤄쭪??怨? ???젫???嚥??얜똻???렽? ??由?筌ㅼ뮆???
-        /// ?袁⑷퍥?遺얇늺?? 筌뤴뫀諭???띻펾?癒?퐣 ?怨몄뒠??뺣뼄.
+        /// 복원할 윈도우 상태를 등록한다. `run()` 호출(=activate) 이전에
+        /// 호출되어야 한다. Wayland에서는 위치 정보가 무시되고
+        /// X11에서만 위치가 복원된다.
+        /// 최대화/전체화면 상태는 모든 환경에서 복원된다.
         public func applyRestoredState(_ state: KSPersistedWindowState) {
-            // ?類ㅼ퐠: ?袁⑺뒄??Wayland?癒?퐣 ?얜똻????筌? X11?癒?퐣???怨몄뒠??뺣뼄.
-            // C 筌β돦肉??X11 surface ?????野꺜??釉?첋?嚥???湲?has_position=1嚥??袁⑤뼎.
+            // 참고: Wayland에서는 위치가 무시되고 X11에서만 위치가 복원된다.
+            // C 트램폴린이 X11 surface 유무를 감지해 has_position=1로 설정한다.
             ks_gtk_host_set_pending_restore_state(
                 hostPtr,
                 Int32(state.x), Int32(state.y),
@@ -345,11 +348,12 @@
                 state.fullscreen ? 1 : 0)
         }
 
-        /// ??덈즲???怨밴묶 ????sink???源낆쨯??뺣뼄. close-request ??뽰젎??        /// 筌롫뗄????살쟿??뽯퓠????녿┛?怨몄몵嚥??紐꾪뀱??뺣뼄. `nil` ?袁⑤뼎 ????곸젫.
+        /// 윈도우 상태 저장 sink를 등록한다. close-request 시점에
+        /// 메인 스레드에서 동기적으로 호출된다. `nil`을 전달하면 제거된다.
         public func setWindowStateSaveSink(
             _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
         ) {
-            // ??곸읈 獄쏅벡????곸젫.
+            // 이전 박스를 해제한다.
             stateSaveBox?.release()
             stateSaveBox = nil
 
@@ -368,8 +372,8 @@
 
         private var stateSaveBox: Unmanaged<StateSaveBox>?
 
-        /// ?袁⑹삺 ??덈즲???怨밴묶????녿┛ 鈺곌퀬?? C 筌β돦肉???덈즲?怨? ?袁⑹춦
-        /// 筌띾슢諭???筌왖 ??? 野껋럩??`nil`??獄쏆꼹???뺣뼄.
+        /// 현재 윈도우 상태를 조회한다. C 트램폴린이 윈도우 상태를
+        /// 읽어 반환한다. 실패 시 `nil`을 반환한다.
         public func currentWindowState() -> KSPersistedWindowState? {
             var x: Int32 = 0
             var y: Int32 = 0
@@ -404,14 +408,14 @@
 
     /// Owns a `KSAssetResolver` for the duration of the scheme handler's
     /// lifetime. Read-only from C side.
-    // @unchecked: GTK callback box (read-only post-init) ??passed as opaque context to C
+    // @unchecked: GTK callback box (read-only post-init) — passed as opaque context to C
     private final class ResolverBox: @unchecked Sendable {
         let resolver: KSAssetResolver
         init(resolver: KSAssetResolver) { self.resolver = resolver }
     }
 
     /// Holder for the window-state-save sink. Read-only from C side.
-    // @unchecked: GTK callback box (read-only post-init) ??passed as opaque context to C
+    // @unchecked: GTK callback box (read-only post-init) — passed as opaque context to C
     private final class StateSaveBox: @unchecked Sendable {
         let sink: @MainActor (KSPersistedWindowState) -> Void
         init(sink: @escaping @MainActor (KSPersistedWindowState) -> Void) {
@@ -458,8 +462,9 @@
             let box = Unmanaged<ResolverBox>.fromOpaque(ctxPtr).takeUnretainedValue()
             do {
                 let asset = try box.resolver.resolve(path: path)
-                // C 筌잛럩肉??g_free???紐꾪뀱??????덈즲嚥?malloc??곗쨮 ?醫딅뼣??뺣뼄(glib malloc??
-                // 筌왖?癒?┷??筌뤴뫀諭????삸??깅퓠??libc malloc???怨뱀깈 ??곸뒠 揶쎛??.
+                // C 트램폴린이 g_free로 해제할 수 있도록 malloc으로 할당한다(glib malloc과
+                // 동일한 힙을 사용한다고 가정). Swift의 libc malloc과 동일한 힙이므로
+                // 안전하다.
                 let size = asset.data.count
                 let buf = UnsafeMutableRawPointer.allocate(
                     byteCount: size, alignment: 1)
@@ -494,7 +499,7 @@
     /// Holder used to pass `self` through a C callback as opaque context.
     /// `@unchecked Sendable` because it's only ever read from the GTK main
     /// thread.
-    // @unchecked: GTK callback box (read-only post-init) ??weak ref captured in C callback
+    // @unchecked: GTK callback box (read-only post-init) — weak ref captured in C callback
     private final class SelfBox: @unchecked Sendable {
         weak var owner: GtkWebViewHost?
         init(owner: GtkWebViewHost) { self.owner = owner }

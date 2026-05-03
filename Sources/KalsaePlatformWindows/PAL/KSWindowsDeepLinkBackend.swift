@@ -157,7 +157,8 @@
             let byteCount = DWORD(utf16.count * MemoryLayout<UInt16>.size)
             let setHr = valueName.withUTF16Pointer { name -> LONG in
                 utf16.withUnsafeBufferPointer { ptr -> LONG in
-                    ptr.baseAddress!.withMemoryRebound(
+                    guard let base = ptr.baseAddress else { return LONG(ERROR_INVALID_PARAMETER) }
+                    return base.withMemoryRebound(
                         to: BYTE.self, capacity: Int(byteCount)
                     ) { bytes in
                         RegSetValueExW(hKey, name, 0, DWORD(REG_SZ), bytes, byteCount)
@@ -190,7 +191,8 @@
             var buf = [UInt16](repeating: 0, count: count)
             let readHr = valueName.withUTF16Pointer { name -> LONG in
                 buf.withUnsafeMutableBufferPointer { bp -> LONG in
-                    bp.baseAddress!.withMemoryRebound(
+                    guard let base = bp.baseAddress else { return LONG(ERROR_INVALID_PARAMETER) }
+                    return base.withMemoryRebound(
                         to: BYTE.self, capacity: Int(size)
                     ) { bytes in
                         RegQueryValueExW(hKey, name, nil, &typ, bytes, &size)

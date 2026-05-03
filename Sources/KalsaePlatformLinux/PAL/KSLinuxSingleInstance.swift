@@ -74,9 +74,10 @@
                 return false
             }
             withUnsafeMutableBytes(of: &addr.sun_path) { buf in
+                guard let dst = buf.baseAddress else { return }
                 socketPath.withCString { src in
                     _ = strncpy(
-                        buf.baseAddress!.assumingMemoryBound(to: CChar.self),
+                        dst.assumingMemoryBound(to: CChar.self),
                         src,
                         buf.count - 1)
                 }
@@ -114,8 +115,9 @@
             addr.sun_family = sa_family_t(AF_UNIX)
             socketPath.withCString { src in
                 withUnsafeMutableBytes(of: &addr.sun_path) { buf in
+                    guard let dst = buf.baseAddress else { return }
                     _ = strncpy(
-                        buf.baseAddress!.assumingMemoryBound(to: CChar.self),
+                        dst.assumingMemoryBound(to: CChar.self),
                         src,
                         buf.count - 1)
                 }

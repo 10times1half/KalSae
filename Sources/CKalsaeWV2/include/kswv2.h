@@ -15,6 +15,7 @@
 
 #include <stdint.h>
 #include <wchar.h>
+#include "kswv2_taskbar.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,10 +56,10 @@ int32_t KSWV2_CreateEnvironment(
 
 void KSWV2_Env_Release(KSWV2Env env);
 
-/// `GetAvailableCoreWebView2BrowserVersionString`를 래픡한다.
+/// `GetAvailableCoreWebView2BrowserVersionString`를 래핑한다.
 /// 반환된 `*version_out`은 호출자가 소유하며 `CoTaskMemFree`로
 /// 해제해야 한다. 성공/실패 HRESULT만 필요할 때는
-/// `version_out`을 NULL로 줌수 있다. 성공 시 0, 실패 시 Win32 HRESULT.
+/// `version_out`을 NULL로 줄 수 있다. 성공 시 0, 실패 시 Win32 HRESULT.
 int32_t KSWV2_GetAvailableBrowserVersion(
     const wchar_t *browser_executable_folder,   // NULL 가능
     wchar_t **version_out);                     // NULL 가능
@@ -118,19 +119,19 @@ int32_t KSWV2_Controller_SetAllowExternalDrop(KSWV2Controller controller, int32_
 // `E_NOINTERFACE`를 그대로 돌려준다 — 호출자는 무시할 수 있다.
 
 /// 컨트롤러의 기본 배경 색을 설정한다. ARGB 바이트 순서:
-/// `a`는 알파 쳬널, `r/g/b`는 색상 쳬널 (각 0..255).
+/// `a`는 알파 채널, `r/g/b`는 색상 채널 (각 0..255).
 /// `a = 0` + `KSWindowConfig.transparent` 윈도우를 조합하면
 /// WebView 자체를 투명하게 만들 수 있다. `ICoreWebView2Controller2`이 필요하다.
 int32_t KSWV2_Controller_SetDefaultBackgroundColor(
     KSWV2Controller controller,
     uint8_t a, uint8_t r, uint8_t g, uint8_t b);
 
-/// 컨트롤러 레벨 즐 배율을 설정한다. `1.0`은 원본; 허용
+/// 컨트롤러 레벨 줌 배율을 설정한다. `1.0`은 원본; 허용
 /// 범위는 WebView2 SDK를 따른다 (≈ 0.25..5.0).
 int32_t KSWV2_Controller_SetZoomFactor(
     KSWV2Controller controller, double factor);
 
-/// 현재 컨트롤러 술 배율을 읽는다. 성공 시 0을 반환하고
+/// 현재 컨트롤러 줌 배율을 읽는다. 성공 시 0을 반환하고
 /// 배율을 `*out_factor`에 쓴다. 두 인수 중 하나라도 NULL이면
 /// `E_POINTER`를 반환한다.
 int32_t KSWV2_Controller_GetZoomFactor(

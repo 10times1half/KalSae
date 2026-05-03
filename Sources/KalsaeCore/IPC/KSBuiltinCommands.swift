@@ -35,12 +35,30 @@ internal enum KSAnyJSON: Codable, Sendable {
     init(from decoder: any Decoder) throws {
         // Codable 프로토콜 — untyped throws (변경 불가)
         let c = try decoder.singleValueContainer()
-        if c.decodeNil() { self = .null; return }
-        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
-        if let d = try? c.decode(Double.self) { self = .double(d); return }
-        if let s = try? c.decode(String.self) { self = .string(s); return }
-        if let a = try? c.decode([KSAnyJSON].self) { self = .array(a); return }
-        if let o = try? c.decode([String: KSAnyJSON].self) { self = .object(o); return }
+        if c.decodeNil() {
+            self = .null
+            return
+        }
+        if let b = try? c.decode(Bool.self) {
+            self = .bool(b)
+            return
+        }
+        if let d = try? c.decode(Double.self) {
+            self = .double(d)
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            self = .string(s)
+            return
+        }
+        if let a = try? c.decode([KSAnyJSON].self) {
+            self = .array(a)
+            return
+        }
+        if let o = try? c.decode([String: KSAnyJSON].self) {
+            self = .object(o)
+            return
+        }
         throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unknown JSON value")
     }
 
@@ -123,6 +141,14 @@ public enum KSBuiltinCommands {
         public let os: String
         public let arch: String
         public let platform: String
+        /// OS 버전 문자열 (예: `"Windows 11 (10.0.22631)"`). 알 수 없는 경우 `nil`.
+        public let osVersion: String?
+        /// 시스템 로케일 BCP-47 태그 (예: `"ko-KR"`). 알 수 없는 경우 `nil`.
+        public let locale: String?
+        /// 앱 번들 버전 (예: `"1.0.0"`). 알 수 없는 경우 `nil`.
+        public let appVersion: String?
+        /// Kalsae 프레임워크 버전 (예: `"0.3.1"`).
+        public let kalsaeVersion: String
     }
 
     // MARK: - Internal arg types
@@ -169,6 +195,15 @@ public enum KSBuiltinCommands {
     }
     struct CaptureArg: Codable, Sendable {
         let format: String?
+        let window: String?
+    }
+    struct TaskbarProgressArg: Codable, Sendable {
+        let progress: KSTaskbarProgress
+        let window: String?
+    }
+    struct OverlayIconArg: Codable, Sendable {
+        let iconPath: String?
+        let description: String?
         let window: String?
     }
     struct WindowEmitArg: Codable, Sendable {
@@ -331,4 +366,16 @@ func kalsaeArchName() -> String {
     #else
         return "unknown"
     #endif
+}
+
+/// OS 버전 문자열을 반환한다.
+/// - 모든 플랫폼: `ProcessInfo.operatingSystemVersion` 으로부터 Major.Minor.Patch 형식.
+func kalsaeOSVersionString() -> String? {
+    let v = ProcessInfo.processInfo.operatingSystemVersion
+    return "\(v.majorVersion).\(v.minorVersion).\(v.patchVersion)"
+}
+
+/// 시스템 로케일 BCP-47 태그를 반환한다 (예: `"ko-KR"`).
+func kalsaeSystemLocale() -> String? {
+    return Locale.current.identifier.replacingOccurrences(of: "_", with: "-")
 }

@@ -14,9 +14,9 @@
                                     (function () {
                           if (window.__KS_) return;
 
-                          // ??????덈뮉 ?癒?쑎 ????? `invoke`??筌뤴뫀諭?reject??
-                          // ???紐꾨뮞??곷뮞??筌띾슢諭?? ?紐꾪뀱?癒? `instanceof KalsaeError`??
-                          // `.code`嚥??브쑨由??????뉗쓺 ??뺣뼄.
+                          // 플랫폼 측에서 `invoke`가 reject하는 오류 객체는
+                          // 항상 이 클래스의 인스턴스여서 `instanceof KalsaeError`로
+                          // `.code`를 안전하게 읽을 수 있다.
                           class KalsaeError extends Error {
                             constructor(payload) {
                               const p = (payload && typeof payload === 'object') ? payload : {};
@@ -33,14 +33,14 @@
                           let nextId = 1;
 
                           function nativePost(obj) {
-                            // 揶쏆빘猿쒐몴?域밸챶?嚥??袁⑸꽊??뺣뼄. WebView2????? JSON??곗쨮 ?袁⑤뼎??랁?
-                            // ICoreWebView2WebMessageReceivedEventArgs::get_WebMessageAsJson??
-                            // ??쇱뵠?怨뺥닏 筌β돦肉??筌욊낮??遺얜쭆 ?類κ묶?????젻餓Β?? ??由??stringify??롢늺
-                            // ??곸㉦ ?紐꾪맜??몃쭆 JSON ?얜챷???곸뵠 ??뤿선甕곌쑬???
+                            // WebView2로 메시지를 전송한다. WebView2는 이미 JSON으로 직렬화되어
+                            // ICoreWebView2WebMessageReceivedEventArgs::get_WebMessageAsJson을
+                            // 통해 도착하므로 중복 stringify를 피하기 위해
+                            // 객체를 그대로 전달한다.
                             window.chrome.webview.postMessage(obj);
                           }
 
-                          // ??뤿뻿 筌롫뗄?놅쭪?(Swift -> JS)????由경에??袁⑤뼎??뺣뼄.
+                          // 인바운드 콜백(Swift -> JS)을 수신한다.
                           window.chrome.webview.addEventListener('message', ev => {
                             let msg = ev.data;
                             if (typeof msg === 'string') {
@@ -96,10 +96,10 @@
                             },
                           });
 
-                          // ?袁⑥삋 ??쇱뿫??쎈읂??곷뮞 ??而?癒?퐣 ?怨뺣뮉 ????
+                          // 편의를 위한 단축 함수. `KB` 객체에 위임한다.
                           function call(name, args) { return KB.invoke(name, args); }
 
-                          // ---- ??덈즲??----
+                          // ---- 윈도우 ----
                           const Win = Object.freeze({
                             minimize:         () => call('__ks.window.minimize'),
                             maximize:         () => call('__ks.window.maximize'),
@@ -131,32 +131,36 @@
                             getZoom:          () => call('__ks.window.getZoom'),
                             print:            (opts) => call('__ks.window.print', { systemDialog: !!(opts && opts.systemDialog), window: (opts && opts.window) || null }),
                             capturePreview:   (opts) => call('__ks.window.capturePreview', { format: (opts && opts.format) || 'png', window: (opts && opts.window) || null }),
+                            displays:         () => call('__ks.window.displays'),
+                            currentDisplay:   (window) => call('__ks.window.currentDisplay', window ? { window } : {}),
+                            setTaskbarProgress: (type, value, window) => call('__ks.window.setTaskbarProgress', { progress: { type: String(type || 'none'), value: value !== undefined ? Number(value) : undefined }, window: window || null }),
+                            setOverlayIcon:   (iconPath, description, window) => call('__ks.window.setOverlayIcon', { iconPath: iconPath || null, description: description || null, window: window || null }),
                           });
 
-                          // ---- ??----
+                          // ---- 셸 ----
                           const Shell = Object.freeze({
                             openExternal:     (url) => call('__ks.shell.openExternal', { url: String(url) }),
                             showItemInFolder: (path) => call('__ks.shell.showItemInFolder', { url: String(path) }),
                             moveToTrash:      (path) => call('__ks.shell.moveToTrash', { url: String(path) }),
                           });
 
-                          // ---- ??쇱뵠??곗쨮域?----
+                          // ---- 다이얼로그 ----
                           const Dialog = Object.freeze({
                             // opts: { title?, defaultDirectory?, filters?: [{name, extensions}], allowsMultiple?, window? }
-                            // ??{ paths: string[] }   (?띯뫁????paths.length === 0)
+                            // 반환: { paths: string[] }   (취소 시 paths.length === 0)
                             openFile:     (opts) => call('__ks.dialog.openFile', opts || {}),
                             // opts: { title?, defaultDirectory?, defaultFileName?, filters?, window? }
-                            // ??{ path: string|null }
+                            // 반환: { path: string|null }
                             saveFile:     (opts) => call('__ks.dialog.saveFile', opts || {}),
-                            // opts: { title?, defaultDirectory?, window? } ??{ path: string|null }
+                            // opts: { title?, defaultDirectory?, window? } 반환: { path: string|null }
                             selectFolder: (opts) => call('__ks.dialog.selectFolder', opts || {}),
                             // opts: { kind: 'info'|'warning'|'error'|'question', title, message, detail?,
                             //         buttons?: 'ok'|'okCancel'|'yesNo'|'yesNoCancel', window? }
-                            // ??{ result: 'ok'|'cancel'|'yes'|'no' }
+                            // 반환: { result: 'ok'|'cancel'|'yes'|'no' }
                             message:      (opts) => call('__ks.dialog.message', opts || {}),
                           });
 
-                          // ---- ???계퉪?諭?----
+                          // ---- 클립보드 ----
                           const Clipboard = Object.freeze({
                             readText:  () => call('__ks.clipboard.readText'),
                             writeText: (text) => call('__ks.clipboard.writeText', { text: String(text) }),
@@ -164,7 +168,7 @@
                             hasFormat: (format) => call('__ks.clipboard.hasFormat', { format: String(format) }),
                           });
 
-                          // ---- ??----
+                          // ---- 앱 ----
                           const App = Object.freeze({
                             quit:        () => call('__ks.app.quit'),
                             environment: () => call('__ks.environment'),
@@ -172,7 +176,7 @@
                             show:        () => call('__ks.window.show'),
                           });
 
-                          // ---- ??源??(`listen`??癰귢쑴臾? ----
+                          // ---- 이벤트(`listen`으로 구독) ----
                           const Events = Object.freeze({
                             on(event, cb)   { return KB.listen(event, cb); },
                             off(event, cb)  {
@@ -192,7 +196,7 @@
                             emit: KB.emit,
                           });
 
-                          // ---- 嚥≪뮄??(__ks.log?????퉸 ??쇱뵠?怨뺥닏 嚥≪뮄?뉑에???깆뒭?? ----
+                          // ---- 로그(__ks.log로 전달되며 콘솔에도 출력) ----
                           function logAt(level) {
                             return function (...args) {
                               const text = args.map(a =>
@@ -200,10 +204,10 @@
                                   : (a instanceof Error) ? (a.stack || a.message)
                                   : (() => { try { return JSON.stringify(a); } catch (_) { return String(a); } })()
                               ).join(' ');
-                              // ??뺣즲夷??由??? 嚥≪뮄?????륁뵠筌왖???類?럡??곴퐣???????嚥??癒?쑎???얜똻???뺣뼄.
-                              try { call('__ks.log', { level, message: text }).catch(() => {}); }
-                              catch (_) { /* registry may not be wired yet */ }
-                              // devtools??域밸챶?嚥?癰귣똻??袁⑥쨯 ?꾩꼷??癒?즲 沃섎챶??쭕怨밸립??
+                          // 로그 레지스트리가 아직 연결되지 않았을 수 있으므로 try-catch로 감싼다.
+                          try { call('__ks.log', { level, message: text }).catch(() => {}); }
+                          catch (_) { /* registry may not be wired yet */ }
+                          // devtools가 열려 있으면 콘솔에도 출력한다.
                               const fn = console[level === 'trace' ? 'debug' : (level === 'warn' ? 'warn' : (level === 'error' ? 'error' : 'log'))];
                               try { fn.apply(console, args); } catch (_) {}
                             };
@@ -230,19 +234,20 @@
                           });
 
                           window.__KS_ = Root;
-                          // ?紐꾩벥 癰귢쑴臾?
+                          // 하위 호환성
                           if (!window.Kalsae) window.Kalsae = Root;
 
-                          // ---- ??뺤삋域??怨몃열 ??딅뱜 ???뮞??(?袁⑥쟿?袁ⓥ봺????덈즲?怨쀬뒠) ----
+                          // ---- 드래그 영역 지원 (Windows 전용, v0.3 로드맵 항목) ----
                           //
-                          // mousedown ???怨몄벥 鈺곌퀣湲?筌ｋ똻???椰꾧퀣??????ゅ첎?筌?`app-region`(?癒?뮉
-                          // `--ks-app-region`) ?④쑴沅??????깆뵠 筌?`drag`???癒?꺖??筌≪뼚?앾쭖?
-                          // `__ks.window.startDrag`嚥???쇱뵠?怨뺥닏 ???????곷섧????뺤삋域밸챶? 揶쏆뮇???뺣뼄.
-                          // `no-drag` 揶쏅?? 鈺곌퀣湲???쀬돳??筌앸맩??餓λ쵎???뽱룖 ??뺤삋域?揶쎛?館釉?獄????癒?뻼??
-                          // ??뺤삋域밸챶? ??쇰뻻 ??곸젫??????덈즲嚥???뺣뼄 (Electron / Chromium ???嚥?.
+                          // mousedown 이벤트에서 `app-region`(또는
+                          // `--ks-app-region`) CSS 속성을 확인해 `drag` 영역이면
+                          // `__ks.window.startDrag`를 호출해 네이티브 드래그를 시작한다.
+                          // `no-drag` 영역은 드래그를 차단하고 하위 요소로 전파되지 않는다.
+                          // 드래그 영역은 재귀적으로 탐색된다 (Electron / Chromium 방식).
                           //
-                          // ??뤿뻼燁???용뮉 ??곗뺘 ?λ뜃由??????????춸 ??덉삂??뺣뼄. ????낆젾/筌띻낱寃?
-                          // contenteditable????뽰뇚??뤿연 ??뺤삋域밸㈇? ??곗뺘 UI ??뽯뮞筌ｌ꼶? 獄쎻뫚鍮??? ??낅즲嚥???뺣뼄.
+                          // 더블클릭 시 최대화/복원을 토글한다. 입력/선택/편집 가능한
+                          // contenteditable 요소는 드래그 영역에서 제외되어
+                          // UI 조작이 정상 동작한다.
                           function isInteractive(el) {
                             if (!el || el.nodeType !== 1) return false;
                             const tag = el.tagName;

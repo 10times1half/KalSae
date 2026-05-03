@@ -226,5 +226,33 @@ extension KSBuiltinCommands {
             if case .failure(let e) = r { throw e }
             return Empty()
         }
+
+        // 디스플레이 열거 (Phase 1).
+        await registerQuery(registry, "__ks.window.displays") { _ throws(KSError) -> [KSDisplayInfo] in
+            return try await windows.listDisplays()
+        }
+
+        // 현재 창이 위치한 디스플레이 반환 (Phase 1).
+        await registerQuery(registry, "__ks.window.currentDisplay") { _ throws(KSError) -> KSDisplayInfo in
+            let h = try await resolver.resolve(window: nil)
+            return try await windows.currentDisplay(h)
+        }
+
+        // 작업 표시줄 진행 상태 (Phase 1, Windows-only; 다른 플랫폼 no-op).
+        await register(registry, "__ks.window.setTaskbarProgress") {
+            (args: TaskbarProgressArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            try await windows.setTaskbarProgress(h, progress: args.progress)
+            return Empty()
+        }
+
+        // 작업 표시줄 오버레이 아이콘 (Phase 1, Windows-only; 다른 플랫폼 no-op).
+        await register(registry, "__ks.window.setOverlayIcon") {
+            (args: OverlayIconArg) throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: args.window)
+            try await windows.setOverlayIcon(
+                h, iconPath: args.iconPath, description: args.description)
+            return Empty()
+        }
     }
 }

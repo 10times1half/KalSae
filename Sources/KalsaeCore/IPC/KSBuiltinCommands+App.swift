@@ -16,7 +16,11 @@ extension KSBuiltinCommands {
             Environment(
                 os: kalsaeOSName(),
                 arch: kalsaeArchName(),
-                platform: platformName)
+                platform: platformName,
+                osVersion: kalsaeOSVersionString(),
+                locale: kalsaeSystemLocale(),
+                appVersion: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                kalsaeVersion: KSVersion.current)
         }
 
         let webLog = KSLog.logger("web")

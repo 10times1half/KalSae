@@ -69,6 +69,9 @@ public final class KSApp {
     /// 동반된 IPC 브리지가 deinit되어 창이 즉시 사라진다. 삭제 금지.
     private let secondaryHosts: [AnyPlatformHost]
 
+    /// `install(_:)`로 등록된 플러그인 목록. `shutdown()` 시 역순 teardown에 사용된다.
+    var _pluginsStorage: [any KSPlugin] = []
+
     private init(
         config: KSConfig,
         registry: KSCommandRegistry,

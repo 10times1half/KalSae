@@ -170,13 +170,19 @@ extension KSApp {
         if let tray = platform.tray {
             await tray.remove()
         }
-        // 2. 모든 등록된 명령을 해제해 이후 디스패치가 해제된 핸들러에
+        // 2. 플러그인 teardown — 등록 역순, best-effort.
+        let ctx = DefaultPluginContext(app: self)
+        for plugin in _pluginsStorage.reversed() {
+            await plugin.teardown(ctx)
+        }
+        _pluginsStorage.removeAll()
+        // 3. 모든 등록된 명령을 해제해 이후 디스패치가 해제된 핸들러에
         //    도달하는 대신 commandNotFound를 반환하도록 한다.
         let names = await registry.registered()
         for name in names {
             await registry.unregister(name)
         }
-        // 3. 로깅.
+        // 4. 로깅.
         KSLog.logger("kalsae.app").info("KSApp shutdown complete")
     }
 }

@@ -4,9 +4,10 @@
     public import KalsaeCore
     public import Foundation
 
-    // MARK: - ?怨???JS
+    // MARK: - iOS 런타임 JS
 
-    /// 筌뤴뫀諭??袁⑥쟿?袁⑸퓠 雅뚯눘???롫뮉 JavaScript. macOS ???삸??깆벥 `KSRuntimeJS`??    /// 沃섎챶??쭕???`webkit.messageHandlers` API??iOS?癒?퐣 ??덉뵬??롫뼄.
+    /// iOS WebView에 주입되는 브리지 JavaScript. macOS의 `KSRuntimeJS`와
+    /// 동일한 역할을 하지만 `webkit.messageHandlers` API를 통해 iOS와 통신한다.
     private enum KSiOSRuntimeJS {
         static let source: String = #"""
                                     (function () {
@@ -83,7 +84,7 @@
             """#
     }
 
-    // MARK: - ?諛몃윮 ?紐꾨뮞??
+    // MARK: - iOS WebView 호스트
     @MainActor
     public final class KSiOSWebViewHost {
         internal let webView: WKWebView
@@ -158,11 +159,12 @@
         }
 
         public func openDevTools() throws(KSError) {
-            // iOS?癒?퐣 Web Inspector???????롮젻筌?macOS??Safari + 疫꿸퀗由??醫듚먨첎? ?袁⑹뒄??롫뼄 ??no-op.
+            // iOS에서는 Web Inspector를 프로그래밍 방식으로 열 수 없음.
+            // macOS는 Safari + Safari Web Inspector 설정 필요. 여기서는 no-op.
         }
     }
 
-    // MARK: - KSWebViewBackend 餓Β??
+    // MARK: - KSWebViewBackend 적합
     extension KSiOSWebViewHost: KSWebViewBackend {
         public func load(url: URL) async throws(KSError) {
             if url.isFileURL {
@@ -225,11 +227,11 @@
         }
 
         public func openDevTools() async throws(KSError) {
-            // iOS?癒?퐣 Web Inspector???⑤벀而?API嚥??????????용뼄.
+            // iOS에서는 Web Inspector를 프로그래밍 방식으로 열 수 없음.
         }
     }
 
-    // MARK: - ks:// ??쎄땀 ?紐껊굶??
+    // MARK: - ks:// 스킴 핸들러
     @MainActor
     internal final class KSiOSSchemeHandler: NSObject, WKURLSchemeHandler {
         var resolver: KSAssetResolver?
@@ -286,7 +288,7 @@
         }
     }
 
-    // MARK: - ??쎄쾿?깆???筌롫뗄?놅쭪? ?紐껊굶??
+    // MARK: - 스크립트 메시지 핸들러
     @MainActor
     internal final class KSiOSScriptMessageHandler: NSObject, WKScriptMessageHandler {
         internal var onMessage: (@MainActor (String) -> Void)?
