@@ -22,6 +22,42 @@ public import Foundation
 
 // MARK: - OS/Arch helpers
 
+/// JS로부터 임의 JSON 값을 왕복하는 데 사용되는 최소 "any JSON" 타입.
+/// 내부 — `KSBuiltinCommands.WindowEmitArg.payload` 필드에서만 사용된다.
+internal enum KSAnyJSON: Codable, Sendable {
+    case null
+    case bool(Bool)
+    case double(Double)
+    case string(String)
+    case array([KSAnyJSON])
+    case object([String: KSAnyJSON])
+
+    init(from decoder: any Decoder) throws {
+        // Codable 프로토콜 — untyped throws (변경 불가)
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null; return }
+        if let b = try? c.decode(Bool.self) { self = .bool(b); return }
+        if let d = try? c.decode(Double.self) { self = .double(d); return }
+        if let s = try? c.decode(String.self) { self = .string(s); return }
+        if let a = try? c.decode([KSAnyJSON].self) { self = .array(a); return }
+        if let o = try? c.decode([String: KSAnyJSON].self) { self = .object(o); return }
+        throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unknown JSON value")
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        // Codable 프로토콜 — untyped throws (변경 불가)
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .null: try c.encodeNil()
+        case .bool(let b): try c.encode(b)
+        case .double(let d): try c.encode(d)
+        case .string(let s): try c.encode(s)
+        case .array(let a): try c.encode(a)
+        case .object(let o): try c.encode(o)
+        }
+    }
+}
+
 public enum KSBuiltinCommands {
     /// 모든 내장 명령을 등록한다. 두 번 이상 호출하면
     /// 이전 핸들러를 조용히 덮어쓴다.

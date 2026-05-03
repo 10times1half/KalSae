@@ -52,7 +52,7 @@
         var succeeded: Bool { value >= 0 }
         // E_NOINTERFACE (0x80004002): 런타임이 해당 인터페이스를 지원하지 않음.
         // 이 경우 핸들러를 조용히 건너뛴다.
-        var isNotInterface: Bool { UInt32(bitPattern: value) == 0x80004002 }
+        var isNotInterface: Bool { UInt32(bitPattern: value) == 0x8000_4002 }
 
         func throwIfFailed(
             _ code: KSError.Code = .platformInitFailed,

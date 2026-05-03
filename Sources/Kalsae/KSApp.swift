@@ -364,7 +364,7 @@ public final class KSApp {
                 let ignored = config.windows.count - 1
                 KSLog.logger("kalsae.app").warning(
                     "Multiple windows declared (\(config.windows.count)) but this platform "
-                    + "supports single-window only; ignoring \(ignored) entries.")
+                        + "supports single-window only; ignoring \(ignored) entries.")
             }
         #endif
 

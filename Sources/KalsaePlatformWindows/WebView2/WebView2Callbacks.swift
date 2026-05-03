@@ -391,10 +391,11 @@
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))
             }
             if n == 0 { return "Kalsae" }
-            let exe = URL(fileURLWithPath: buf.withUnsafeBufferPointer { bufPtr -> String in
-                guard let base = bufPtr.baseAddress else { return "." }
-                return base.toString()
-            })
+            let exe = URL(
+                fileURLWithPath: buf.withUnsafeBufferPointer { bufPtr -> String in
+                    guard let base = bufPtr.baseAddress else { return "." }
+                    return base.toString()
+                })
             return exe.deletingPathExtension().lastPathComponent
         }
     }

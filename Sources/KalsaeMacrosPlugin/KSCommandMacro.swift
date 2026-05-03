@@ -1,10 +1,13 @@
 import SwiftDiagnostics
 import SwiftSyntax
-/// `@KSCommand` 援ы쁽泥? ?⑥닔 ?좎뼵??泥⑤??섏뼱 JSON ?몄퐫???붿퐫??諛?/// ?ㅻ쪟 蹂?섏쓣 泥섎━?섎㈃???먮낯??`KSCommandRegistry`??/// ?깅줉?섎뒗 ?쇱뼱 ?⑥닔瑜?諛쒗뻾?쒕떎.
+/// `@KSCommand` 매크로 구현체. 함수 선언을 분석해 JSON 인자를
+/// 디코딩하고 변환한 뒤, `KSCommandRegistry`에
+/// 등록하는 피어 함수를 생성한다.
 import SwiftSyntaxMacros
 
-// `KSMacroError`??SwiftDiagnostics ?꾩엯 ?댁쟾???곗씠??throw ?꾩슜 ?쇱씠??
-// ?곗닔 寃쎈줈媛 ?댁젣 diagnose 湲곕컲?대ŉ ?꾨땲吏留??뚯뒪?몄뿉?쒖쓽 API ?명솚??// ?꾪빐 議댁옱???좎??쒕떎.
+// `KSMacroError`는 SwiftDiagnostics 도입 전에도 throw를 사용할 수
+// 있도록 별도 경로가 존재하지만, 매크로 내부의 API 변환을
+// 위해 현재도 남아 있다.
 public struct KSCommandMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -12,7 +15,9 @@ public struct KSCommandMacro: PeerMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] {
         guard let fn = declaration.as(FunctionDeclSyntax.self) else {
-            // ?쒖옄由ъ뿉???묓빐?ㅻ떊 ?붿옄 ?꾩씠肄섏쓣 ?먮븣由щ룄濡?throw???            // diagnose瑜??ъ슜. ?ㅻⅨ ?먰룊?덉쓣 ?곸떎?섏? ?딄퀬 ?섎굹??            // ?섎? ?덈뒗 ?ㅻ쪟留??ъ슜?먯뿉寃?蹂댁뿬以??
+            // 선언이 함수가 아니면 진단을 위해 throw하는 대신
+            // diagnose를 사용. 이렇게 하면 여러 오류가
+            // 있어도 사용자에게 한꺼번에 보여줄 수 있다.
             context.diagnose(
                 Diagnostic(
                     node: Syntax(node),
@@ -20,8 +25,9 @@ public struct KSCommandMacro: PeerMacro {
             return []
         }
 
-        // 留ㅺ컻蹂???쒖빟 寃利? ?꾧꺽???ㅽ뙣???덉씠吏留??뺤옣??肄붾뱶媛
-        // ???泥댁빱瑜??몃옒?섏? 留꾩씠???먯껜??紐낆떆???ㅻ쪟瑜?        // ?쏆뼱二쇰뒗 寃??붾쾭洹뱀쟻?쇰줈 媛移??덈떎.
+        // 매크로 변환 검증 단계를 통과하지 못하면 생성 코드가
+        // 잘못된 접근을 시도해 사용자에게 혼란을 줄 수 있으므로
+        // 일찍 중단하는 것이 바람직하다.
         if !validateParameters(fn: fn, in: context) {
             return []
         }
@@ -42,28 +48,28 @@ public struct KSCommandMacro: PeerMacro {
             }
         }()
 
-        // ?좏깮??臾몄옄??由ы꽣???대쫫 ?몄옄 異붿텧.
+        // 생성된 문자열 리터럴에서 레지스트리 이름 추출.
         let registryName = Self.registryName(from: node) ?? funcName
 
-        // 留ㅺ컻蹂???섏쭛.
+        // 매크로 변수 추출.
         let params = signature.parameterClause.parameters
 
-        // 鍮꾧났媛?Args 援ъ“泥?蹂몃Ц 援ъ꽦.
+        // 빈 생성자 Args 구조체 타입 선언.
         var argFields: [String] = []
         var callArgs: [String] = []
         for param in params {
             let firstName = param.firstName.text
             let secondName = param.secondName?.text
-            // JSON ??= ?몄옄 ?덉씠釉??덈뒗 寃쎌슦), 洹몃젃吏 ?딆쑝硫??대? ?대쫫.
+            // JSON 키 = 인자 레이블(있는 경우), 그렇지 않으면 내부 이름.
             let jsonKey: String = (firstName == "_") ? (secondName ?? "_") : firstName
             let typeText = param.type.trimmedDescription
 
             argFields.append("let \(jsonKey): \(typeText)")
 
-            // ?몄텧 吏???덉씠釉?
-            //   `func f(_ x: Int)`  ???덉씠釉??놁쓬
-            //   `func f(x: Int)`    ??`x: args.x`
-            //   `func f(a b: Int)`  ??`a: args.a`
+            // 호출 인자 레이블
+            //   `func f(_ x: Int)`  레이블 없음
+            //   `func f(x: Int)`    `x: args.x`
+            //   `func f(a b: Int)`  `a: args.a`
             if firstName == "_" {
                 callArgs.append("args.\(jsonKey)")
             } else {
@@ -76,7 +82,7 @@ public struct KSCommandMacro: PeerMacro {
 
         let decodeBlock: String
         if params.isEmpty {
-            // ?몄옄?녿뒗 紐낅졊? ?섏씠濡쒕뱶瑜??꾩쟾??臾댁떆?쒕떎.
+            // 인자가 없는 명령은 빈 페이로드를 전달한다.
             decodeBlock = "let args = \(argsTypeName)()\n            _ = args\n            _ = data"
         } else {
             decodeBlock = """
@@ -160,10 +166,10 @@ public struct KSCommandMacro: PeerMacro {
             }
         }
 
-        // ?앹꽦?섎뒗 ?몃뱾???대줈?????긽 @Sendable + async?대떎.
-        // `__KSArgs_<funcName>`???쇱뼱 ?⑥닔 ?대???以묒꺽?섎뒗 ????뚯씪 ?ㅼ퐫?꾩쓽
-        // ?먯껜 ?쇱뼱濡?諛⑹텧?쒕떎. Swift 6.3 Windows IRGen??留ㅽ겕濡??뺤옣???대줈?
-        // ?대???以묒꺽 ??낆쓣 李몄“?섎뒗 ?붾쾭洹??뺣낫瑜?留뚮궃 ???щ옒?쒕릺湲??뚮Ц.
+        // 생성된 함수들은 기본적으로 @Sendable + async이다.
+        // `__KSArgs_<funcName>`은 피어 함수 내에서 중첩된 타입의
+        // 전체 선언으로 생성된다. Swift 6.3 Windows IRGen이 마크롤
+        // 처리할 때 중첩 타입 선언을 찾는 특수 로직을 필요로 하기 때문이다.
 
         let argsDecl: String
         if params.isEmpty {
@@ -197,38 +203,38 @@ public struct KSCommandMacro: PeerMacro {
         ]
     }
 
-    /// `@KSCommand("foo")`?먯꽌 臾몄옄??由ы꽣???몄옄瑜?異붿텧?쒕떎.
+    /// `@KSCommand("foo")`에서 문자열 리터럴에서 레지스트리 이름을 추출한다.
     private static func registryName(from node: AttributeSyntax) -> String? {
         guard case .argumentList(let args) = node.arguments else { return nil }
         guard let first = args.first else { return nil }
         guard let literal = first.expression.as(StringLiteralExprSyntax.self) else {
             return nil
         }
-        // ?됰쾾??臾몄옄???멸렇癒쇳듃瑜??댁뼱遺숈씤??
+        // 보간 문자열 세그먼트를 걸러낸다.
         var s = ""
         for seg in literal.segments {
             if let ss = seg.as(StringSegmentSyntax.self) {
                 s += ss.content.text
             } else {
-                // 蹂닿컙(?쒗쁽?? ??由ы꽣?댁씠 ?꾨땲誘濡?以묐떒?쒕떎.
+                // 보간(interpolation) 세그먼트가 있으면 중단한다.
                 return nil
             }
         }
         return s
     }
 
-    // MARK: - 寃利??ы띁
+    // MARK: - 검증 헬퍼
 
-    /// ?⑥닔 ?쒓렇?덉쿂瑜?寃?ы븯???뺤옣??諛⑺빐?섍굅??留ㅽ겕濡쒓? ?쇱뼱瑜?諛쒗뻾???댄썑
-    /// ???泥댁빱瑜?怨ㅻ??섍쾶 留뚮뱶??援ъ“瑜?由ы룷?명븳??
-    /// ?ㅻ쪟媛 諛쒗뻾??寃쎌슦 `false`瑜?諛섑솚?섎ŉ, 留ㅽ겕濡쒕뒗 以묐떒?댁빞 ?쒕떎.
+    /// 함수 시그니처를 검사해 잘못된 접근을 시도하기 전에 일찍 중단하고
+    /// 적절한 오류를 진단해 사용자에게 혼란을 주지 않도록 한다.
+    /// 검증이 실패한 경우 `false`를 반환하며, 매크로는 중단해야 한다.
     private static func validateParameters(
         fn: FunctionDeclSyntax,
         in context: some MacroExpansionContext
     ) -> Bool {
         var ok = true
         for param in fn.signature.parameterClause.parameters {
-            // `inout T` ??JSON 寃쎌슦 媛??섎?留?媛?ν븯誘濡??섎?媛 ?녿떎.
+            // `inout T` 는 JSON 역직렬화가 불가능하므로 거부한다.
             if let attrType = param.type.as(AttributedTypeSyntax.self),
                 attrType.specifiers.contains(where: {
                     $0.as(SimpleTypeSpecifierSyntax.self)?.specifier.tokenKind == .keyword(.inout)
@@ -240,12 +246,12 @@ public struct KSCommandMacro: PeerMacro {
                         message: KSCommandDiagnostic.inoutParameter))
                 ok = false
             }
-            // 媛蹂 ?몄옄 (`T...`).
+            // 가변 인자 (`T...`).
             if param.ellipsis != nil {
                 let fixIt = FixIt(
                     message: KSCommandFixIt.replaceVariadicWithArray,
                     changes: [
-                        // ??낆쓣 `[T]`濡?諛붽씀怨?`...`???쒓굅?쒕떎.
+                        // 타입을 `[T]`로 바꾸고 `...`를 제거한다.
                         .replace(
                             oldNode: Syntax(param),
                             newNode: Syntax(
@@ -264,9 +270,9 @@ public struct KSCommandMacro: PeerMacro {
         return ok
     }
 
-    /// `@KSCommand(...)` ?띿꽦 ?몄닔 紐⑸줉??寃利앺븳??
-    /// ?띿꽦? ?몄닔?녾굅???⑥씪 臾몄옄??由ы꽣???대쫫留??덉슜?섎ŉ,
-    /// 洹??몃뒗 fix-it怨??④퍡 嫄곕??쒕떎.
+    /// `@KSCommand(...)` 속성 인자 목록을 검증한다.
+    /// 속성은 인자가 없거나 단일 문자열 리터럴만 허용하며,
+    /// 그 외는 fix-it과 함께 거부한다.
     private static func validateAttributeArguments(
         node: AttributeSyntax,
         in context: some MacroExpansionContext
@@ -281,7 +287,7 @@ public struct KSCommandMacro: PeerMacro {
         }
         guard let first = args.first else { return true }
         guard let literal = first.expression.as(StringLiteralExprSyntax.self) else {
-            // `@KSCommand(123)` ??由ы꽣?댁씠 ?꾨땲硫?fix-it?쇰줈 ?몄옄 ?쒓굅 ?쒖븞.
+            // `@KSCommand(123)` 은 리터럴이 아니면 fix-it으로 인자 제거를 제안.
             let fixIt = FixIt(
                 message: KSCommandFixIt.removeArgument,
                 changes: [
@@ -296,7 +302,7 @@ public struct KSCommandMacro: PeerMacro {
                     fixIts: [fixIt]))
             return false
         }
-        // 蹂닿컙 ?멸렇癒쇳듃媛 ?덉쑝硫?(?? `\(name)`) 嫄곕??쒕떎.
+        // 보간 세그먼트가 있으면 (예: `\(name)`) 거부한다.
         for seg in literal.segments {
             if seg.as(StringSegmentSyntax.self) == nil {
                 context.diagnose(
@@ -306,7 +312,7 @@ public struct KSCommandMacro: PeerMacro {
                 return false
             }
         }
-        // 鍮?臾몄옄??`@KSCommand("")`) 嫄곕?.
+        // 빈 문자열 (`@KSCommand("")`) 거부.
         let raw = literal.segments.compactMap {
             $0.as(StringSegmentSyntax.self)?.content.text
         }.joined()

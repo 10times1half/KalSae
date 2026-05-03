@@ -5,7 +5,6 @@
 /// 재컴파일 없이 편집할 수 있으며, 소스 파일이 이스케이프된 문자열을
 /// 왜곡시킬 수 있는 편집기를 통해서도 정상적으로 라운드트립한다.
 public import Foundation
-
 internal import KalsaeCore
 
 public struct ProjectTemplate {

@@ -514,6 +514,7 @@
             }
         }
 
+    nonisolated(unsafe) private let _gtkKSPostEncoder = JSONEncoder()
     @MainActor
     extension GtkWebViewHost: KSWebViewBackend {
         public func load(url: URL) async throws(KSError) {
@@ -528,7 +529,7 @@
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
-            let data = try JSONEncoder().encode(message)
+            let data = try _gtkKSPostEncoder.encode(message)
             guard let json = String(data: data, encoding: .utf8) else {
                 throw KSError(code: .internal, message: "postMessage: JSON encoding failed")
             }

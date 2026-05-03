@@ -136,6 +136,7 @@
         // MARK: - Inbound (Kotlin ??Swift)
 
         private var inboundHandler: ((String) -> Void)?
+        nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
 
         /// Kotlin calls this from the `@JavascriptInterface` method.
         /// Thread-safe ??the Android WebView may call this off the main thread.
@@ -224,7 +225,7 @@
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
-            let data = try JSONEncoder().encode(message)
+            let data = try Self._sharedEncoder.encode(message)
             guard let json = String(data: data, encoding: .utf8) else {
                 throw KSError(code: .internal, message: "postMessage: JSON encoding failed")
             }

@@ -16,6 +16,7 @@
         private let schemeHandler: KSMacSchemeHandler
         private var closeInterceptorEnabled = false
         private var zoomFactor: Double = 1.0
+        nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
 
         public init(label: String) {
             let ucc = WKUserContentController()
@@ -84,8 +85,7 @@
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
             let data: Data
             do {
-                let encoder = JSONEncoder()
-                data = try encoder.encode(message)
+                data = try Self._sharedEncoder.encode(message)
             } catch {
                 throw KSError(code: .internal, message: "postMessage: \(error)")
             }

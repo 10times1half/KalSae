@@ -4,6 +4,7 @@
     internal import KalsaeCore
     internal import Foundation
 
+    nonisolated(unsafe) private let _wv2KSPostEncoder = JSONEncoder()
     @MainActor
     extension WebView2Host: KSWebViewBackend {
         public func load(url: URL) async throws(KSError) {
@@ -28,7 +29,7 @@
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
             let data: Data
             do {
-                data = try JSONEncoder().encode(message)
+                data = try _wv2KSPostEncoder.encode(message)
             } catch {
                 throw KSError(
                     code: .internal,

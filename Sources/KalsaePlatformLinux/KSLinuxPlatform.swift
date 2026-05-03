@@ -481,8 +481,10 @@
             defer { warnLock.unlock() }
             guard !didWarnTransparent else { return }
             didWarnTransparent = true
-            FileHandle.standardError.write(Data(
-                "[Kalsae][Linux] KSWindowConfig.transparent=true 는 Linux에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다.\n".utf8))
+            FileHandle.standardError.write(
+                Data(
+                    "[Kalsae][Linux] KSWindowConfig.transparent=true 는 Linux에서 아직 지원되지 않습니다 (Windows 전용, v0.3). 무시됩니다.\n"
+                        .utf8))
         }
     }
 

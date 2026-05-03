@@ -91,6 +91,7 @@
         private let messageHandler: KSiOSScriptMessageHandler
         private let schemeHandler: KSiOSSchemeHandler
         private var inbound: ((String) -> Void)?
+        nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
 
         public init(label: String) {
             let ucc = WKUserContentController()
@@ -196,7 +197,7 @@
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
-            let data = try JSONEncoder().encode(message)
+            let data = try Self._sharedEncoder.encode(message)
             guard let json = String(data: data, encoding: .utf8) else {
                 throw KSError(code: .internal, message: "postMessage: JSON encoding failed")
             }
