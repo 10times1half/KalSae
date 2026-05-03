@@ -1,5 +1,3 @@
-public import Foundation
-
 // MARK: - KSRect
 
 /// 정수 픽셀 좌표계의 직사각형 영역 (가상 데스크톱 기준).

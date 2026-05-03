@@ -1,5 +1,3 @@
-public import Foundation
-
 // MARK: - 플러그인 컨텍스트
 
 /// `KSPlugin.setup(_:)` / `teardown(_:)` 호출 시 플러그인이 받는 런타임 컨텍스트.

@@ -6,8 +6,6 @@
 ///
 /// 모든 웹뷰/브리지 작업은 UI 스레드에서 이루어지므로 이 허브는
 /// `@MainActor` 전용이다.
-public import Foundation
-
 /// 창 레이블 → emit 클로저 매핑을 유지하는 공유 허브.
 @MainActor
 public final class KSWindowEmitHub: Sendable {

@@ -36,7 +36,7 @@ public final class KSIPCBridgeCore {
 
     /// 매 호출마다 JSONEncoder 인스턴스를 새로 만드는 비용을 절감하는 공유 인스턴스.
     /// 모든 사용처가 @MainActor로 격리되어 있어 단일 스레드에서만 접근된다.
-    nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
+    private static let _sharedEncoder = JSONEncoder()
 
     private let registry: KSCommandRegistry
     private let post: PostJSON
