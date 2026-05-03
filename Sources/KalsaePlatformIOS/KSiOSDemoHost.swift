@@ -56,6 +56,12 @@
             try webViewHost.setAssetRoot(root)
         }
 
+        /// 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP) 자동 추가 여부를
+        /// 토글한다. `KSSecurityConfig.crossOriginIsolation`에 대응한다.
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            webViewHost.setCrossOriginIsolation(enabled)
+        }
+
         /// URL을 저장한다; 실제 탐색은 `UIWindow`이 존재하면
         /// `onWindowReady`에서 실행된다.
         public func start(url: String, devtools: Bool) throws(KSError) {

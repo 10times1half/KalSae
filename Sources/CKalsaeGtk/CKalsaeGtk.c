@@ -67,6 +67,9 @@ struct KSGtkHost {
     /* 모든 ks:// 응답에 붙여 보낼 Content-Security-Policy. */
     char                 *response_csp;
 
+    /* Cross-Origin Isolation 토글: 1=COOP/COEP/CORP 헤더 추가, 0=없음. */
+    int                   coi_enabled;
+
     /* close-request 인터셉터 플래그: 1=활성, 0=비활성. */
     int                   close_interceptor;
 
@@ -635,6 +638,14 @@ static void on_kb_scheme_request(WebKitURISchemeRequest *req,
             hdrs, "X-Content-Type-Options", "nosniff");
         soup_message_headers_append(
             hdrs, "Referrer-Policy", "no-referrer");
+        if (host->coi_enabled) {
+            soup_message_headers_append(
+                hdrs, "Cross-Origin-Opener-Policy", "same-origin");
+            soup_message_headers_append(
+                hdrs, "Cross-Origin-Embedder-Policy", "require-corp");
+            soup_message_headers_append(
+                hdrs, "Cross-Origin-Resource-Policy", "same-origin");
+        }
         webkit_uri_scheme_response_set_http_headers(resp, hdrs);
         /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
         soup_message_headers_unref(hdrs);
@@ -652,6 +663,12 @@ void ks_gtk_host_set_response_csp(KSGtkHost *host, const char *csp)
     if (csp && csp[0] != '\0') {
         host->response_csp = g_strdup(csp);
     }
+}
+
+void ks_gtk_host_set_cross_origin_isolation(KSGtkHost *host, int enabled)
+{
+    if (!host) return;
+    host->coi_enabled = enabled ? 1 : 0;
 }
 
 /* ================================================================

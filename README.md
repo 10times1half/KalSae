@@ -2,7 +2,7 @@
 
 > A Swift-native, cross-platform desktop framework for shipping web UIs as small, secure native apps.
 
-![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)
+![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
 
 Kalsae lets you build desktop (and mobile) applications by combining a **native OS shell written in Swift** with a **web frontend** of your choice (Vite, Next.js, plain HTML — anything that produces static assets). It is in the same family as Tauri and Electron, but the host process is pure Swift 6 and the runtime stays small by reusing the OS web engine: **WebView2** on Windows, **WKWebView** on macOS/iOS, **WebKitGTK 6.0** on Linux, and **Android WebView** on Android.
 
@@ -465,7 +465,7 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | Theme (light / dark / system) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Zoom, capture preview, print UI | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Close interceptor (event-based close) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Multi-window | 🔶 | 🔶 | 🔶 | 🔶 | 🔶 |
+| Multi-window | ✅⁵ | ✅⁵ | 🔶⁵ | 🔶⁵ | 🔶⁵ |
 | Native dialogs (message / open / save / folder) | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | Application & context menus | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | Keyboard accelerators (global hot-keys) | ✅ | ✅ | 🔶² | ❌ | ❌ |
@@ -486,6 +486,11 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 ² Linux: window-scoped accelerators only via `GtkShortcutController` (LOCAL scope). System-wide global hot-keys are out of scope for v1 due to a missing standard Wayland protocol.
 ³ Linux: size, maximized, and fullscreen are always restored. Window position is restored on X11 only — Wayland compositors control window placement and ignore programmatic positioning.
 ⁴ Linux: implemented via D-Bus StatusNotifierItem + DBusMenu (no AppIndicator3 / libayatana dependency). Works on KDE Plasma, Cinnamon, XFCE, Pantheon, and GNOME with the AppIndicator extension. Vanilla GNOME has no native SNI support — install logs a warning and falls back to no-op. Submenus are not supported in v1 (flat menus only).
+
+⁵ Multi-window (v0.3+):
+- ✅ Windows / macOS — every window declared in `config.windows` boots at startup with the full security stack (CSP headers, virtual host, `persistState`, deep-link, context-menu policy, drop policy).
+- 🔶 Linux / iOS / Android — single-window only. Additional `config.windows` entries are ignored and a warning is logged at boot.
+- The runtime `__ks.window.create` IPC command creates a structurally-only window — it does **not** inherit CSP / virtual host / `persistState` from the app config and the caller must pass an explicit URL. For full security, declare windows up front in `config.windows`. See [Docs/IPC.md](Docs/IPC.md) for details.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>

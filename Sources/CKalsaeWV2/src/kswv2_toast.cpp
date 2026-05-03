@@ -48,7 +48,8 @@ std::wstring XmlEscape(const wchar_t *s) {
 extern "C" int32_t KSWV2_ShowToast(
     const wchar_t *aumid,
     const wchar_t *title,
-    const wchar_t *body)
+    const wchar_t *body,
+    const wchar_t *tag)
 {
     if (!aumid || !aumid[0]) return E_INVALIDARG;
 
@@ -135,6 +136,19 @@ extern "C" int32_t KSWV2_ShowToast(
     hr = toastFactory->CreateToastNotification(xmlDoc.Get(), &toast);
     if (FAILED(hr)) return (int32_t)hr;
 
+    // tag가 있으면 IToastNotification2::put_Tag로 설정한다.
+    // tag는 이후 KSWV2_CancelToast로 알림을 취소하는 데 사용된다.
+    if (tag && tag[0]) {
+        ComPtr<IToastNotification2> toast2;
+        if (SUCCEEDED(toast.As(&toast2))) {
+            HSTRING tagHS = nullptr;
+            if (SUCCEEDED(WindowsCreateString(tag, (UINT32)wcslen(tag), &tagHS))) {
+                toast2->put_Tag(tagHS);
+                WindowsDeleteString(tagHS);
+            }
+        }
+    }
+
     hr = notifier->Show(toast.Get());
     return (int32_t)hr;
 }
@@ -144,4 +158,52 @@ extern "C" int32_t KSWV2_ShowToast(
 extern "C" int32_t KSWV2_SetAppUserModelID(const wchar_t *aumid) {
     if (!aumid || !aumid[0]) return E_INVALIDARG;
     return (int32_t)SetCurrentProcessExplicitAppUserModelID(aumid);
+}
+
+/// Action Center에서 tag/aumid로 식별되는 토스트를 제거한다.
+/// `KSWV2_ShowToast`에 전달한 tag와 aumid를 그대로 사용한다.
+/// tag나 aumid가 비어있으면 E_INVALIDARG. 알림이 없으면 S_OK를 반환한다.
+extern "C" int32_t KSWV2_CancelToast(
+    const wchar_t *aumid,
+    const wchar_t *tag)
+{
+    if (!aumid || !aumid[0]) return E_INVALIDARG;
+    if (!tag || !tag[0]) return E_INVALIDARG;
+
+    // IToastNotificationManagerStatics2를 통해 History 객체를 가져온다.
+    HSTRING managerClassName = nullptr;
+    HRESULT hr = WindowsCreateString(
+        RuntimeClass_Windows_UI_Notifications_ToastNotificationManager,
+        (UINT32)wcslen(RuntimeClass_Windows_UI_Notifications_ToastNotificationManager),
+        &managerClassName);
+    if (FAILED(hr)) return (int32_t)hr;
+
+    ComPtr<IToastNotificationManagerStatics2> toastStatics2;
+    hr = RoGetActivationFactory(managerClassName, IID_PPV_ARGS(&toastStatics2));
+    WindowsDeleteString(managerClassName);
+    if (FAILED(hr)) return (int32_t)hr;
+
+    ComPtr<IToastNotificationHistory> history;
+    hr = toastStatics2->get_History(&history);
+    if (FAILED(hr)) return (int32_t)hr;
+
+    // RemoveGroupedTagWithId(tag, group="", applicationId=aumid) で削除.
+    HSTRING tagHS = nullptr;
+    HSTRING groupHS = nullptr;
+    HSTRING aumidHS = nullptr;
+    hr = WindowsCreateString(tag, (UINT32)wcslen(tag), &tagHS);
+    if (SUCCEEDED(hr)) hr = WindowsCreateString(L"", 0, &groupHS);
+    if (SUCCEEDED(hr)) hr = WindowsCreateString(aumid, (UINT32)wcslen(aumid), &aumidHS);
+
+    HRESULT removeHr = E_FAIL;
+    if (SUCCEEDED(hr)) {
+        removeHr = history->RemoveGroupedTagWithId(tagHS, groupHS, aumidHS);
+        // S_OK, S_FALSE, 또는 "해당 알림 없음"도 S_OK이므로 성공으로 처리.
+    }
+
+    WindowsDeleteString(tagHS);
+    WindowsDeleteString(groupHS);
+    WindowsDeleteString(aumidHS);
+
+    return (int32_t)removeHr;
 }

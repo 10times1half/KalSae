@@ -135,6 +135,17 @@ public enum KSBuiltinCommands {
         let format: String?
         let window: String?
     }
+    struct WindowEmitArg: Codable, Sendable {
+        let event: String
+        let payload: KSAnyJSON
+        let target: String?
+    }
+    struct WindowInfo: Codable, Sendable {
+        let label: String
+    }
+    struct LabelResult: Codable, Sendable {
+        let label: String
+    }
     struct URLArg: Codable, Sendable { let url: String }
     struct TextArg: Codable, Sendable { let text: String }
     struct FormatArg: Codable, Sendable { let format: String }
@@ -244,6 +255,14 @@ actor WindowResolver {
             throw KSError(
                 code: .windowCreationFailed,
                 message: "No window registered for label '\(label)'")
+        }
+        // `window` 인자 없이 호출된 경우 IPC 프레임이 전달된 창 레이블
+        // (TaskLocal)을 먼저 시도한다. 이렇게 하면 두 번째 창에서
+        // `minimize()`를 호출할 때 main 창이 아닌 호출자 창이 최소화된다.
+        if let label = KSInvocationContext.windowLabel,
+            let h = await windows.find(label: label)
+        {
+            return h
         }
         if let h = mainWindowProvider() { return h }
         throw KSError(

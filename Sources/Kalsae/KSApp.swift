@@ -61,17 +61,27 @@ public final class KSApp {
     /// `__ks.deepLink.openURL` 이벤트를 방출하는 데 사용된다.
     private let deepLinkBackend: (any KSDeepLinkBackend)?
 
+    /// 두 번째 이후 윈도우 호스트 컬렉션. primary `host`와 함께 앱 수명 동안 살아있어
+    /// 각 플랫폼 호스트의 Win32Window/NSWindow와 WebView2Bridge가 유지된다.
+    ///
+    /// 의도적으로 "저장만" 한다 — 다른 코드에서 읽지 않으나, 이 배열을
+    /// 잡고 있지 않으면 보조 창의 `Win32Window`/`KSMacWindow`와
+    /// 동반된 IPC 브리지가 deinit되어 창이 즉시 사라진다. 삭제 금지.
+    private let secondaryHosts: [AnyPlatformHost]
+
     private init(
         config: KSConfig,
         registry: KSCommandRegistry,
         platform: any KSPlatform,
         host: AnyPlatformHost,
+        secondaryHosts: [AnyPlatformHost] = [],
         deepLinkBackend: (Any)? = nil
     ) {
         self.config = config
         self.registry = registry
         self.platform = platform
         self.deepLinkBackend = deepLinkBackend as? any KSDeepLinkBackend
+        self.secondaryHosts = secondaryHosts
         // 컴파일 타임에 한 case만 활성화되므로 망라적 switch가
         // 강제 언래핑 없이 정확히 하나의 호스트를 추출한다.
         switch host {
@@ -275,6 +285,89 @@ public final class KSApp {
             try concrete.start(url: url, devtools: config.security.devtools)
         #endif
 
+        // 7. 두 번째 이후 윈도우 부팅 — Windows/macOS 전용 (v0.3).
+        // Linux/iOS/Android 는 single-window 유지.
+        var secondaryWrappers: [AnyPlatformHost] = []
+        #if os(Windows)
+            for secondaryConfig in config.windows where secondaryConfig.label != window.label {
+                let secStateStore: KSWindowStateStore? =
+                    secondaryConfig.persistState
+                    ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+                    : nil
+                let secRestoredState = secStateStore?.load(label: secondaryConfig.label)
+                let sec = try KSWindowsDemoHost(
+                    windowConfig: secondaryConfig, registry: registry,
+                    restoredState: secRestoredState)
+                let secMode = decideServingMode(
+                    urlOverride: nil, windowURL: secondaryConfig.url,
+                    devServerURL: config.build.devServerURL, resourceRoot: resourceRoot)
+                if case .virtualHost(let secRoot) = secMode {
+                    try sec.prepare(devtools: config.security.devtools)
+                    let secAssetResolver = KSAssetResolver(root: secRoot, cache: KSAssetCache())
+                    try sec.setResourceHandler(
+                        resolver: secAssetResolver,
+                        csp: config.security.csp,
+                        host: Self.virtualHost)
+                }
+                try sec.addDocumentCreatedScript(cspScript)
+                if config.security.contextMenu == .disabled {
+                    sec.setDefaultContextMenusEnabled(false)
+                }
+                if !config.security.allowExternalDrop {
+                    sec.setAllowExternalDrop(false)
+                    do {
+                        try sec.installFileDropEmitter()
+                    } catch {
+                        KSLog.logger("kalsae.app").warning(
+                            "secondary '\(secondaryConfig.label)' installFileDropEmitter failed: \(error)")
+                    }
+                }
+                if let store = secStateStore {
+                    let lbl = secondaryConfig.label
+                    sec.setWindowStateSaveSink { state in _ = store.save(label: lbl, state: state) }
+                }
+                let secURL = resolveStartURL(
+                    urlOverride: nil, windowURL: secondaryConfig.url,
+                    devServerURL: config.build.devServerURL, servingMode: secMode)
+                try sec.startPrepared(url: secURL, devtools: config.security.devtools)
+                secondaryWrappers.append(.windows(sec))
+            }
+        #elseif os(macOS)
+            for secondaryConfig in config.windows where secondaryConfig.label != window.label {
+                let secStateStore: KSWindowStateStore? =
+                    secondaryConfig.persistState
+                    ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+                    : nil
+                let sec = try KSMacDemoHost(windowConfig: secondaryConfig, registry: registry)
+                let secMode = decideServingMode(
+                    urlOverride: nil, windowURL: secondaryConfig.url,
+                    devServerURL: config.build.devServerURL, resourceRoot: resourceRoot)
+                if case .virtualHost(let secRoot) = secMode {
+                    try sec.setAssetRoot(secRoot)
+                }
+                try sec.addDocumentCreatedScript(cspScript)
+                if let store = secStateStore {
+                    let lbl = secondaryConfig.label
+                    sec.setWindowStateSaveSink { state in _ = store.save(label: lbl, state: state) }
+                }
+                let secURL = resolveStartURL(
+                    urlOverride: nil, windowURL: secondaryConfig.url,
+                    devServerURL: config.build.devServerURL, servingMode: secMode)
+                try sec.start(url: secURL, devtools: config.security.devtools)
+                secondaryWrappers.append(.mac(sec))
+            }
+        #elseif os(Linux) || os(iOS) || os(Android)
+            // 단일 창만 지원하는 플랫폼: `config.windows`에 두 개 이상 선언되어 있으면
+            // 정적으로 버려진다. 사용자가 "왜 두 번째 창이 안 뜨지?" 디버깅하지
+            // 않도록 부팅 시 1회 경고를 남긴다.
+            if config.windows.count > 1 {
+                let ignored = config.windows.count - 1
+                KSLog.logger("kalsae.app").warning(
+                    "Multiple windows declared (\(config.windows.count)) but this platform "
+                    + "supports single-window only; ignoring \(ignored) entries.")
+            }
+        #endif
+
         let platform = try Kalsae.makePlatform()
 
         // 알림 백엔드를 트레이 아이콘과 연결해 토스트가 상주 아이콘을
@@ -363,6 +456,7 @@ public final class KSApp {
         let app = KSApp(
             config: config, registry: registry,
             platform: platform, host: wrapper,
+            secondaryHosts: secondaryWrappers,
             deepLinkBackend: builtDeepLinkBackend)
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.

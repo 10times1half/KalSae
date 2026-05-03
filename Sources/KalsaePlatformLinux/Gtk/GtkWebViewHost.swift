@@ -319,6 +319,12 @@
             ks_gtk_host_set_response_csp(hostPtr, csp)
         }
 
+        /// 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP) 자동 추가 여부를
+        /// 토글한다. `KSSecurityConfig.crossOriginIsolation`에 대응한다.
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            ks_gtk_host_set_cross_origin_isolation(hostPtr, enabled ? 1 : 0)
+        }
+
         private var resolverBox: Unmanaged<ResolverBox>?
 
         // MARK: - Window state persistence

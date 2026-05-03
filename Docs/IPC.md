@@ -133,6 +133,15 @@ The host registers the following built-in command namespaces during boot:
 | `__ks.window.center` | Center the window on screen |
 | `__ks.window.beforeClose` | Register a close handler (return `{ cancel: true }` to prevent close) |
 
+#### Multi-window (v0.3+)
+
+| Command | Args | Returns | Description |
+|---|---|---|---|
+| `__ks.window.create` | `KSWindowConfig` | `{ label }` | Create a new native window. Optional `url` field is loaded immediately. **Limitation:** the new window inherits structural settings only — no CSP header injection, no virtual host (`https://app.kalsae/` / `ks://app/`), no `persistState`, no deep-link handlers. Caller must pass an explicit URL and apply security policy in JS. For full security, declare windows up front in `config.windows`. |
+| `__ks.window.list` | — | `[{ label }]` | Return all currently open window labels. |
+| `__ks.window.current` | — | `{ label }` | Return the label of the window from which the IPC frame was sent (resolved via `KSInvocationContext.windowLabel` task-local). Throws `invalidArgument` when called outside an IPC dispatch. |
+| `__ks.window.emit` | `{ event, payload, target? }` | — | Emit an event to a specific window (`target` = label) or broadcast to all windows when `target` is `null`/omitted. |
+
 ### `__ks.shell.*`
 
 | Command | Description |
@@ -220,6 +229,8 @@ The host emits the following events to the JS frontend:
 | `__ks.deepLink.openURL` | `{ url }` | Deep link URL received |
 | `__ks.file.drop` | `{ paths: string[] }` | Files dropped onto window |
 | `__ks.webview.downloadStarting` | `{ url, mimeType }` | Download initiated |
+| `__ks.window.created` | `{ label }` | A new window was created. Broadcast to all open windows (Windows / macOS, v0.3+). |
+| `__ks.window.closed` | `{ label }` | A window was closed. Broadcast to all remaining windows (Windows / macOS, v0.3+). |
 
 ## Threading Model
 

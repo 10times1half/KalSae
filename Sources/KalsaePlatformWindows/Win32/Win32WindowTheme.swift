@@ -9,6 +9,7 @@
         /// back to the older index (19) for earlier builds. Failures are
         /// silent — theming is best-effort.
         func setTheme(_ theme: KSWindowTheme) {
+            currentTheme = theme
             guard let hwnd else { return }
             // DWMWA_USE_IMMERSIVE_DARK_MODE 값은 Win10 1903+ / 19h2에서 20,
             // 이전 빌드는 19었다. 둘 다 시도한다.

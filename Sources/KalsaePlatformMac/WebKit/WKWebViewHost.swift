@@ -103,6 +103,10 @@
             schemeHandler.csp = csp
         }
 
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            schemeHandler.crossOriginIsolation = enabled
+        }
+
         public func openDevTools() throws(KSError) {
             if #available(macOS 13.3, *) {
                 webView.isInspectable = true
@@ -233,6 +237,7 @@
     internal final class KSMacSchemeHandler: NSObject, WKURLSchemeHandler {
         var resolver: KSAssetResolver?
         var csp: String = KSSecurityConfig.defaultCSP
+        var crossOriginIsolation: Bool = false
 
         nonisolated func webView(_ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask) {
             MainActor.assumeIsolated { self.startTask(urlSchemeTask) }
@@ -248,13 +253,18 @@
             }
             do {
                 let asset = try resolver.resolve(path: url.path)
-                let headers: [String: String] = [
+                var headers: [String: String] = [
                     "Content-Type": asset.mimeType,
                     "Content-Length": String(asset.data.count),
                     "Content-Security-Policy": csp,
                     "X-Content-Type-Options": "nosniff",
                     "Referrer-Policy": "no-referrer",
                 ]
+                if crossOriginIsolation {
+                    headers["Cross-Origin-Opener-Policy"] = "same-origin"
+                    headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+                    headers["Cross-Origin-Resource-Policy"] = "same-origin"
+                }
                 guard
                     let response = HTTPURLResponse(
                         url: url, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)

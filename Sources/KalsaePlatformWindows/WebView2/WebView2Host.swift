@@ -37,6 +37,12 @@
         internal var messageHandlerBox: Unmanaged<MessageHandlerBox>?
         internal var resourceHandlerBox: Unmanaged<ResourceHandlerBox>?
         internal var dropTargetBox: Unmanaged<DropTargetBox>?
+        internal var newWindowHandlerBox: Unmanaged<NewWindowHandlerBox>?
+        internal var permissionHandlerBox: Unmanaged<PermissionHandlerBox>?
+        internal var downloadHandlerBox: Unmanaged<DownloadHandlerBox>?
+        internal var serverCertHandlerBox: Unmanaged<ServerCertHandlerBox>?
+        internal var basicAuthHandlerBox: Unmanaged<BasicAuthHandlerBox>?
+        internal var clientCertHandlerBox: Unmanaged<ClientCertHandlerBox>?
 
         init(label: String) {
             self.label = label
@@ -219,6 +225,18 @@
             }
             dropTargetBox?.release()
             dropTargetBox = nil
+            newWindowHandlerBox?.release()
+            newWindowHandlerBox = nil
+            permissionHandlerBox?.release()
+            permissionHandlerBox = nil
+            downloadHandlerBox?.release()
+            downloadHandlerBox = nil
+            serverCertHandlerBox?.release()
+            serverCertHandlerBox = nil
+            basicAuthHandlerBox?.release()
+            basicAuthHandlerBox = nil
+            clientCertHandlerBox?.release()
+            clientCertHandlerBox = nil
             if let controller {
                 _ = KSWV2_Controller_Close(controller)
                 KSWV2_Controller_Release(controller)

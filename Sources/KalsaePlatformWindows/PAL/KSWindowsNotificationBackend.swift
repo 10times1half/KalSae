@@ -52,7 +52,17 @@
         }
 
         public func cancel(id: String) async {
-            // 태그/그룹으로 속애어 취소는 후속 단계에서 구현.
+            await MainActor.run {
+                guard let aumid = self.aumid else {
+                    // AUMID 미등록: 트레이 버블 폴백은 cancel 불가 (SDK 미지원).
+                    return
+                }
+                aumid.withCString(encodedAs: UTF16.self) { aumidPtr in
+                    id.withCString(encodedAs: UTF16.self) { tagPtr in
+                        _ = KSWV2_CancelToast(aumidPtr, tagPtr)
+                    }
+                }
+            }
         }
 
         /// Synchronous, UI-thread entry point used by `KSApp.postNotification`.
@@ -82,7 +92,9 @@
                     n.title.withCString(encodedAs: UTF16.self) { titlePtr in
                         let body = n.body ?? ""
                         return body.withCString(encodedAs: UTF16.self) { bodyPtr in
-                            KSWV2_ShowToast(aumidPtr, titlePtr, bodyPtr)
+                            n.id.withCString(encodedAs: UTF16.self) { tagPtr in
+                                KSWV2_ShowToast(aumidPtr, titlePtr, bodyPtr, tagPtr)
+                            }
                         }
                     }
                 }

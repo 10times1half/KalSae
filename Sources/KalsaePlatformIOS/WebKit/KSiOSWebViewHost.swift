@@ -219,6 +219,10 @@
             schemeHandler.csp = csp
         }
 
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            schemeHandler.crossOriginIsolation = enabled
+        }
+
         public func openDevTools() async throws(KSError) {
             // iOS?癒?퐣 Web Inspector???⑤벀而?API嚥??????????용뼄.
         }
@@ -229,6 +233,7 @@
     internal final class KSiOSSchemeHandler: NSObject, WKURLSchemeHandler {
         var resolver: KSAssetResolver?
         var csp: String = KSSecurityConfig.defaultCSP
+        var crossOriginIsolation: Bool = false
 
         nonisolated func webView(
             _ webView: WKWebView, start urlSchemeTask: any WKURLSchemeTask
@@ -250,11 +255,16 @@
             }
             do {
                 let asset = try resolver.resolve(path: url.path)
-                let headers: [String: String] = [
+                var headers: [String: String] = [
                     "Content-Type": asset.mimeType,
                     "Content-Length": String(asset.data.count),
                     "Content-Security-Policy": csp,
                 ]
+                if crossOriginIsolation {
+                    headers["Cross-Origin-Opener-Policy"] = "same-origin"
+                    headers["Cross-Origin-Embedder-Policy"] = "require-corp"
+                    headers["Cross-Origin-Resource-Policy"] = "same-origin"
+                }
                 guard
                     let response = HTTPURLResponse(
                         url: url, statusCode: 200,

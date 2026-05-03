@@ -261,7 +261,78 @@ int32_t KSWV2_AddWebResourceRequestedHandler(
 int32_t KSWV2_AddWebResourceRequestedFilter(
     KSWV2WebView webview, const wchar_t *uri_wildcard);
 
-// MARK: - 메모리 할당 헬퍼
+/// 이 webview의 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP)를
+/// 자동 추가할지 토글한다. `enabled != 0`이면 다음 3개 헤더가
+/// 모든 WebResourceRequested 응답에 붙는다:
+///   Cross-Origin-Opener-Policy: same-origin
+///   Cross-Origin-Embedder-Policy: require-corp
+///   Cross-Origin-Resource-Policy: same-origin
+/// 0이면 비활성화. 항상 0(S_OK)을 반환한다.
+/// `KSWV2_AddWebResourceRequestedHandler`보다 먼저 또는 나중에 호출 가능.
+int32_t KSWV2_SetCrossOriginIsolation(
+    KSWV2WebView webview, int32_t enabled);
+
+// MARK: - 보안 핸들러
+
+// 새 창(팝업) 요청 핸들러.
+// `window.open()` / `target="_blank"` 등으로 WebView2가 새 창을
+// 열려할 때 호출된다.
+// 콜백 반환값: 0 = 요청 거부 (Handled=TRUE, NewWindow=null),
+//              그 외 = 허용(호스트가 직접 NewWindow 처리 필요).
+// uri_utf16: 요청된 목적지 URL (항상 non-null).
+typedef int32_t (*KSWV2NewWindowCB)(void *user, const wchar_t *uri_utf16);
+
+int32_t KSWV2_AddNewWindowRequestedHandler(
+    KSWV2WebView webview, void *user, KSWV2NewWindowCB cb);
+
+// 권한 요청 핸들러.
+// 마이크, 카메라, 지오로케이션 등 민감한 API 요청 시 호출된다.
+// kind는 COREWEBVIEW2_PERMISSION_KIND 정수값.
+// 콜백 반환값: 0 = DENY, 1 = ALLOW, 2 = DEFAULT (WebView2 기본 처리).
+typedef int32_t (*KSWV2PermissionCB)(
+    void *user, const wchar_t *uri_utf16, int32_t kind);
+
+int32_t KSWV2_AddPermissionRequestedHandler(
+    KSWV2WebView webview, void *user, KSWV2PermissionCB cb);
+
+// 다운로드 시작 핸들러 (ICoreWebView2_4).
+// 페이지가 파일 다운로드를 시작할 때 호출된다.
+// url_utf16:  다운로드 URL.
+// mime_utf16: MIME 타입 (없으면 빈 문자열).
+// 콜백 반환값: 0 = 다운로드 허용, 1 = 취소.
+typedef int32_t (*KSWV2DownloadStartingCB)(
+    void *user, const wchar_t *url_utf16, const wchar_t *mime_utf16);
+
+int32_t KSWV2_AddDownloadStartingHandler(
+    KSWV2WebView webview, void *user, KSWV2DownloadStartingCB cb);
+
+// TLS/서버 인증서 오류 핸들러 (ICoreWebView2_14).
+// 콜백 반환값: 0 = 탐색 취소(deny-secure 기본값), 1 = 계속(허용).
+// 지원하지 않는 런타임에서 KSWV2_AddServerCertificateErrorHandler는
+// E_NOINTERFACE를 반환하며 핸들러가 설치되지 않는다.
+typedef int32_t (*KSWV2ServerCertErrorCB)(void *user);
+
+int32_t KSWV2_AddServerCertificateErrorHandler(
+    KSWV2WebView webview, void *user, KSWV2ServerCertErrorCB cb);
+
+// HTTP Basic/Digest 인증 요청 핸들러 (ICoreWebView2_10).
+// 콜백 반환값: 0 = 취소(자격증명 없이 거부), 1 = 계속(기본 처리).
+// 기본 정책: 취소(0). 지원하지 않는 런타임에서 E_NOINTERFACE.
+typedef int32_t (*KSWV2BasicAuthCB)(
+    void *user, const wchar_t *uri_utf16, const wchar_t *challenge_utf16);
+
+int32_t KSWV2_AddBasicAuthenticationHandler(
+    KSWV2WebView webview, void *user, KSWV2BasicAuthCB cb);
+
+// 클라이언트 인증서 요청 핸들러 (ICoreWebView2_5).
+// 콜백 반환값: 0 = 취소(인증서 없이 진행), 1 = 기본 처리(OS 선택기).
+// 기본 정책: 취소(0). 지원하지 않는 런타임에서 E_NOINTERFACE.
+typedef int32_t (*KSWV2ClientCertCB)(void *user, const wchar_t *host_utf16);
+
+int32_t KSWV2_AddClientCertificateHandler(
+    KSWV2WebView webview, void *user, KSWV2ClientCertCB cb);
+
+
 //
 // Swift가 반환하는 응답 버퍼는 C++ 쪽에서 `free()`할 수 있어야 한다.
 // Swift의 자체 할당자가 CRT 할당자와 일치한다는 보장이 없으므로, 콜백이
@@ -281,13 +352,25 @@ int32_t KSWV2_SetAppUserModelID(const wchar_t *aumid);
 
 /// Posts a Windows.UI.Notifications XAML toast under `aumid`. `title`
 /// and `body` are optional (NULL or empty string suppresses the
-/// corresponding `<text>` element). Returns 0 on success or a Win32
-/// HRESULT on failure (e.g. RPC_E_DISCONNECTED if the AUMID is not
+/// corresponding `<text>` element). `tag` is used as the WinRT toast tag
+/// so the notification can be retracted with `KSWV2_CancelToast`. Pass
+/// NULL or empty string to post without a tag. Returns 0 on success or a
+/// Win32 HRESULT on failure (e.g. RPC_E_DISCONNECTED if the AUMID is not
 /// registered with a Start Menu shortcut).
 int32_t KSWV2_ShowToast(
     const wchar_t *aumid,
     const wchar_t *title,
-    const wchar_t *body);
+    const wchar_t *body,
+    const wchar_t *tag);
+
+/// Removes the toast notification identified by `tag` from the Action
+/// Center history of `aumid`. Uses `IToastNotificationHistory::
+/// RemoveGroupedTagWithId` with an empty group. Returns S_OK (0) when the
+/// removal succeeds or when no matching notification is found. A non-zero
+/// return indicates a WinRT activation failure.
+int32_t KSWV2_CancelToast(
+    const wchar_t *aumid,
+    const wchar_t *tag);
 
 // MARK: - 이미지(WIC) — PNG ↔ DIB 변환
 //

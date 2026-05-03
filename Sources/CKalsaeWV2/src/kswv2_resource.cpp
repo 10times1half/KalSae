@@ -9,7 +9,9 @@
 #include <wrl.h>
 #include <objbase.h>
 #include <cstring>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include "kswv2_internal.h"
 
 using namespace Microsoft::WRL;
@@ -26,7 +28,33 @@ ICoreWebView2Environment *GetEnvFromWebView(ICoreWebView2 *wv) {
     return SUCCEEDED(hr) ? env : nullptr;
 }
 
+// webview 별 Cross-Origin Isolation 플래그 저장소.
+// `KSWV2_SetCrossOriginIsolation`로 설정되며, 응답 헤더 빌더가 조회한다.
+// 단순한 boolean이므로 mutex로 충분 (호출 빈도 매우 낮음).
+std::mutex g_coi_mu;
+std::unordered_map<ICoreWebView2 *, bool> g_coi_flags;
+
+bool LookupCOI(ICoreWebView2 *wv) {
+    std::lock_guard<std::mutex> lock(g_coi_mu);
+    auto it = g_coi_flags.find(wv);
+    return it != g_coi_flags.end() && it->second;
+}
+
 } // namespace
+
+extern "C" int32_t KSWV2_SetCrossOriginIsolation(
+    KSWV2WebView webview, int32_t enabled)
+{
+    if (!webview) return E_POINTER;
+    ICoreWebView2 *wv = KSWV2_AsWebView(webview);
+    std::lock_guard<std::mutex> lock(g_coi_mu);
+    if (enabled) {
+        g_coi_flags[wv] = true;
+    } else {
+        g_coi_flags.erase(wv);
+    }
+    return 0;
+}
 
 extern "C" int32_t KSWV2_AddWebResourceRequestedHandler(
     KSWV2WebView webview, void *user, KSWV2ResourceCB cb)
@@ -93,6 +121,11 @@ extern "C" int32_t KSWV2_AddWebResourceRequestedHandler(
             if (!headers.empty()) headers += L"\r\n";
             headers += L"X-Content-Type-Options: nosniff";
             headers += L"\r\nReferrer-Policy: no-referrer";
+            if (LookupCOI(sender)) {
+                headers += L"\r\nCross-Origin-Opener-Policy: same-origin";
+                headers += L"\r\nCross-Origin-Embedder-Policy: require-corp";
+                headers += L"\r\nCross-Origin-Resource-Policy: same-origin";
+            }
             if (ct) free(ct);
             if (csp) free(csp);
 

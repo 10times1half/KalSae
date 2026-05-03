@@ -77,9 +77,14 @@
             case WM_DPICHANGED:
                 let dpi = Int((wparam >> 16) & 0xFFFF)  // HIWORD = Y-DPI(=X-DPI)
                 let scale = Double(dpi) / 96.0
-                // OS가 새 권장 사각형을 lparam(RECT*)로 넘긴다 — 수용한다.
-                if let rectPtr = UnsafeMutablePointer<RECT>(
-                    bitPattern: UInt(lparam)), let hwnd
+                // OS가 새 권장 사각형을 lparam(RECT*)로 넘긴다 — fullscreen이
+                // 아닐 때만 수용한다. fullscreen 상태에서는 setFullscreen이
+                // 모니터 rcMonitor에 맞춰 이미 자체 배치를 관리하므로
+                // 권장 사각형을 적용하면 chrome 없는 창이 모니터를 못 채우는
+                // 회귀가 발생한다.
+                if !isFullscreen(),
+                    let rectPtr = UnsafeMutablePointer<RECT>(
+                        bitPattern: UInt(lparam)), let hwnd
                 {
                     let r = rectPtr.pointee
                     _ = SetWindowPos(
@@ -103,6 +108,10 @@
                         emit(
                             "__ks.system.themeChanged",
                             ThemePayload(theme: theme))
+                        // DWM 타이틀 바 색상도 새 OS 테마에 맞게 재적용한다.
+                        // currentTheme == .system이면 setTheme이 내부에서 즉시
+                        // 레지스트리를 다시 읽어 올바른 색상을 설정한다.
+                        setTheme(currentTheme)
                     }
                 }
                 return DefWindowProcW(hwnd, msg, wparam, lparam)
@@ -205,7 +214,15 @@
                     Win32App.shared.unregister(hwnd: hwnd)
                     KSWin32HandleRegistry.shared.unregister(label: label)
                     KSWin32MainWindowTracker.shared.untrack(hwnd: hwnd)
+                    // 닫히는 창을 먼저 hub/bridge 레지스트리에서 해제한 다음
+                    // 나머지 창에만 브로드캐스트한다.
                     KSWindowEmitHub.shared.unregister(label: label)
+                    KSWindowsBridgeRegistry.shared.unregister(label: label)
+                    struct ClosedPayload: Encodable { let label: String }
+                    try? KSWindowEmitHub.shared.emit(
+                        event: "__ks.window.closed",
+                        payload: ClosedPayload(label: label),
+                        to: nil)
                 }
                 webviewHost?.dispose()
                 webviewHost = nil

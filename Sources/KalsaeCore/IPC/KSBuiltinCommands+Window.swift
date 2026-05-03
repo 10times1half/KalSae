@@ -168,5 +168,63 @@ extension KSBuiltinCommands {
             let data = try await windows.capturePreview(h, format: fmt)
             return data.base64EncodedString()
         }
+
+        // Multi-window: 새 창 생성. JS -> `__KS_.invoke("__ks.window.create", config)`.
+        // `url` 필드를 지정하면 생성 즉시 해당 URL로 탐색한다.
+        await register(registry, "__ks.window.create") { (args: KSWindowConfig) throws(KSError) -> LabelResult in
+            let handle = try await windows.create(args)
+            if let urlStr = args.url, let url = URL(string: urlStr) {
+                let webview = try await windows.webView(for: handle)
+                try await webview.load(url: url)
+            }
+            // 만들어진 창을 다른 모든 창에 알린다.
+            struct CreatedPayload: Encodable { let label: String }
+            let r: Result<Void, KSError> = await MainActor.run {
+                do {
+                    try KSWindowEmitHub.shared.emit(
+                        event: "__ks.window.created",
+                        payload: CreatedPayload(label: args.label),
+                        to: nil)
+                    return .success(())
+                } catch {
+                    return .failure(
+                        error as? KSError ?? KSError(code: .internal, message: "\(error)"))
+                }
+            }
+            _ = r  // 이벤트 emit 실패는 창 생성 자체를 실패시키지 않는다.
+            return LabelResult(label: args.label)
+        }
+
+        // Multi-window: 현재 열린 창 레이블 목록 반환.
+        await registerQuery(registry, "__ks.window.list") { _ throws(KSError) -> [WindowInfo] in
+            let handles = await windows.all()
+            return handles.map { WindowInfo(label: $0.label) }
+        }
+
+        // Multi-window: 이 IPC 프레임이 발생한 창 레이블 반환.
+        await registerQuery(registry, "__ks.window.current") { _ throws(KSError) -> LabelResult in
+            guard let label = KSInvocationContext.windowLabel else {
+                throw KSError(code: .invalidArgument, message: "__ks.window.current: no active window context")
+            }
+            return LabelResult(label: label)
+        }
+
+        // Multi-window: 특정 창 또는 모든 창에 이벤트 emit.
+        // `target` 미지정 시 브로드캐스트.
+        await register(registry, "__ks.window.emit") { (args: WindowEmitArg) throws(KSError) -> Empty in
+            let r: Result<Void, KSError> = await MainActor.run {
+                do {
+                    try KSWindowEmitHub.shared.emit(
+                        event: args.event, payload: args.payload, to: args.target)
+                    return .success(())
+                } catch {
+                    return .failure(
+                        error as? KSError
+                            ?? KSError(code: .internal, message: "\(error)"))
+                }
+            }
+            if case .failure(let e) = r { throw e }
+            return Empty()
+        }
     }
 }

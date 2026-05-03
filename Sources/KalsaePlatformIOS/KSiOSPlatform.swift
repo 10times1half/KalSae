@@ -76,6 +76,8 @@
                 try host.setAssetRoot(servedRoot)
             }
 
+            host.setCrossOriginIsolation(config.security.crossOriginIsolation)
+
             try host.addDocumentCreatedScript(Self.cspInjectionScript(config.security.csp))
 
             let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {

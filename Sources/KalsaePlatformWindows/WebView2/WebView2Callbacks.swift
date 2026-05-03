@@ -72,6 +72,59 @@
         }
     }
 
+    @MainActor
+    internal final class NewWindowHandlerBox {
+        let handler: @MainActor (_ uri: String) -> Bool  // returns true = allow
+        init(handler: @MainActor @escaping (_ uri: String) -> Bool) {
+            self.handler = handler
+        }
+    }
+
+    @MainActor
+    internal final class PermissionHandlerBox {
+        // returns: 0=deny, 1=allow, 2=default
+        let handler: @MainActor (_ uri: String, _ kind: Int32) -> Int32
+        init(handler: @MainActor @escaping (_ uri: String, _ kind: Int32) -> Int32) {
+            self.handler = handler
+        }
+    }
+
+    @MainActor
+    internal final class DownloadHandlerBox {
+        // returns: 0=allow, 1=cancel
+        let handler: @MainActor (_ url: String, _ mime: String) -> Int32
+        init(handler: @MainActor @escaping (_ url: String, _ mime: String) -> Int32) {
+            self.handler = handler
+        }
+    }
+
+    @MainActor
+    internal final class ServerCertHandlerBox {
+        // returns: 0=cancel(deny-secure), 1=allow
+        let handler: @MainActor () -> Int32
+        init(handler: @MainActor @escaping () -> Int32) {
+            self.handler = handler
+        }
+    }
+
+    @MainActor
+    internal final class BasicAuthHandlerBox {
+        // returns: 0=cancel, 1=allow(OS 기본 처리)
+        let handler: @MainActor (_ uri: String, _ challenge: String) -> Int32
+        init(handler: @MainActor @escaping (_ uri: String, _ challenge: String) -> Int32) {
+            self.handler = handler
+        }
+    }
+
+    @MainActor
+    internal final class ClientCertHandlerBox {
+        // returns: 0=cancel, 1=allow(OS 선택기)
+        let handler: @MainActor (_ host: String) -> Int32
+        init(handler: @MainActor @escaping (_ host: String) -> Int32) {
+            self.handler = handler
+        }
+    }
+
     // MARK: - Callback dispatch
     //
     // Every entry point here is invoked from a `@convention(c)` thunk in
@@ -207,6 +260,93 @@
             }
         }
 
+        static func dispatchNewWindow(
+            user: UnsafeMutableRawPointer?,
+            uri: UnsafePointer<UInt16>?
+        ) -> Int32 {
+            guard let user else { return 0 }
+            let userBox = KSSendableRaw(value: user)
+            let uriStr = uri.map { $0.toString() } ?? ""
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<NewWindowHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler(uriStr) ? Int32(1) : Int32(0)
+            }
+        }
+
+        static func dispatchPermission(
+            user: UnsafeMutableRawPointer?,
+            uri: UnsafePointer<UInt16>?,
+            kind: Int32
+        ) -> Int32 {
+            guard let user else { return 0 }
+            let userBox = KSSendableRaw(value: user)
+            let uriStr = uri.map { $0.toString() } ?? ""
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<PermissionHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler(uriStr, kind)
+            }
+        }
+
+        static func dispatchDownload(
+            user: UnsafeMutableRawPointer?,
+            url: UnsafePointer<UInt16>?,
+            mime: UnsafePointer<UInt16>?
+        ) -> Int32 {
+            guard let user else { return 0 }
+            let userBox = KSSendableRaw(value: user)
+            let urlStr = url.map { $0.toString() } ?? ""
+            let mimeStr = mime.map { $0.toString() } ?? ""
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<DownloadHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler(urlStr, mimeStr)
+            }
+        }
+
+        static func dispatchServerCertError(
+            user: UnsafeMutableRawPointer?
+        ) -> Int32 {
+            guard let user else { return 0 }  // default: deny
+            let userBox = KSSendableRaw(value: user)
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<ServerCertHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler()
+            }
+        }
+
+        static func dispatchBasicAuth(
+            user: UnsafeMutableRawPointer?,
+            uri: UnsafePointer<UInt16>?,
+            challenge: UnsafePointer<UInt16>?
+        ) -> Int32 {
+            guard let user else { return 0 }  // default: cancel
+            let userBox = KSSendableRaw(value: user)
+            let uriStr = uri.map { $0.toString() } ?? ""
+            let challengeStr = challenge.map { $0.toString() } ?? ""
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<BasicAuthHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler(uriStr, challengeStr)
+            }
+        }
+
+        static func dispatchClientCert(
+            user: UnsafeMutableRawPointer?,
+            host: UnsafePointer<UInt16>?
+        ) -> Int32 {
+            guard let user else { return 0 }  // default: cancel
+            let userBox = KSSendableRaw(value: user)
+            let hostStr = host.map { $0.toString() } ?? ""
+            return MainActor.assumeIsolated {
+                let box = Unmanaged<ClientCertHandlerBox>
+                    .fromOpaque(userBox.value).takeUnretainedValue()
+                return box.handler(hostStr)
+            }
+        }
+
         /// Wide-char dup that matches `free()` on the C++ side via the
         /// allocator exported from `KSWV2.cpp`.
         private static func wcsdupShim(_ s: String) -> UnsafeMutablePointer<UInt16>? {
@@ -224,7 +364,10 @@
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))
             }
             if n == 0 { return URL(fileURLWithPath: ".") }
-            let path = buf.withUnsafeBufferPointer { $0.baseAddress!.toString() }
+            let path = buf.withUnsafeBufferPointer { bufPtr -> String in
+                guard let base = bufPtr.baseAddress else { return "." }
+                return base.toString()
+            }
             return URL(fileURLWithPath: path).deletingLastPathComponent()
         }
 
@@ -248,7 +391,10 @@
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))
             }
             if n == 0 { return "Kalsae" }
-            let exe = URL(fileURLWithPath: buf.withUnsafeBufferPointer { $0.baseAddress!.toString() })
+            let exe = URL(fileURLWithPath: buf.withUnsafeBufferPointer { bufPtr -> String in
+                guard let base = bufPtr.baseAddress else { return "." }
+                return base.toString()
+            })
             return exe.deletingPathExtension().lastPathComponent
         }
     }

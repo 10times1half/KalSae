@@ -106,7 +106,8 @@
         /// `Content-Security-Policy`로 쳊부한다. 동일 호스트에
         /// `setVirtualHostMapping`과 상호 배타적이다.
         public func setResourceHandler(
-            resolver: KSAssetResolver, csp: String, host: String
+            resolver: KSAssetResolver, csp: String, host: String,
+            crossOriginIsolation: Bool = false
         ) throws(KSError) {
             guard window.hwnd != nil else {
                 throw KSError(
@@ -114,7 +115,9 @@
                     message: "Window has no HWND")
             }
             try ensureWebViewInitialized(devtools: pendingDevtools)
-            try webview.setResourceHandler(resolver: resolver, csp: csp, host: host)
+            try webview.setResourceHandler(
+                resolver: resolver, csp: csp, host: host,
+                crossOriginIsolation: crossOriginIsolation)
         }
 
         /// WebView2의 기본 브라우저 스타일 컨텍스트 메뉴를 토글한다.
@@ -132,12 +135,15 @@
         }
 
         /// 네이티브 `WM_POWERBROADCAST(PBT_APMSUSPEND)` 콜백을 설정한다.
+        /// JS 측에서는 별도 설정 없이 `__ks.system.suspend` 이벤트가
+        /// 자동으로 emit되므로 프론트엔드에서 수신하는 것이 일반적이다.
         public func setOnSuspend(_ cb: (@MainActor () -> Void)?) {
             window.onSuspendSwift = cb
         }
 
         /// 네이티브 `WM_POWERBROADCAST(PBT_APMRESUMEAUTOMATIC|RESUMESUSPEND)`
-        /// 콜백을 설정한다.
+        /// 콜백을 설정한다. JS 측에서는 `__ks.system.resume` 이벤트가
+        /// 자동으로 emit된다.
         public func setOnResume(_ cb: (@MainActor () -> Void)?) {
             window.onResumeSwift = cb
         }
@@ -192,6 +198,37 @@
                 // OS가 금지 아이콘 대신 복사 커서를 표시하도록 한다.
                 return !paths.isEmpty || kind == .leave
             }
+        }
+
+        /// 팝업 차단, 권한 거부-기본값, 다운로드 알림 핸들러를 설치한다.
+        /// `startPrepared` / `prepare` 이후에 호출해야 한다.
+        ///
+        /// 다운로드 시작 이벤트는 자동으로 `__ks.webview.downloadStarting`
+        /// JS 이벤트로 라우팅된다. 페이로드 스키마:
+        /// ```json
+        /// { "url": "<download URL>", "mimeType": "<MIME>" }
+        /// ```
+        ///
+        /// - Parameters:
+        ///   - allowPopups: `true`이면 `window.open()` 요청을 허용한다.
+        ///   - openExternal: 팝업이 차단될 때 URL을 기본 브라우저에서 열 클로저.
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            let bridge = self.bridge
+            try webview.installSecurityHandlers(
+                allowPopups: allowPopups,
+                openExternal: openExternal,
+                downloadEmit: { url, mime in
+                    struct Payload: Encodable {
+                        let url: String
+                        let mimeType: String
+                    }
+                    try? bridge.emit(
+                        event: "__ks.webview.downloadStarting",
+                        payload: Payload(url: url, mimeType: mime))
+                })
         }
 
         private var webviewInitialized = false

@@ -39,7 +39,7 @@
         public init() {
             let registry = KSCommandRegistry()
             self.commandRegistry = registry
-            self._windows = KSMacWindowBackend()
+            self._windows = KSMacWindowBackend(registry: registry)
             self._dialogs = KSMacDialogBackend()
             self._tray = KSMacTrayBackend()
             self._menus = KSMacMenuBackend()
@@ -98,6 +98,8 @@
             if case .virtualHost(let servedRoot) = servingMode {
                 try host.setAssetRoot(servedRoot)
             }
+
+            host.setCrossOriginIsolation(config.security.crossOriginIsolation)
 
             try host.addDocumentCreatedScript(Self.cspInjectionScript(config.security.csp))
 
@@ -315,6 +317,11 @@
             let wLabel = windowConfig.label
             window.onWindowClosed = {
                 KSWindowEmitHub.shared.unregister(label: wLabel)
+                struct ClosedPayload: Encodable { let label: String }
+                try? KSWindowEmitHub.shared.emit(
+                    event: "__ks.window.closed",
+                    payload: ClosedPayload(label: wLabel),
+                    to: nil)
             }
 
             let raw = UInt64(UInt(bitPattern: ObjectIdentifier(window)))
@@ -341,6 +348,12 @@
         /// macOS에서 탐색 URL은 `ks://app/index.html`이다.
         public func setAssetRoot(_ root: URL) throws(KSError) {
             try webview.setAssetRoot(root)
+        }
+
+        /// 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP) 자동 추가 여부를
+        /// 토글한다. `KSSecurityConfig.crossOriginIsolation`에 대응한다.
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            webview.setCrossOriginIsolation(enabled)
         }
 
         /// 모든 문서 시작 시 실행될 JS 스니폫을 대기열에 추가한다.
@@ -417,7 +430,7 @@
             let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
             await KSBuiltinCommands.register(
                 into: registry,
-                windows: KSMacWindowBackend(),
+                windows: KSMacWindowBackend(registry: registry),
                 shell: KSMacShellBackend(),
                 clipboard: KSMacClipboardBackend(),
                 notifications: KSMacNotificationBackend(),

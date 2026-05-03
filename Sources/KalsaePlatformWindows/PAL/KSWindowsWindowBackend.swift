@@ -72,6 +72,10 @@
                             userDataFolderOverride: config.webview?.userDataPath)
                         window.attach(host: webview)
                         try bridge.install()
+                        // 명시 retain — eventSink 클로저 캡처에만 의존하면
+                        // eventSink 교체 시 bridge가 즉시 deinit된다.
+                        KSWindowsBridgeRegistry.shared.register(
+                            label: config.label, bridge: bridge)
                         applyVisualOptions(window: window, webview: webview, options: config.webview)
                     } catch {
                         webview.dispose()
@@ -102,6 +106,7 @@
                 do {
                     let w = try self.window(for: handle)
                     w.close()
+                    KSWindowsBridgeRegistry.shared.unregister(label: handle.label)
                     return .success(())
                 } catch {
                     return .failure(

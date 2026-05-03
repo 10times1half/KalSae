@@ -22,7 +22,11 @@
     /// The `create(_:)` method produces an NSWindow with an embedded WKWebView
     /// and a fully-wired `WKBridge`.
     public struct KSMacWindowBackend: KSWindowBackend, Sendable {
-        public init() {}
+        private let registry: KSCommandRegistry
+
+        public init(registry: KSCommandRegistry = KSCommandRegistry()) {
+            self.registry = registry
+        }
 
         // MARK: - Resolution helpers
 
@@ -45,6 +49,7 @@
         // MARK: - Lifecycle
 
         public func create(_ config: KSWindowConfig) async throws(KSError) -> KSWindowHandle {
+            let registry = self.registry
             let result: Result<KSWindowHandle, KSError> = await MainActor.run {
                 do {
                     let w = try KSMacWindow(config: config)
@@ -52,9 +57,33 @@
                     w.webviewHost = host
                     w.setContentView(host.webView)
 
+                    // IPC 브리지 설치 — 이 단계가 없으면 새 창이
+                    // `KSWindowEmitHub`에 등록되지 않아 `__ks.window.list`,
+                    // `__ks.window.emit(target:)`, JS `__KS_.invoke(...)` 가 모두 실패한다.
+                    let bridge = WKBridge(
+                        host: host, registry: registry, windowLabel: config.label)
+                    do {
+                        try bridge.install()
+                    } catch {
+                        throw error as? KSError
+                            ?? KSError(code: .internal, message: "\(error)")
+                    }
+                    KSMacBridgeRegistry.shared.register(label: config.label, bridge: bridge)
+
                     let raw = UInt64(UInt(bitPattern: ObjectIdentifier(w)))
                     let handle = KSWindowHandle(label: config.label, rawValue: raw)
                     KSMacHandleRegistry.shared.register(label: config.label, rawValue: raw, window: w)
+
+                    let wLabel = config.label
+                    w.onWindowClosed = {
+                        KSWindowEmitHub.shared.unregister(label: wLabel)
+                        KSMacBridgeRegistry.shared.unregister(label: wLabel)
+                        struct ClosedPayload: Encodable { let label: String }
+                        try? KSWindowEmitHub.shared.emit(
+                            event: "__ks.window.closed",
+                            payload: ClosedPayload(label: wLabel),
+                            to: nil)
+                    }
 
                     if config.visible {
                         w.show()
@@ -73,6 +102,7 @@
             try await runMain(handle) { $0.close() }
             await MainActor.run {
                 KSMacHandleRegistry.shared.unregister(label: handle.label)
+                KSMacBridgeRegistry.shared.unregister(label: handle.label)
             }
         }
 

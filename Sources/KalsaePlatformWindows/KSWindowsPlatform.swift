@@ -109,7 +109,8 @@
                 try host.setResourceHandler(
                     resolver: resolver,
                     csp: config.security.csp,
-                    host: Self.virtualHost)
+                    host: Self.virtualHost,
+                    crossOriginIsolation: config.security.crossOriginIsolation)
             }
 
             try host.addDocumentCreatedScript(Self.cspInjectionScript(config.security.csp))
@@ -121,6 +122,16 @@
                 host.setAllowExternalDrop(false)
                 try? host.installFileDropEmitter()
             }
+
+            // 보안 핸들러: 팝업 차단, 권한 거부-기본값, 다운로드 알림.
+            let shellRef = _shell
+            let allowPopups = config.security.allowPopups
+            try host.installSecurityHandlers(
+                allowPopups: allowPopups,
+                openExternal: { urlStr in
+                    guard let url = URL(string: urlStr) else { return }
+                    Task.detached { try? await shellRef.openExternal(url) }
+                })
 
             let url = Self.resolveStartURL(
                 windowURL: window.url,

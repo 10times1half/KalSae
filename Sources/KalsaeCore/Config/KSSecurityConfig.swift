@@ -84,6 +84,25 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// 선택적으로 사용자의 기본 브라우저에서 열 수 있다.
     public var navigation: KSNavigationScope
 
+    /// WebView가 `window.open()` / `target="_blank"` 등으로
+    /// 새 브라우저 창(팝업)을 여는 것을 허용할지 여부.
+    /// `false`(기본값)이면 요청이 거부된다.
+    /// `true`이면 허용되지만, WebView2가 새 WebView 인스턴스를 생성하지 않도록
+    /// 호스트가 핸들러에서 적절히 처리해야 한다.
+    public var allowPopups: Bool
+
+    /// 교차 오리진 격리(Cross-Origin Isolation)를 활성화한다.
+    /// `true`이면 모든 자산 응답에 다음 3개 헤더를 추가한다:
+    /// - `Cross-Origin-Opener-Policy: same-origin`
+    /// - `Cross-Origin-Embedder-Policy: require-corp`
+    /// - `Cross-Origin-Resource-Policy: same-origin`
+    ///
+    /// `SharedArrayBuffer`, WebAssembly threads, 고정밀 `performance.now()` 등을
+    /// 사용할 때만 켜라. 활성화되면 외부 리소스(`<img src="https://cdn...">`,
+    /// 폰트, iframe 등)가 `Cross-Origin-Resource-Policy` 또는 CORS로
+    /// 명시적으로 제3자에게 허용되지 않으면 차단되므로 기본값은 `false`이다.
+    public var crossOriginIsolation: Bool
+
     /// `contextMenu` 필드에 대한 정책 값.
     public enum ContextMenuPolicy: String, Codable, Sendable, Equatable {
         /// 네이티브 브라우저 스타일 컨텍스트 메뉴(잘라내기/복사/붙여넣기/검사).
@@ -104,7 +123,9 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         http: KSHTTPScope = .init(),
         downloads: KSDownloadScope = .init(),
         navigation: KSNavigationScope = .init(),
-        commandRateLimit: KSCommandRateLimit? = nil
+        commandRateLimit: KSCommandRateLimit? = nil,
+        allowPopups: Bool = false,
+        crossOriginIsolation: Bool = false
     ) {
         self.csp = csp
         self.commandAllowlist = commandAllowlist
@@ -118,11 +139,14 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.downloads = downloads
         self.navigation = navigation
         self.commandRateLimit = commandRateLimit
+        self.allowPopups = allowPopups
+        self.crossOriginIsolation = crossOriginIsolation
     }
 
     private enum CodingKeys: String, CodingKey {
         case csp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
         case shell, notifications, http, downloads, navigation, commandRateLimit
+        case allowPopups, crossOriginIsolation
     }
 
     public init(from decoder: any Decoder) throws {
@@ -139,10 +163,19 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.downloads = try c.decodeIfPresent(KSDownloadScope.self, forKey: .downloads) ?? .init()
         self.navigation = try c.decodeIfPresent(KSNavigationScope.self, forKey: .navigation) ?? .init()
         self.commandRateLimit = try c.decodeIfPresent(KSCommandRateLimit.self, forKey: .commandRateLimit)
+        self.allowPopups = try c.decodeIfPresent(Bool.self, forKey: .allowPopups) ?? false
+        self.crossOriginIsolation = try c.decodeIfPresent(Bool.self, forKey: .crossOriginIsolation) ?? false
     }
 
     public static let defaultCSP =
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ks://localhost"
+
+    /// `defaultCSP`에 `'wasm-unsafe-eval'` 소스를 조건부 허용한 변형.
+    /// 일반 WASM streaming compile은 `defaultCSP`로도 동작하지만, `eval`을
+    /// 사용하는 투릴 코드(예: WASI polyfill, 특정 손설이 떨어지는 프레임워크)는
+    /// 이 값이 있어야 한다. 명시적으로 `csp:`에 적으는 용도의 상수.
+    public static let defaultCSPWithWasm =
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ks://localhost"
 
     public static let `default` = KSSecurityConfig()
 }

@@ -250,6 +250,11 @@
         /// when `nil`, events are simply dropped.
         internal var eventSink: (@MainActor (String, any Encodable & Sendable) -> Void)?
 
+        /// `setTheme(_:)`로 마지막으로 설정된 테마. `WM_SETTINGCHANGE`에서
+        /// OS 테마가 바뀔 때 DWM 타이틀 바 색상을 자동으로 재적용하기 위해
+        /// 사용한다. 기본값은 `.system`(OS 설정을 따름).
+        internal var currentTheme: KSWindowTheme = .system
+
         /// When `true`, `WM_CLOSE` is suppressed and a
         /// `__ks.window.beforeClose` event is emitted instead. JS must call
         /// `__ks.window.close` (or set the interceptor back to `false`) to

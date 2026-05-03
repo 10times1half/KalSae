@@ -101,6 +101,8 @@
                 try host.setResponseCSP(config.security.csp)
             }
 
+            host.setCrossOriginIsolation(config.security.crossOriginIsolation)
+
             try host.addDocumentCreatedScript(Self.cspInjectionScript(config.security.csp))
 
             let url = Self.resolveStartURL(
@@ -334,6 +336,12 @@
         /// `addDocumentCreatedScript`에서 설치하는 메타 태그 폴백을 보완한다.
         public func setResponseCSP(_ csp: String) throws(KSError) {
             try webview.setResponseCSP(csp)
+        }
+
+        /// 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP) 자동 추가 여부를
+        /// 토글한다. `KSSecurityConfig.crossOriginIsolation`에 대응한다.
+        public func setCrossOriginIsolation(_ enabled: Bool) {
+            webview.setCrossOriginIsolation(enabled)
         }
 
         /// 모든 문서 시작 시 실행될 JS 스니폫을 대기열에 추가한다.

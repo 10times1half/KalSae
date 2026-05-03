@@ -256,6 +256,14 @@ void ks_gtk_host_set_scheme_resolver(KSGtkHost *host,
  *  인수 버퍼의 소유권은 호출자가 유지한다.              */
 void ks_gtk_host_set_response_csp(KSGtkHost *host, const char *csp);
 
+/** `ks://` 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP)를 자동으로
+ *  추가할지 토글한다. `enabled != 0`이면 다음 3개 헤더를 붙인다:
+ *    Cross-Origin-Opener-Policy: same-origin
+ *    Cross-Origin-Embedder-Policy: require-corp
+ *    Cross-Origin-Resource-Policy: same-origin
+ *  0이면 비활성화. */
+void ks_gtk_host_set_cross_origin_isolation(KSGtkHost *host, int enabled);
+
 /* 고급 WebView/윈도우 제어 ------------------------------------------ */
 
 /** WebKitWebView 줄 배율을 설정한다. 1.0 = 원본.             */
