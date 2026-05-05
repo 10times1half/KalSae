@@ -3,9 +3,15 @@ import PackageDescription
 
 let package = Package(
     name: "{{NAME}}",
-    platforms: [.macOS(.v14)],
+    // SwiftPM의 `platforms:`는 Apple 플랫폼 최소 버전만 선언한다.
+    // Windows 10 1809+ 와 Linux (GTK4 + WebKitGTK 6.0)는 자동 지원되며,
+    // 이 줄은 그 두 OS에서의 빌드를 제한하지 않는다.
+    platforms: [
+        .macOS(.v14),
+        .iOS(.v16),
+    ],
     dependencies: [
-        .package(url: "https://github.com/kalsae/kalsae.git", from: "{{KALSAE_VERSION}}"),
+        {{KALSAE_DEPENDENCY}}
     ],
     targets: [
         .executableTarget(

@@ -31,7 +31,7 @@ function Assert-Destination([string]$output, [string]$expectedDestination, [stri
 
 Write-Host '[1/3] default install root dry-run check'
 $defaultOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $fetchScript -DryRun 2>&1 | Out-String -Width 4096
-$defaultDest = Join-Path $repoRoot 'Vendor\WebView2'
+$defaultDest = Join-Path $repoRoot 'Sources\CKalsaeWV2\Vendor\WebView2'
 Assert-Destination $defaultOut $defaultDest 'default'
 
 Write-Host '[2/3] absolute ProjectRoot dry-run check'
@@ -39,7 +39,7 @@ $tmpAbs = Join-Path ([System.IO.Path]::GetTempPath()) "kalsae-wv2-smoke-$([Guid]
 New-Item -ItemType Directory -Path $tmpAbs | Out-Null
 try {
     $absOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $fetchScript -ProjectRoot $tmpAbs -DryRun 2>&1 | Out-String -Width 4096
-    $absDest = Join-Path $tmpAbs 'Vendor\WebView2'
+    $absDest = Join-Path $tmpAbs 'Sources\CKalsaeWV2\Vendor\WebView2'
     Assert-Destination $absOut $absDest 'absolute'
 } finally {
     Remove-Item -Recurse -Force $tmpAbs
@@ -53,7 +53,7 @@ New-Item -ItemType Directory -Path $tmpRel -Force | Out-Null
 try {
     Set-Location $tmpBase
     $relOut = & powershell -NoProfile -ExecutionPolicy Bypass -File $fetchScript -ProjectRoot '.\consumer' -DryRun 2>&1 | Out-String -Width 4096
-    $relDest = Join-Path $tmpRel 'Vendor\WebView2'
+    $relDest = Join-Path $tmpRel 'Sources\CKalsaeWV2\Vendor\WebView2'
     Assert-Destination $relOut $relDest 'relative'
 } finally {
     Set-Location $cwdBefore

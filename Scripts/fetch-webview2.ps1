@@ -1,20 +1,21 @@
 ﻿#
 # fetch-webview2.ps1
 # Downloads the Microsoft.Web.WebView2 NuGet package and extracts its
-# contents into Vendor/WebView2/ so that CkalsaeWebView2 can find
-# WebView2.h and WebView2LoaderStatic.lib.
+# contents into Sources/CKalsaeWV2/Vendor/WebView2/ so that CKalsaeWV2 can
+# find WebView2.h. The path lives inside the target so SwiftPM does not
+# treat the headerSearchPath as an unsafe build flag (no `..` escapes).
 #
 # Usage:
 #   .\Scripts\fetch-webview2.ps1              # latest stable
 #   .\Scripts\fetch-webview2.ps1 -Version 1.0.2792.45
 #   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp
-#   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp -Destination Vendor/WebView2
+#   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp -Destination Sources/CKalsaeWV2/Vendor/WebView2
 #   .\Scripts\fetch-webview2.ps1 -ProjectRoot C:\MyApp -DryRun
 #
 [CmdletBinding()]
 param(
     [string]$Version = "latest",
-    [string]$Destination = "Vendor/WebView2",
+    [string]$Destination = "Sources/CKalsaeWV2/Vendor/WebView2",
     [string]$ProjectRoot = "",
     [switch]$DryRun
 )
@@ -69,10 +70,27 @@ Write-Host "Extracting..."
 Expand-Archive -Path $nupkg -DestinationPath $tmp -Force
 
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
-# Copy just the parts we need (build/ and runtimes/).
-Copy-Item -Recurse -Force (Join-Path $tmp 'build')    (Join-Path $dest 'build')
-if (Test-Path (Join-Path $tmp 'runtimes')) {
-    Copy-Item -Recurse -Force (Join-Path $tmp 'runtimes') (Join-Path $dest 'runtimes')
+
+# 헤더 — 빌드 입력 (CKalsaeWV2 의 headerSearchPath 가 이곳을 가리킴)
+$includeOut = Join-Path $dest 'build\native\include'
+New-Item -ItemType Directory -Force -Path $includeOut | Out-Null
+Copy-Item -Recurse -Force (Join-Path $tmp 'build\native\include\*') $includeOut
+
+# 런타임 DLL — 패키징 입력 (fixed-runtime 모드에서 동봉할 WebView2Loader.dll)
+# WebView2LoaderStatic.lib 은 정적 링크를 쓰지 않으므로 복사하지 않는다.
+foreach ($arch in @('win-x64', 'win-x86', 'win-arm64')) {
+    $srcDll  = Join-Path $tmp "runtimes\$arch\native\WebView2Loader.dll"
+    if (Test-Path $srcDll) {
+        $dstDir = Join-Path $dest "runtimes\$arch\native"
+        New-Item -ItemType Directory -Force -Path $dstDir | Out-Null
+        Copy-Item -Force $srcDll $dstDir
+    }
+}
+
+# 라이선스 — 배포물 컴플라이언스용
+foreach ($f in @('LICENSE.txt', 'THIRD_PARTY_NOTICES.txt')) {
+    $src = Join-Path $tmp $f
+    if (Test-Path $src) { Copy-Item -Force $src $dest }
 }
 
 # Write a tiny marker so we remember which version is checked out.

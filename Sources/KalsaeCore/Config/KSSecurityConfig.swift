@@ -28,6 +28,22 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// Content Security Policy.
     public var csp: String
 
+    /// 개발 모드(`build.devServerURL`이 활성 상태)에서 사용할 CSP.
+    /// `nil`이면 dev 모드에서도 `csp`가 그대로 적용된다.
+    ///
+    /// Vite/Webpack 같은 dev 서버는 인라인 스크립트와 WebSocket HMR을
+    /// 사용하기 때문에 프로덕션 CSP(`script-src 'self'`)와 충돌한다.
+    /// 권장값:
+    /// ```
+    /// default-src 'self' http://localhost:* ws://localhost:*; \
+    /// script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*; \
+    /// style-src 'self' 'unsafe-inline'; \
+    /// img-src 'self' data: blob: http://localhost:*; \
+    /// connect-src 'self' ks://localhost http://localhost:* ws://localhost:*; \
+    /// font-src 'self' data:
+    /// ```
+    public var devCsp: String?
+
     /// JS에서 호출 가능한 `@KSCommand` 식별자의 허용 목록.
     ///
     /// 비어 있으면 어떤 명령도 도달할 수 없고,
@@ -113,6 +129,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
 
     public init(
         csp: String = KSSecurityConfig.defaultCSP,
+        devCsp: String? = nil,
         commandAllowlist: [String]? = nil,
         fs: KSFSScope = .init(),
         devtools: Bool = false,
@@ -128,6 +145,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         crossOriginIsolation: Bool = false
     ) {
         self.csp = csp
+        self.devCsp = devCsp
         self.commandAllowlist = commandAllowlist
         self.fs = fs
         self.devtools = devtools
@@ -144,7 +162,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case csp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
+        case csp, devCsp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
         case shell, notifications, http, downloads, navigation, commandRateLimit
         case allowPopups, crossOriginIsolation
     }
@@ -152,6 +170,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.csp = try c.decodeIfPresent(String.self, forKey: .csp) ?? Self.defaultCSP
+        self.devCsp = try c.decodeIfPresent(String.self, forKey: .devCsp)
         self.commandAllowlist = try c.decodeIfPresent([String].self, forKey: .commandAllowlist)
         self.fs = try c.decodeIfPresent(KSFSScope.self, forKey: .fs) ?? .init()
         self.devtools = try c.decodeIfPresent(Bool.self, forKey: .devtools) ?? false
@@ -176,6 +195,16 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// 이 값이 있어야 한다. 명시적으로 `csp:`에 적으는 용도의 상수.
     public static let defaultCSPWithWasm =
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ks://localhost"
+
+    /// Vite/Webpack 등 일반적인 dev 서버 HMR과 호환되는 권장 CSP.
+    /// `devCsp` 필드에 명시적으로 사용할 수 있다.
+    public static let permissiveDevCSP =
+        "default-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; "
+        + "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* http://127.0.0.1:*; "
+        + "style-src 'self' 'unsafe-inline'; "
+        + "img-src 'self' data: blob: http://localhost:* http://127.0.0.1:*; "
+        + "connect-src 'self' ks://localhost http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; "
+        + "font-src 'self' data:"
 
     public static let `default` = KSSecurityConfig()
 }

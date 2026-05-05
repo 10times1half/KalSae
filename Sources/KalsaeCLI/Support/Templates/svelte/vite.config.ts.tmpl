@@ -1,0 +1,17 @@
+import { defineConfig } from 'vite'
+import { svelte } from '@sveltejs/vite-plugin-svelte'
+
+// Kalsae: vite 출력은 SwiftPM `.copy("Resources")` 가 패키징하도록
+// `Sources/{{NAME}}/Resources/dist` 로 보낸다.
+export default defineConfig({
+  plugins: [svelte()],
+  base: './',
+  build: {
+    outDir: 'Sources/{{NAME}}/Resources/dist',
+    emptyOutDir: true,
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
+})

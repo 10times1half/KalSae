@@ -170,6 +170,9 @@ extension KSApp {
         if let tray = platform.tray {
             await tray.remove()
         }
+        // 1.5. dev 라이브 리로드 watcher 작업 취소 (실행 중일 때만).
+        devWatcherTask?.cancel()
+        devWatcherTask = nil
         // 2. 플러그인 teardown — 등록 역순, best-effort.
         let ctx = DefaultPluginContext(app: self)
         for plugin in _pluginsStorage.reversed() {

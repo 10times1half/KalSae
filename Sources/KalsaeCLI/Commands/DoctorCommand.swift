@@ -2,6 +2,7 @@ import ArgumentParser
 import Foundation
 /// `kalsae doctor` - 로컬 개발 환경과 프로젝트 구성을 점검한다.
 import KalsaeCLICore
+import KalsaeCore
 
 struct DoctorCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -29,7 +30,13 @@ struct DoctorCommand: ParsableCommand {
                 project: cwd.path,
                 infos: report.infos,
                 warnings: report.warnings,
-                hasWarnings: report.hasWarnings)
+                hasWarnings: report.hasWarnings,
+                nodeVersion: report.nodeVersion,
+                npmVersion: report.npmVersion,
+                osName: report.osName,
+                osVersion: report.osVersion,
+                architecture: report.architecture,
+                swiftVersion: report.swiftVersion)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(payload)
@@ -45,6 +52,15 @@ struct DoctorCommand: ParsableCommand {
 
         print("🩺  Kalsae Doctor")
         print("    Project: \(cwd.path)")
+        print("")
+        print("System")
+        print("  OS         : \(report.osName ?? "?") \(report.osVersion ?? "")")
+        print("  Arch       : \(report.architecture ?? "?")")
+        print("  Swift      : \(report.swiftVersion ?? "(not detected)")")
+        print("  Node.js    : \(report.nodeVersion ?? "(not detected)")")
+        print("  npm        : \(report.npmVersion ?? "(not detected)")")
+        print("  Kalsae CLI : \(KSVersion.current)")
+        print("")
         for info in report.infos {
             print("✅  \(info)")
         }
@@ -73,5 +89,11 @@ struct DoctorCommand: ParsableCommand {
         let infos: [String]
         let warnings: [String]
         let hasWarnings: Bool
+        let nodeVersion: String?
+        let npmVersion: String?
+        let osName: String?
+        let osVersion: String?
+        let architecture: String?
+        let swiftVersion: String?
     }
 }

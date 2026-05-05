@@ -76,6 +76,12 @@
             try bridge.emit(event: event, payload: payload)
         }
 
+        /// 현재 문서를 다시 로드한다. dev 라이브 리로드 호환용 (Android는
+        /// no-op — 라이브 리로드는 데스크톱 PAL에만 적용).
+        public func reload() {
+            // no-op
+        }
+
         /// Android 프로세스는 Activity 라이프사이클에 의해 유지된다;
         /// 이 스터브는 즉시 0을 반환한다. Activity가 자체 라이프사이클를 관리한다.
         public func runMessageLoop() -> Int32 {

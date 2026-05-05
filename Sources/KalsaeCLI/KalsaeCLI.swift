@@ -14,6 +14,7 @@ struct KalsaeCLI: ParsableCommand {
             BuildCommand.self,
             DoctorCommand.self,
             GenerateCommand.self,
+            VersionCommand.self,
         ]
     )
 }

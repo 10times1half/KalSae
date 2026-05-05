@@ -3,7 +3,7 @@ import Testing
 
 @testable import KalsaeCLICore
 
-@Suite("KSBindingsGenerator ??TypeMapper")
+@Suite("KSBindingsGenerator - TypeMapper")
 struct BindingsTypeMapperTests {
 
     @Test("Primitives map to TS scalars")
@@ -44,7 +44,7 @@ struct BindingsTypeMapperTests {
     func dictionarySugar() {
         #expect(KSBindingsGenerator.mapType("[String: Int]") == "Record<string, number>")
         #expect(KSBindingsGenerator.mapType("[String: Bool?]") == "Record<string, boolean | null>")
-        // 媛?쒖꽦???꾪븳 二쇱꽍?쇰줈 鍮?String ??蹂댁〈
+        // Keep this as a non-String-key map to verify fallback behavior.
         let mapped = KSBindingsGenerator.mapType("[Int: String]")
         #expect(mapped.hasPrefix("Record<string, string>"))
         #expect(mapped.contains("keys: Int"))
@@ -73,7 +73,7 @@ struct BindingsTypeMapperTests {
         #expect(KSBindingsGenerator.stripBackticks("plain") == "plain")
     }
 }
-@Suite("KSBindingsGenerator ??Renderer & end-to-end")
+@Suite("KSBindingsGenerator - Renderer & end-to-end")
 struct BindingsRendererTests {
 
     private func makeOptions(sources: [URL], output: URL) -> KSBindingsGenerator.Options {

@@ -12,6 +12,7 @@ DerivedData/
 # --- Vendored / fetched dependencies ---
 # Recreate via Scripts/fetch-webview2.ps1
 Vendor/WebView2/
+Sources/CKalsaeWV2/Vendor/
 
 # --- Build outputs / packaging ---
 dist/

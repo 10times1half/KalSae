@@ -122,8 +122,9 @@ kalsae new MyDesktopApp --frontend vue  --package-manager yarn
 # Supported package managers: npm (default) | pnpm | yarn
 
 cd MyDesktopApp
-kalsae dev                     # run with hot iteration
-kalsae build --package         # release build + WebView2 bundling
+kalsae dev                     # run with hot iteration (live reload by default; --no-reload to disable)
+kalsae build                   # release build + WebView2 bundling (packaging is ON by default; --no-package to skip)
+kalsae build --nsis            # Windows: also produce NSIS installer
 ```
 
 On Windows, `kalsae build` automatically runs `Scripts/fetch-webview2.ps1` when
@@ -134,13 +135,13 @@ the WebView2 SDK is missing (`--no-auto-fetch-web-view2` disables this).
 If release tags are not available yet, use the `main` branch explicitly:
 
 ```swift
-.package(url: "https://github.com/Kalsae/Kalsae.git", branch: "main")
+.package(url: "https://github.com/10times1half/KalSae.git", branch: "main")
 ```
 
 When semver tags are published, prefer a version requirement:
 
 ```swift
-.package(url: "https://github.com/Kalsae/Kalsae.git", from: "0.1.0")
+.package(url: "https://github.com/10times1half/KalSae.git", from: "0.1.0")
 ```
 
 <details>
@@ -201,8 +202,9 @@ kalsae new MyDesktopApp --frontend vue  --package-manager yarn
 # 지원 패키지 매니저: npm (기본) | pnpm | yarn
 
 cd MyDesktopApp
-kalsae dev                     # 개발 모드 실행
-kalsae build --package         # 릴리스 빌드 + WebView2 번들링
+kalsae dev                     # 개발 모드 실행 (라이브 리로드 기본 ON, 끄려면 --no-reload)
+kalsae build                   # 릴리스 빌드 + WebView2 번들링 (패키징 기본 ON, 끄려면 --no-package)
+kalsae build --nsis            # Windows: NSIS 인스톨러까지 생성
 ```
 
 </details>
@@ -538,7 +540,7 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 |---|---|
 | `kalsae new <name>` | Scaffold a new project (Package.swift, App.swift, sample `index.html`) |
 | `kalsae dev [--target NAME] [--config FILE] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval SECONDS]` | Run with `swift run`; optionally start `build.devCommand`, wait for `build.devServerURL`, and auto-restart on source changes |
-| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config FILE] [--dist PATH] [--allow-missing-dist] [--no-sync-resources] [--icon PATH] [--output DIR] [--zip]` | Integrated frontend+Swift build with dist validation/sync, optional packaging with WebView2 runtime |
+| `kalsae build [--debug] [--no-package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86\|x86_64\|universal] [--clean] [--skip-frontend] [--dryrun] [-o NAME] [--nsis] [--nsis-publisher NAME] [--signtool-cmd "..."] [--nsis-signtool-cmd "..."] [--config FILE] [--dist PATH] [--allow-missing-dist] [--no-sync-resources] [--icon PATH] [--output DIR] [--zip]` | Integrated frontend+Swift build with dist validation/sync. Packaging is **ON by default** (Wails-compatible); `--no-package` skips it. Windows: optional NSIS installer + signtool hooks. macOS: `.app` bundle. |
 | `kalsae doctor [--config FILE] [--strict] [--json]` | Diagnose common local issues (config/dist/WebView2/swift-syntax cache) |
 | `kalsae generate bindings [--out FILE] [--module NAME] [inputs...]` | Emit TypeScript types for `@KSCommand` functions |
 
@@ -551,7 +553,7 @@ Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
 |---|---|
 | `kalsae new <name>` | 새 프로젝트 생성 (Package.swift, App.swift, 샘플 `index.html`) |
 | `kalsae dev [--target 이름] [--config 파일] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval 초]` | `swift run` 래핑; `build.devCommand` 자동 실행, `build.devServerURL` 대기, 소스 변경 시 자동 재시작 옵션 제공 |
-| `kalsae build [--debug] [--package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86] [--config 파일] [--dist 경로] [--allow-missing-dist] [--no-sync-resources] [--icon 경로] [--output 디렉터리] [--zip]` | 프론트엔드+Swift 통합 빌드(검증/리소스 동기화 포함) 및 WebView2 런타임 포함 패키징 |
+| `kalsae build [--debug] [--no-package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86\|x86_64\|universal] [--clean] [--skip-frontend] [--dryrun] [-o 이름] [--nsis] [--nsis-publisher 이름] [--signtool-cmd "..."] [--nsis-signtool-cmd "..."] [--config 파일] [--dist 경로] [--allow-missing-dist] [--no-sync-resources] [--icon 경로] [--output 디렉터리] [--zip]` | 프론트엔드+Swift 통합 빌드(검증/리소스 동기화 포함). 패키징은 **기본 ON** (Wails 호환), `--no-package`로 끔. Windows에서 NSIS 인스톨러/signtool 훅 옵션, macOS에서 `.app` 번들 산출. |
 | `kalsae doctor [--config 파일] [--strict] [--json]` | 로컬 환경 이슈 진단 (config/dist/WebView2/swift-syntax 캐시) |
 | `kalsae generate bindings [--out 파일] [--module 이름] [입력...]` | `@KSCommand` 함수의 TypeScript 타입 생성 |
 

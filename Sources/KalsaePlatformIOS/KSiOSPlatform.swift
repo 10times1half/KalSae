@@ -78,7 +78,18 @@
 
             host.setCrossOriginIsolation(config.security.crossOriginIsolation)
 
-            try host.addDocumentCreatedScript(Self.cspInjectionScript(config.security.csp))
+            // dev 서버 모드에서는 `devCsp`가 있으면 그것을 주입하고,
+            // 없으면 주입을 건너뛴다(→ dev 서버 자체 CSP가 적용).
+            // 프로덕션 CSP는 인라인 스크립트/HMR 웹소츓과 충돌하기 쉬워 그대로 적용하지 않는다.
+            let injectedCSP: String? = {
+                if case .devServer = servingMode {
+                    return config.security.devCsp
+                }
+                return config.security.csp
+            }()
+            if let injectedCSP {
+                try host.addDocumentCreatedScript(Self.cspInjectionScript(injectedCSP))
+            }
 
             let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {
                 guard let dlc = config.deepLink else { return nil }

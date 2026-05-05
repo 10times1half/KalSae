@@ -36,7 +36,12 @@ public func findExecutable(named name: String) -> URL? {
     let path = env["PATH"] ?? env["Path"] ?? ""
     let separator: Character = path.contains(";") ? ";" : ":"
     #if os(Windows)
-        let suffixes = ["", ".exe", ".cmd", ".bat"]
+        // Windows: PATHEXT-style 확장자가 붙은 매치만 반환한다.
+        // Node.js 설치 디렉터리의 bash 스크립트 `npm` (확장자 없음)이
+        // `npm.cmd`보다 먼저 매치되면 Process가 실행 불가능한 셸 스크립트를
+        // 반환해 ERROR_BAD_EXE_FORMAT(193, Foundation Cocoa 3584)이 발생한다.
+        // 정확한 확장자를 포함한 이름(예: "npm.cmd")은 그대로 매치된다.
+        let suffixes = [".exe", ".cmd", ".bat", ".com"]
     #else
         let suffixes = [""]
     #endif
@@ -52,33 +57,90 @@ public func findExecutable(named name: String) -> URL? {
     return nil
 }
 @discardableResult
-public func shell(command: String, arguments: [String] = [], in directory: String? = nil) throws -> Int32 {
-    guard let url = findExecutable(named: command) else {
-        throw ShellError.commandNotFound(command)
-    }
-    let process = Process()
-    process.executableURL = url
-    process.arguments = arguments
-    if let dir = directory {
-        process.currentDirectoryURL = URL(fileURLWithPath: dir)
-    }
+public func shell(
+    command: String,
+    arguments: [String] = [],
+    in directory: String? = nil,
+    environment: [String: String]? = nil
+) throws -> Int32 {
+    let process = try makeProcess(
+        command: command, arguments: arguments,
+        in: directory, environment: environment)
     try process.run()
     process.waitUntilExit()
     let status = process.terminationStatus
     if status != 0 { throw ShellError.nonZeroExit(status) }
     return status
 }
-public func spawn(command: String, arguments: [String] = [], in directory: String? = nil) throws -> Process {
+public func spawn(
+    command: String,
+    arguments: [String] = [],
+    in directory: String? = nil,
+    environment: [String: String]? = nil
+) throws -> Process {
+    let process = try makeProcess(
+        command: command, arguments: arguments,
+        in: directory, environment: environment)
+    try process.run()
+    return process
+}
+
+/// Windows에서 `.cmd`/`.bat` 파일은 Process API가 직접 실행할 수 없어
+/// (`ERROR_BAD_EXE_FORMAT` 193) `cmd.exe /c` 로 감싸야 한다.
+/// npm/pnpm/yarn 등 Node 도구가 모두 `.cmd` 셰어이므로 필수.
+private func makeProcess(
+    command: String,
+    arguments: [String],
+    in directory: String?,
+    environment: [String: String]? = nil
+)
+    throws -> Process
+{
     guard let url = findExecutable(named: command) else {
         throw ShellError.commandNotFound(command)
     }
     let process = Process()
-    process.executableURL = url
-    process.arguments = arguments
+    if let environment {
+        // 부모 환경을 상속한 뒤 호출자 키를 덮어씌운다 — 비어있는 dict가
+        // PATH/USERPROFILE 등 핵심 변수를 날려버리는 것을 막는다.
+        var env = ProcessInfo.processInfo.environment
+        for (k, v) in environment { env[k] = v }
+        process.environment = env
+    }
+    #if os(Windows)
+        let ext = url.pathExtension.lowercased()
+        if ext == "cmd" || ext == "bat" {
+            // `.cmd`/`.bat`는 Process API로 직접 실행할 수 없고 (193 ERROR_BAD_EXE_FORMAT),
+            // `cmd.exe /c`는 공백 포함 경로(`C:\Program Files\nodejs\npm.cmd`) 인용을 정확히
+            // 표현하기 어렵다 (cmd /s 규약 vs Foundation 자동 quoting 충돌).
+            // PowerShell의 `&` call 연산자는 따옴표/공백을 안전하게 처리하므로
+            // pwsh/powershell을 통해 실행한다.
+            let psURL =
+                findExecutable(named: "pwsh") ?? findExecutable(named: "powershell")
+            guard let psURL else { throw ShellError.shellUnavailable }
+            process.executableURL = psURL
+            // PowerShell 안에서 큰따옴표는 백틱으로 이스케이프.
+            func psQuote(_ s: String) -> String {
+                let escaped = s.replacingOccurrences(of: "'", with: "''")
+                return "'\(escaped)'"
+            }
+            let invocation =
+                "& \(psQuote(url.path)) "
+                + arguments.map(psQuote).joined(separator: " ")
+            process.arguments = [
+                "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", invocation,
+            ]
+        } else {
+            process.executableURL = url
+            process.arguments = arguments
+        }
+    #else
+        process.executableURL = url
+        process.arguments = arguments
+    #endif
     if let directory {
         process.currentDirectoryURL = URL(fileURLWithPath: directory)
     }
-    try process.run()
     return process
 }
 @discardableResult

@@ -20,6 +20,7 @@
 #include <windows.h>
 #include <WebView2.h>
 #include "kswv2.h"
+#include "kswv2_loader.h"
 
 // 불투명 핸들 reinterpret_cast. typedef 변경 등 한 곳만 수정하면
 // 모든 사용 위치를 바꿀 필요가 없도록 여기에 집중 관리한다.

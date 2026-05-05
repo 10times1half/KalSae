@@ -1,7 +1,7 @@
-/// SwiftPM 鍮뚮뱶 寃곌낵臾? ?꾨줎?몄뿏???먯뀑, ?ㅼ젙, ?몃?
-/// 留ㅻ땲?섏뒪?몃? ?⑹퀜 ?щ같??媛?ν븳 ??踰덈뱾??鍮뚮뱶?쒕떎.
-/// WebView2 ?뺤뇺???곕씪 WebView2 Evergreen 遺?몄뒪?몃옒???먮뒗
-/// `Vendor/WebView2/runtimes/` ?섏쐞??怨좎젙 踰꾩쟾 ?고??꾩쓣 ?ы븿?쒕떎.
+/// Builds a distributable Windows bundle from SwiftPM outputs, frontend assets,
+/// config, and manifests.
+/// For WebView2 fixed runtime mode, vendor files are copied from
+/// `Vendor/WebView2/runtimes/`.
 public import Foundation
 
 public enum KSPackager {
@@ -27,19 +27,19 @@ public enum KSPackager {
 
     public struct Options: Sendable {
         public var projectRoot: URL
-        public var executablePath: URL  // 蹂듭궗???ｌ쓣 鍮뚮뱶 ?꾨즺 .exe
+        public var executablePath: URL  // Built .exe to copy into bundle
         public var configPath: URL  // Kalsae.json
-        public var frontendDist: URL?  // ?댁꽍??dist ?붾젆?곕━ (dev-server ?꾩슜 ?깆? nil 媛??
+        public var frontendDist: URL?  // Dist directory (nil for dev-server only)
         public var output: URL  // dist/<name>-<version>-<arch>/
         public var appName: String
         public var version: String
         public var identifier: String
         public var architecture: Architecture
         public var policy: WebView2Policy
-        public var iconPath: URL?  // .ico, 議댁옱 ??洹몃?濡?蹂듭궗
+        public var iconPath: URL?  // .ico copied as-is when present
         public var vendorRuntimeRoot: URL?  // Vendor/WebView2/runtimes/<arch>/
-        public var bootstrapperPath: URL?  // MicrosoftEdgeWebview2Setup.exe (?좏깮)
-        public var zip: Bool  // true?대㈃ <output>.zip ?앹꽦
+        public var bootstrapperPath: URL?  // MicrosoftEdgeWebview2Setup.exe (optional)
+        public var zip: Bool  // Create <output>.zip when true
 
         public init(
             projectRoot: URL,
@@ -81,31 +81,31 @@ public enum KSPackager {
         public let warnings: [String]
 
         public var description: String {
-            var s = "Packaged \(policy) ??\(outputPath)"
+            var s = "Packaged \(policy) at \(outputPath)"
             if let z = zipPath { s += "\nArchive: \(z)" }
             for w in warnings { s += "\n  ! \(w)" }
             return s
         }
     }
 
-    /// ?⑦궎吏 鍮뚮뱶瑜??ㅽ뻾?쒕떎. 二쇰줈 ?뚯씪 蹂듭궗, 留ㅻ땲?섏뒪???앹꽦,
-    /// 諛?(?좏깮?? zip ?앹꽦?쇰줈 援ъ꽦?쒕떎. I/O ?ㅽ뙣 ???먮윭瑜??섏쭊??
+    /// Runs packaging: file copy, manifest/runtime materialization,
+    /// and optional zip archive creation.
     public static func run(_ opts: Options) throws -> Report {
         let fm = FileManager.default
         var warnings: [String] = []
 
-        // 異쒕젰 ?붾젆?곕━ 珥덇린??
+        // Reset output directory.
         if fm.fileExists(atPath: opts.output.path) {
             try fm.removeItem(at: opts.output)
         }
         try fm.createDirectory(at: opts.output, withIntermediateDirectories: true)
 
-        // 1. ?ㅽ뻾 ?뚯씪.
+        // 1) Executable
         let exeName = "\(opts.appName).exe"
         let dstExe = opts.output.appendingPathComponent(exeName)
         try fm.copyItem(at: opts.executablePath, to: dstExe)
 
-        // 2. ?ъ씠?쒖뭅 manifest (DPI ?몄떇, asInvoker).
+        // 2) Side-by-side manifest (DPI awareness, asInvoker)
         let manifestURL = opts.output.appendingPathComponent("\(exeName).manifest")
         try renderManifest(opts: opts).write(
             to: manifestURL,
@@ -116,7 +116,7 @@ public enum KSPackager {
         let dstConfig = opts.output.appendingPathComponent("Kalsae.json")
         try fm.copyItem(at: opts.configPath, to: dstConfig)
 
-        // 4. ?꾨줎?몄뿏???먯궛.
+        // 4) Frontend assets
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             let dstResources = opts.output.appendingPathComponent("Resources")
             try copyTree(from: dist, to: dstResources)
@@ -124,13 +124,13 @@ public enum KSPackager {
             warnings.append("Frontend dist directory not found; skipping Resources/.")
         }
 
-        // 5. ?꾩씠肄?(?좏깮) ??MVP?먯꽌??PNG?묲CO 蹂???놁씠 洹몃?濡?蹂듭궗.
+        // 5) Icon (optional)
         if let icon = opts.iconPath, fm.fileExists(atPath: icon.path) {
             let dst = opts.output.appendingPathComponent(icon.lastPathComponent)
             try fm.copyItem(at: icon, to: dst)
         }
 
-        // 6. WebView2 ?고????섏씠濡쒕뱶.
+        // 6) WebView2 runtime policy materialization
         var runtime: [String: Any] = [
             "policy": opts.policy.rawValue,
             "identifier": opts.identifier,
@@ -159,7 +159,7 @@ public enum KSPackager {
             options: [.prettyPrinted, .sortedKeys])
         try runtimeData.write(to: runtimeURL)
 
-        // 7. ?좏깮???뺤텞.
+        // 7) Optional zip archive
         var zipPath: String? = nil
         if opts.zip {
             let archive = opts.output.deletingLastPathComponent()
@@ -185,7 +185,8 @@ public enum KSPackager {
     // MARK: - Manifest
 
     private static func renderManifest(opts: Options) -> String {
-        // Win10+?먯꽌 ?몄떇?섎뒗 ?몃? manifest. PerMonitorV2 DPI ?몄떇怨?        // Common Controls v6 ?섏〈?깆쓣 異붽??섍퀬, UAC ?덈꺼? `asInvoker`濡?        // ?먯뼱 ?쇰컲 ?ъ슜?먭? UAC ?놁씠 ?ㅽ뻾?????덈룄濡??쒕떎.
+        // Win10/11 manifest: PerMonitorV2 DPI awareness, Common Controls v6,
+        // and `asInvoker` execution level so normal users can run without UAC prompts.
         return """
             <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
             <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
@@ -229,9 +230,10 @@ public enum KSPackager {
             """
     }
 
-    /// Win32 `assemblyIdentity` / VERSIONINFO???꾩슂??    /// ?꾧꺽??4-?뚰듃 `a.b.c.d` ?뺤떇?쇰줈 semver??臾몄옄?댁쓣 ?뺢퇋?뷀븳??
+    /// Normalizes semver-like text into a 4-part `a.b.c.d` string for
+    /// Win32 `assemblyIdentity` / VERSIONINFO.
     private static func normalizedVersion(_ raw: String) -> String {
-        // ?욌룄 ??援щ텇 ?レ옄 ?묐몢留?痍⑦븯怨??꾨━由대━利??묐??щ뒗 ?쒓굅?쒕떎.
+        // Keep only the numeric head before prerelease/build metadata.
         let head =
             raw.split(
                 separator: "-", maxSplits: 1,
@@ -242,7 +244,7 @@ public enum KSPackager {
         return parts.prefix(4).map(String.init).joined(separator: ".")
     }
 
-    // MARK: - WebView2 ?섏씠濡쒕뱶 ?ы띁
+    // MARK: - WebView2 Runtime Helpers
 
     private static func copyBootstrapper(
         opts: Options,
@@ -260,6 +262,14 @@ public enum KSPackager {
         }
         let dst = opts.output.appendingPathComponent("MicrosoftEdgeWebview2Setup.exe")
         try fm.copyItem(at: src, to: dst)
+    }
+
+    /// 패키지 디렉터리에 WebView2 evergreen 부트스트랩이 들어 있으면 그 파일명을
+    /// 반환한다 (NSIS 인스톨러가 silent 부트스트랩을 호출할지 결정하는 데 쓴다).
+    public static func detectBootstrapperFileName(in dir: URL) -> String? {
+        let fm = FileManager.default
+        let candidate = dir.appendingPathComponent("MicrosoftEdgeWebview2Setup.exe")
+        return fm.fileExists(atPath: candidate.path) ? candidate.lastPathComponent : nil
     }
 
     private static func copyFixedRuntime(
@@ -281,7 +291,7 @@ public enum KSPackager {
         runtime["browserExecutableFolder"] = "webview2-runtime"
     }
 
-    // MARK: - ?뚯씪?쒖뒪???ы띁
+    // MARK: - File System Helpers
 
     private static func copyTree(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
@@ -294,14 +304,13 @@ public enum KSPackager {
         try fm.copyItem(at: src, to: dst)
     }
 
-    /// `dir`??`.zip` ?꾩뭅?대툕瑜??앹꽦?쒕떎. Windows 10+?먯꽌 湲곕낯 ?쒓났?섎뒗
-    /// PowerShell??`[System.IO.Compression.ZipFile]`???ъ슜?섎?濡?    /// ?쒕뱶?뚰떚 zip ?섏〈?깆씠 ?꾩슂 ?녿떎.
+    /// Creates a `.zip` from `dir` using PowerShell's built-in
+    /// `System.IO.Compression.ZipFile` on Windows.
     ///
-    /// **蹂댁븞:** ?뚯뒪? ???寃쎈줈???섍꼍 蹂?섎? ?듯빐 ?꾨떖?섎ŉ
-    /// (PowerShell 紐낅졊??臾몄옄??蹂닿컙?쇰줈 ?쎌엯?섏? ?딆쓬)
-    /// ?댁? ?곗샂?? 諛깊떛, ?щ윭, 湲고? PowerShell 硫뷀? 臾몄옄媛 ?ы븿??    /// 寃쎈줈媛 ?ㅽ겕由쏀듃瑜?源④굅??紐낅졊??二쇱엯?????녿떎.
+    /// Security: untrusted paths are passed via environment variables, not
+    /// string-interpolated into the PowerShell script.
     ///
-    /// ?뚯뒪?멸? ?꾩껜 `run(_:)` ?뚯씠?꾨씪???놁씠 吏곸젒 ?寃잜븷 ???덈룄濡?    /// internal濡??좎??쒕떎.
+    /// Internal visibility lets tests call this helper directly.
     internal static func createZip(from dir: URL, to archive: URL) throws {
         let p = Self.makeZipProcess(from: dir, to: archive)
         try p.run()

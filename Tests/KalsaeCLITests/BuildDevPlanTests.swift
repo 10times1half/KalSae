@@ -120,4 +120,27 @@ struct DevPlanTests {
         #expect(plan.devCommand == "npm run dev")
         #expect(plan.shouldWaitForDevServer)
     }
+
+    @Test("--frontend-dev-server-url overrides config")
+    func devServerURLOverride() {
+        let config = makeConfig(devServerURL: "http://localhost:5173")
+        let plan = KSDevPlan.make(
+            config: config,
+            skipDevCommand: false,
+            noWaitDevServer: false,
+            devServerURLOverride: "http://localhost:9000")
+        #expect(plan.devServerURL == "http://localhost:9000")
+        #expect(plan.shouldWaitForDevServer)
+    }
+
+    @Test("blank --frontend-dev-server-url falls back to config")
+    func devServerURLOverrideBlank() {
+        let config = makeConfig(devServerURL: "http://localhost:5173")
+        let plan = KSDevPlan.make(
+            config: config,
+            skipDevCommand: false,
+            noWaitDevServer: false,
+            devServerURLOverride: "   ")
+        #expect(plan.devServerURL == "http://localhost:5173")
+    }
 }

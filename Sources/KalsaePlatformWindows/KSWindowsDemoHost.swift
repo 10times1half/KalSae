@@ -311,6 +311,13 @@
             try bridge.emit(event: event, payload: payload)
         }
 
+        /// 현재 문서를 다시 로드한다 (`location.reload()` 동등). dev 라이브
+        /// 리로드(`KALSAE_DEV_RELOAD=1`)에서 사용된다. 웹뷰가 아직 초기화되지
+        /// 않았다면 무시된다.
+        public func reload() {
+            webview.reload()
+        }
+
         /// 클로저를 UI 스레드의 메시지 큐에 전달한다. 백그라운드 스레드 /
         /// Task.detached에서 윈도우, 웹뷰, IPC 브리지와 안전하게
         /// 상호작용할 때 사용한다. Swift의 `MainActor` 실행기가 Win32

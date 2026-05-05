@@ -1,0 +1,27 @@
+import { useState } from 'react'
+
+declare global {
+  interface Window {
+    __KS_: { invoke<T = unknown>(name: string, args?: unknown): Promise<T> }
+  }
+}
+
+export default function App() {
+  const [msg, setMsg] = useState('')
+  return (
+    <main style={{ fontFamily: 'system-ui', padding: 32 }}>
+      <h1>{{NAME}}</h1>
+      <button
+        onClick={async () => {
+          const r = await window.__KS_.invoke<{ message: string }>('hello', {
+            name: '{{NAME}}',
+          })
+          setMsg(r.message)
+        }}
+      >
+        Say Hello
+      </button>
+      <p>{msg}</p>
+    </main>
+  )
+}

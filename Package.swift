@@ -41,7 +41,7 @@ let package = Package(
             path: "Sources/CKalsaeWV2",
             publicHeadersPath: "include",
             cxxSettings: [
-                .headerSearchPath("../../Vendor/WebView2/build/native/include"),
+                .headerSearchPath("Vendor/WebView2/build/native/include"),
                 .define("UNICODE"),
                 .define("_UNICODE"),
                 .define("_WIN32_WINNT", to: "0x0A00"),
@@ -53,14 +53,6 @@ let package = Package(
                 .linkedLibrary("shlwapi", .when(platforms: [.windows])),
                 .linkedLibrary("shell32", .when(platforms: [.windows])),
                 .linkedLibrary("uuid", .when(platforms: [.windows])),
-                .unsafeFlags(
-                    ["-L", "Vendor/WebView2/build/native/x64"],
-                    .when(platforms: [.windows])),
-                .linkedLibrary(
-                    "WebView2LoaderStatic",
-                    .when(platforms: [.windows])),
-                .linkedLibrary("runtimeobject", .when(platforms: [.windows])),
-                .linkedLibrary("windowscodecs", .when(platforms: [.windows])),
             ]
         ),
         .systemLibrary(

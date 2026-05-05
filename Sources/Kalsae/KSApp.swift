@@ -72,6 +72,10 @@ public final class KSApp {
     /// `install(_:)`로 등록된 플러그인 목록. `shutdown()` 시 역순 teardown에 사용된다.
     var _pluginsStorage: [any KSPlugin] = []
 
+    /// dev 라이브 리로드(`KALSAE_DEV_RELOAD=1`)에서 활성화되는 watcher 작업.
+    /// `shutdown()`에서 cancel된다.
+    internal var devWatcherTask: Task<Void, Never>?
+
     private init(
         config: KSConfig,
         registry: KSCommandRegistry,
@@ -467,6 +471,18 @@ public final class KSApp {
             subscribeMenuRouter(app: app)
         #endif
 
+        // 8. dev 라이브 리로드 (`KALSAE_DEV_RELOAD=1`).
+        //    `kalsae dev`가 자식 프로세스에 환경 변수를 전달하면 해당 부팅이
+        //    가상 호스트로 자산을 제공할 때 자산 디렉터리를 폴링하며 변경 시
+        //    웹뷰를 reload한다. 비-가상 호스트(외부 dev server / file://)는
+        //    풀-페이지 리로드가 의미 없거나 dev server 자체가 hot module을
+        //    담당하므로 watcher를 켜지 않는다.
+        if ProcessInfo.processInfo.environment["KALSAE_DEV_RELOAD"] == "1",
+            case .virtualHost(let watchRoot) = servingMode
+        {
+            app.startDevAssetWatcher(root: watchRoot)
+        }
+
         return app
     }
 
@@ -533,6 +549,32 @@ public final class KSApp {
     /// 종료될 때까지 플랫폼 메시지 루프를 실행한다.
     public func run() -> Int32 {
         host.runMessageLoop()
+    }
+
+    /// 현재 윈도우의 웹뷰를 리로드한다 (`location.reload()` 동등). dev 라이브
+    /// 리로드(`KALSAE_DEV_RELOAD=1`)에서 자동 호출되며, 앱 코드가 명시적으로
+    /// 호출해도 안전하다. iOS/Android에서는 no-op.
+    public func reload() {
+        host.reload()
+    }
+
+    /// 자산 변경을 감지해 `reload()`를 호출하는 watcher 작업을 시작한다.
+    /// `KSApp.boot`가 `KALSAE_DEV_RELOAD=1` 환경에서 가상 호스트 모드일 때
+    /// 자동으로 호출한다. 이미 watcher가 실행 중이면 무시.
+    internal func startDevAssetWatcher(root: URL) {
+        guard devWatcherTask == nil else { return }
+        let watcher = KSAssetWatcher(root: root)
+        let log = KSLog.logger("kalsae.app")
+        log.info("dev live-reload watcher started for \(root.path)")
+        devWatcherTask = Task.detached { [weak self] in
+            await watcher.run {
+                await MainActor.run {
+                    guard let self else { return }
+                    KSLog.logger("kalsae.app").info("dev live-reload: assets changed → reload")
+                    self.reload()
+                }
+            }
+        }
     }
 
     /// 애플리케이션의 정리된 종료를 요청한다. Windows에서는 데모 윈도우에

@@ -12,14 +12,16 @@ struct ProjectTemplateTests {
     private func scaffold(
         name: String = "MyApp",
         frontend: String = "vanilla",
-        packageManager: String = "npm"
+        packageManager: String = "npm",
+        kalsaePath: String? = nil
     ) throws -> URL {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("Kalsae-test-\(UUID().uuidString)")
         try ProjectTemplate(
             name: name,
             frontend: frontend,
-            packageManager: packageManager
+            packageManager: packageManager,
+            kalsaePath: kalsaePath
         ).write(to: tmp)
         return tmp
     }
@@ -127,9 +129,34 @@ struct ProjectTemplateTests {
         #expect(
             json.contains("\"version\": \"\(KSVersion.current)\""),
             "generated Kalsae.json should use shared version")
+        // 기본 템플릿은 `from: KSVersion.current` 의존성을 사용한다.
+        // CKalsaeWV2 에서 unsafeFlags 를 제거했으므로 버전 태그 기반 의존성을 사용할 수 있다.
         #expect(
             package.contains("from: \"\(KSVersion.current)\""),
-            "generated Package.swift should use shared version")
+            "generated Package.swift should pin Kalsae to current version")
+        #expect(
+            package.contains("https://github.com/10times1half/KalSae.git"),
+            "generated Package.swift should use canonical Kalsae repository URL")
+    }
+
+    @Test("kalsaePath produces a path-based Kalsae dependency")
+    func kalsaePathProducesPathDependency() throws {
+        let root = try scaffold(kalsaePath: "C:/Projects/Kalsae")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let package = try String(
+            contentsOf: root.appendingPathComponent("Package.swift"),
+            encoding: .utf8
+        )
+
+        #expect(
+            package.contains(".package(name: \"kalsae\", path: \"C:/Projects/Kalsae\")"),
+            "kalsaePath should emit a SwiftPM path dependency, got: \(package)"
+        )
+        #expect(
+            !package.contains("https://github.com/10times1half/KalSae.git"),
+            "kalsaePath should suppress the canonical URL dependency"
+        )
     }
 
     // MARK: - 프론트엔드 프리셋
@@ -176,5 +203,181 @@ struct ProjectTemplateTests {
 
         #expect(json.contains("\"about:blank\""), "unknown preset should fall back to vanilla")
         #expect(json.contains("\"devCommand\": null"), "unknown preset should have null devCommand")
+    }
+
+    // MARK: - React 인라인 프론트엔드 파일
+
+    @Test("React preset scaffolds package.json + vite project files")
+    func reactScaffoldsViteFiles() throws {
+        let root = try scaffold(frontend: "react")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("package.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("vite.config.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("tsconfig.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.tsx").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.tsx").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/index.css").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+    }
+
+    @Test("React vite.config outputs into Sources/<NAME>/Resources/dist")
+    func reactViteOutDir() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "react")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let viteConfig = try String(
+            contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
+        #expect(
+            viteConfig.contains("Sources/CoolApp/Resources/dist"),
+            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+    }
+
+    @Test("React package.json uses lowercase project name")
+    func reactPackageJsonNameLowercased() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "react")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pkg = try String(
+            contentsOf: root.appendingPathComponent("package.json"), encoding: .utf8)
+        #expect(pkg.contains("\"name\": \"coolapp\""), "package.json name must be lowercased, got: \(pkg)")
+    }
+
+    // MARK: - Vue 인라인 프론트엔드 파일
+
+    @Test("Vue preset scaffolds package.json + vite project files")
+    func vueScaffoldsViteFiles() throws {
+        let root = try scaffold(frontend: "vue")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("package.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("vite.config.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("tsconfig.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("tsconfig.app.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("tsconfig.node.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.vue").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/style.css").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+    }
+
+    @Test("Vue vite.config outputs into Sources/<NAME>/Resources/dist")
+    func vueViteOutDir() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "vue")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let viteConfig = try String(
+            contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
+        #expect(
+            viteConfig.contains("Sources/CoolApp/Resources/dist"),
+            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+    }
+
+    @Test("Vue App.vue uses window.__KS_ bridge")
+    func vueAppUsesBridge() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "vue")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let app = try String(
+            contentsOf: root.appendingPathComponent("src/App.vue"), encoding: .utf8)
+        #expect(app.contains("window.__KS_"), "Vue App.vue must use window.__KS_ bridge")
+        #expect(app.contains("CoolApp"), "Vue App.vue must include project name")
+    }
+
+    // MARK: - Svelte 인라인 프론트엔드 파일
+
+    @Test("Svelte preset scaffolds package.json + vite project files")
+    func svelteScaffoldsViteFiles() throws {
+        let root = try scaffold(frontend: "svelte")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let fm = FileManager.default
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("package.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("vite.config.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("tsconfig.json").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("svelte.config.js").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.svelte").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.css").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+    }
+
+    @Test("Svelte vite.config outputs into Sources/<NAME>/Resources/dist")
+    func svelteViteOutDir() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "svelte")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let viteConfig = try String(
+            contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
+        #expect(
+            viteConfig.contains("Sources/CoolApp/Resources/dist"),
+            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+    }
+
+    @Test("Svelte App.svelte uses window.__KS_ bridge")
+    func svelteAppUsesBridge() throws {
+        let root = try scaffold(name: "CoolApp", frontend: "svelte")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let app = try String(
+            contentsOf: root.appendingPathComponent("src/App.svelte"), encoding: .utf8)
+        #expect(app.contains("window.__KS_"), "Svelte App.svelte must use window.__KS_ bridge")
+        #expect(app.contains("CoolApp"), "Svelte App.svelte must include project name")
+    }
+}
+
+// MARK: - KSConfigLocator
+
+@Suite("KSConfigLocator")
+struct KSConfigLocatorTests {
+    @Test("Finds Sources/<name>/Resources/kalsae.json fallback")
+    func findsResourcesFallback() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Kalsae-locator-\(UUID().uuidString)")
+        try ProjectTemplate(name: "MyApp").write(to: tmp)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let found = KSConfigLocator.find(cwd: tmp)
+        #expect(found != nil, "Should locate kalsae.json under Sources/MyApp/Resources/")
+        // Windows 는 대소문자 무시 파일시스템이므로 KSConfigLocator 가 시도하는 첫
+        // 후보(Kalsae.json) 가 그대로 일치할 수 있다. 두 표기 모두 허용.
+        let lower = found?.lastPathComponent.lowercased()
+        #expect(lower == "kalsae.json")
+    }
+
+    @Test("Prefers root-level Kalsae.json over Resources fallback")
+    func prefersRootLevel() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Kalsae-locator-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let rootCfg = tmp.appendingPathComponent("Kalsae.json")
+        try "{}".write(to: rootCfg, atomically: false, encoding: .utf8)
+
+        // Sources/X/Resources/kalsae.json 도 만든다.
+        let sub = tmp.appendingPathComponent("Sources/X/Resources")
+        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+        try "{}".write(
+            to: sub.appendingPathComponent("kalsae.json"),
+            atomically: false, encoding: .utf8)
+
+        let found = KSConfigLocator.find(cwd: tmp)
+        #expect(found?.path == rootCfg.path, "Root-level Kalsae.json should win")
+    }
+
+    @Test("Returns nil when no config exists")
+    func returnsNil() throws {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Kalsae-locator-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        #expect(KSConfigLocator.find(cwd: tmp) == nil)
     }
 }

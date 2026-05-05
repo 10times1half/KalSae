@@ -33,7 +33,7 @@ extern "C" int32_t KSWV2_CreateEnvironment(
         });
 
     return static_cast<int32_t>(
-        CreateCoreWebView2EnvironmentWithOptions(
+        KSWV2_Loader_CreateEnvironmentWithOptions(
             browser_executable_folder,
             user_data_folder,
             nullptr,
@@ -49,7 +49,7 @@ extern "C" int32_t KSWV2_GetAvailableBrowserVersion(
     wchar_t **version_out)
 {
     LPWSTR v = nullptr;
-    HRESULT hr = GetAvailableCoreWebView2BrowserVersionString(
+    HRESULT hr = KSWV2_Loader_GetAvailableBrowserVersionString(
         browser_executable_folder, &v);
     if (version_out) {
         *version_out = v;          // 호출자가 CoTaskMemFree로 해제

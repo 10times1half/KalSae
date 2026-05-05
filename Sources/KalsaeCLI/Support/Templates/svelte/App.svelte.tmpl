@@ -1,0 +1,29 @@
+<script lang="ts">
+  declare global {
+    interface Window {
+      __KS_: { invoke<T = unknown>(name: string, args?: unknown): Promise<T> }
+    }
+  }
+
+  let msg = $state('')
+
+  async function greet() {
+    const r = await window.__KS_.invoke<{ message: string }>('hello', {
+      name: '{{NAME}}',
+    })
+    msg = r.message
+  }
+</script>
+
+<main>
+  <h1>{{NAME}}</h1>
+  <button onclick={greet}>Say Hello</button>
+  <p>{msg}</p>
+</main>
+
+<style>
+  main {
+    font-family: system-ui;
+    padding: 32px;
+  }
+</style>

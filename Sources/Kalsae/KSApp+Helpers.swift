@@ -2,14 +2,14 @@ internal import Foundation
 
 extension KSApp {
 
-    /// ?댁옣 ?먯궛 留ㅽ븨???ъ슜?섎뒗 媛???몄뒪??
+    /// Virtual host used when serving local assets.
     public static let virtualHost = "app.kalsae"
 
-    /// 媛?ν븳 媛???대Ⅸ ?쒖젏??CSP `<meta>` ?쒓렇瑜??ㅼ튂?섎뒗 ?묒? JS ?ㅻ땲??
-    /// ?뚮옯???몄뒪?멸? ?붿쭊??document-created ?낆쓣 ?듯빐 ?깅줉?섎?濡?
-    /// HTML???뚯떛?섍린 ?꾩뿉 ?ㅽ뻾?쒕떎.
+    /// Returns a script that injects a CSP `<meta>` tag as early as possible.
+    /// Platform hosts register this as a document-created script so it runs
+    /// before page HTML parsing completes.
     internal static func cspInjectionScript(_ csp: String) -> String {
-        // JS 由ы꽣?댁뿉 ?덉쟾?섍쾶 ?ｊ린 ?꾪빐 ?곗샂?쒖? ??뒳?섏떆瑜??댁뒪耳?댄봽?쒕떎.
+        // Escape control characters so the value is safe inside a JS string literal.
         var escaped = ""
         escaped.reserveCapacity(csp.count + 8)
         for ch in csp {
@@ -53,8 +53,8 @@ extension KSApp {
         return exists && isDir.boolValue
     }
 
-    /// `http://??? `https://??(`about:blank` ?쒖쇅)瑜??쇱씠釉?dev ?쒕쾭
-    /// ?붾뱶?ъ씤?몃줈 媛꾩＜?쒕떎. 鍮?臾몄옄?닿낵 `about:blank`??    /// "dev ?쒕쾭媛 援ъ꽦?섏? ?딆쓬"?쇰줈 ?댁꽍?쒕떎.
+    /// Treat non-empty `http://` and `https://` URLs as remote dev-server origins.
+    /// Empty strings and `about:blank` are treated as "no dev server configured".
     internal static func isRemoteURL(_ s: String) -> Bool {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }

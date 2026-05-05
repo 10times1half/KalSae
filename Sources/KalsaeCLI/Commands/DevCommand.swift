@@ -34,15 +34,74 @@ struct DevCommand: ParsableCommand {
     @Option(name: .long, help: "Polling interval in seconds for --watch mode.")
     var watchInterval: Double = 1.0
 
+    @Option(
+        name: .long,
+        help: "Minimum milliseconds to wait between watch-mode restarts (debounces rapid file changes).")
+    var debounce: Int = 200
+
+    @Flag(
+        name: .long,
+        help: "Open the dev server URL in the default browser once it is reachable.")
+    var browser: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Arguments to pass to the application after 'swift run', shell-quoted (e.g. --app-args \"--debug --port 8080\")."
+    )
+    var appArgs: String? = nil
+
+    @Option(
+        name: .long,
+        help: "Override build.devServerURL (Wails: -frontenddevserverurl).")
+    var frontendDevServerURL: String? = nil
+
+    @Option(
+        name: .long,
+        help: "Seconds to wait for the dev server to become reachable (default: 20).")
+    var devServerTimeout: Double = 20
+
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Set KALSAE_DEV_RELOAD=1 in the launched app's environment so the host can opt into live asset reload. Use --no-reload to disable. (default: --reload)"
+    )
+    var reload: Bool = true
+
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Automatically fetch the WebView2 SDK into the Kalsae checkout when missing (Windows only)."
+    )
+    var autoFetchWebView2: Bool = true
+
+    @Option(
+        name: .long,
+        help: "WebView2 SDK version to fetch when auto-fetching (default: latest).")
+    var webview2SdkVersion: String = "latest"
+
     func run() throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
+
+        // Windows: `swift run` 이 CKalsaeWV2 를 컴파일하기 전에
+        // Kalsae 체크아웃의 Vendor/WebView2 를 채워둔다.
+        do {
+            try KSWebView2Provisioner.ensure(
+                cwd: cwd,
+                autoFetch: autoFetchWebView2,
+                sdkVersion: webview2SdkVersion)
+        } catch let error as ShellError {
+            throw ValidationError(error.description)
+        }
+
         let configURL = resolveConfigURLIfPresent(cwd: cwd, fm: fm)
         let appConfig = try loadConfigIfPresent(configURL)
         let plan = KSDevPlan.make(
             config: appConfig,
             skipDevCommand: skipDevCommand,
-            noWaitDevServer: noWaitDevServer)
+            noWaitDevServer: noWaitDevServer,
+            devServerURLOverride: frontendDevServerURL)
 
         var devProcess: Process? = nil
         if let raw = plan.devCommand {
@@ -61,17 +120,31 @@ struct DevCommand: ParsableCommand {
         if plan.shouldWaitForDevServer,
             let url = plan.devServerURL
         {
-            try waitForDevServer(urlString: url, timeoutSeconds: 20)
+            try waitForDevServer(urlString: url, timeoutSeconds: devServerTimeout)
+        }
+
+        if browser, let url = plan.devServerURL, Self.isRemoteURL(url) {
+            openInBrowser(url)
         }
 
         var args = ["run"]
         if let t = target { args += [t] }
+        let extraAppArgs = Self.parseShellArgs(appArgs)
+        if !extraAppArgs.isEmpty {
+            args.append("--")
+            args += extraAppArgs
+        }
         print("▶  swift \(args.joined(separator: " "))")
 
+        // KALSAE_DEV_RELOAD: dev 라이브 리로드 hint. 호스트(KSApp)는 이 env var이
+        // "1"이면 frontendDist watcher를 켜고 변경 시 webview reload를 트리거할 수
+        // 있다 (host-side wiring은 별도 PR 예정). `--no-reload`로 끌 수 있다.
+        let extraEnv: [String: String] = ["KALSAE_DEV_RELOAD": reload ? "1" : "0"]
+
         if watch {
-            try runWatchedSwiftProcess(args: args, cwd: cwd)
+            try runWatchedSwiftProcess(args: args, cwd: cwd, environment: extraEnv)
         } else {
-            try shell(command: "swift", arguments: args)
+            try shell(command: "swift", arguments: args, environment: extraEnv)
         }
     }
 
@@ -79,11 +152,7 @@ struct DevCommand: ParsableCommand {
         if let config {
             return URL(fileURLWithPath: config, relativeTo: cwd)
         }
-        let upper = cwd.appendingPathComponent("Kalsae.json")
-        if fm.fileExists(atPath: upper.path) { return upper }
-        let lower = cwd.appendingPathComponent("kalsae.json")
-        if fm.fileExists(atPath: lower.path) { return lower }
-        return nil
+        return KSConfigLocator.find(cwd: cwd, fm: fm)
     }
 
     private func loadConfigIfPresent(_ configURL: URL?) throws -> KSConfig? {
@@ -113,28 +182,43 @@ struct DevCommand: ParsableCommand {
             "Dev server did not become reachable within \(Int(timeoutSeconds))s: \(urlString)")
     }
 
-    private func runWatchedSwiftProcess(args: [String], cwd: URL) throws {
+    private func runWatchedSwiftProcess(
+        args: [String], cwd: URL, environment: [String: String]? = nil
+    ) throws {
         if watchInterval <= 0 {
             throw ValidationError("--watch-interval must be greater than 0.")
+        }
+        if debounce < 0 {
+            throw ValidationError("--debounce must be >= 0.")
         }
 
         let fm = FileManager.default
         var fingerprint = watchFingerprint(cwd: cwd, fm: fm)
-        var process = try spawn(command: "swift", arguments: args, in: cwd.path)
-        print("👀  Watch mode enabled (interval: \(watchInterval)s)")
+        var process = try spawn(
+            command: "swift", arguments: args, in: cwd.path, environment: environment)
+        print("👀  Watch mode enabled (interval: \(watchInterval)s, debounce: \(debounce)ms)")
+        var lastRestart: Date = .distantPast
 
         while true {
             Thread.sleep(forTimeInterval: watchInterval)
 
             let nextFingerprint = watchFingerprint(cwd: cwd, fm: fm)
             if nextFingerprint > fingerprint {
+                let now = Date()
+                let elapsedMs = now.timeIntervalSince(lastRestart) * 1000.0
+                if elapsedMs < Double(debounce) {
+                    continue
+                }
                 fingerprint = nextFingerprint
+                lastRestart = now
                 if process.isRunning {
                     process.terminate()
                     process.waitUntilExit()
                 }
                 print("♻️  Changes detected. Restarting swift run...")
-                process = try spawn(command: "swift", arguments: args, in: cwd.path)
+                process = try spawn(
+                    command: "swift", arguments: args, in: cwd.path,
+                    environment: environment)
                 continue
             }
 
@@ -209,5 +293,67 @@ struct DevCommand: ParsableCommand {
         _ = semaphore.wait(timeout: .now() + 2)
         task.cancel()
         return result.ok
+    }
+
+    // MARK: - Wails-호환 헬퍼
+
+    /// `http://`/`https://` 인 경우에만 원격으로 본다 (`about:blank` 등은 제외).
+    static func isRemoteURL(_ text: String?) -> Bool {
+        guard let text,
+            let u = URL(string: text),
+            let scheme = u.scheme?.lowercased()
+        else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    /// 셸 스타일 인자 분할. 큰따옴표/작은따옴표를 그룹으로 인식하고
+    /// 따옴표 내부 공백은 그대로 유지한다. 매우 단순하지만
+    /// `--app-args` 일반 사용 케이스에는 충분하다.
+    static func parseShellArgs(_ raw: String?) -> [String] {
+        guard let raw, !raw.isEmpty else { return [] }
+        var out: [String] = []
+        var current = ""
+        var quote: Character? = nil
+        for ch in raw {
+            if let q = quote {
+                if ch == q {
+                    quote = nil
+                } else {
+                    current.append(ch)
+                }
+            } else if ch == "\"" || ch == "'" {
+                quote = ch
+            } else if ch.isWhitespace {
+                if !current.isEmpty {
+                    out.append(current)
+                    current = ""
+                }
+            } else {
+                current.append(ch)
+            }
+        }
+        if !current.isEmpty { out.append(current) }
+        return out
+    }
+
+    /// 기본 브라우저로 URL 열기. 실패는 경고만 출력하고 무시.
+    private func openInBrowser(_ url: String) {
+        #if os(Windows)
+            // PowerShell `Start-Process` 가 가장 확실하다. cmd `start` 는 첫
+            // 인자를 윈도우 타이틀로 해석할 수 있어 회피한다.
+            do {
+                try shell(command: "powershell", arguments: ["-NoProfile", "-Command", "Start-Process", "'\(url)'"])
+            } catch {
+                print("⚠  Failed to open browser: \(error)")
+            }
+        #elseif os(macOS)
+            do { try shell(command: "open", arguments: [url]) } catch {
+                print("⚠  Failed to open browser: \(error)")
+            }
+        #else
+            do { try shell(command: "xdg-open", arguments: [url]) } catch {
+                print("⚠  Failed to open browser: \(error)")
+            }
+        #endif
     }
 }
