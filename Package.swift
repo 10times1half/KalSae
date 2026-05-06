@@ -200,6 +200,7 @@ let package = Package(
                         condition: .when(platforms: [.linux])),
             ],
             path: "Sources/KalsaeDemo",
+            exclude: ["dist-bench"],
             resources: [.copy("Resources")],
             swiftSettings: commonSwiftSettings
         ),

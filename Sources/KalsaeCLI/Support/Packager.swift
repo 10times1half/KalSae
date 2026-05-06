@@ -1,6 +1,6 @@
-/// Builds a distributable Windows bundle from SwiftPM outputs, frontend assets,
-/// config, and manifests.
-/// For WebView2 fixed runtime mode, vendor files are copied from
+/// SwiftPM 출력물, 프론트엔드 에셋, 설정 및 매니페스트로부터
+/// 배포 가능한 Windows 번들을 빌드합니다.
+/// WebView2 fixed runtime 모드의 경우, vendor 파일들은 다음 위치로부터 복사됩니다.
 /// `Vendor/WebView2/runtimes/`.
 public import Foundation
 
@@ -135,8 +135,13 @@ public enum KSPackager {
                 stripSourceMaps: opts.stripSourceMaps,
                 stripExtensions: opts.stripExtensions)
             if stripResult.removed > 0 {
-                print(
-                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))")
+                let msg =
+                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))"
+                print(msg)
+            }
+            if stripResult.failed > 0 {
+                warnings.append(
+                    "Failed to strip \(stripResult.failed) file(s) from frontend bundle (locked or read-only).")
             }
         } else {
             warnings.append("Frontend dist directory not found; skipping Resources/.")
@@ -322,84 +327,22 @@ public enum KSPackager {
         try fm.copyItem(at: src, to: dst)
     }
 
-    /// Creates a `.zip` from `dir` using PowerShell's built-in
-    /// `System.IO.Compression.ZipFile` on Windows.
-    ///
-    /// Security: untrusted paths are passed via environment variables, not
-    /// string-interpolated into the PowerShell script.
+    /// Creates a `.zip` from `dir` using the `KSZipArchiver` (pure-Swift
+    /// `ZIPFoundation`). Replaces the previous PowerShell shell-out — saves
+    /// ~250 ms PowerShell cold-start per build and removes path-quoting
+    /// vulnerabilities.
     ///
     /// Internal visibility lets tests call this helper directly.
     internal static func createZip(from dir: URL, to archive: URL) throws {
-        let p = Self.makeZipProcess(from: dir, to: archive)
-        try p.run()
-        p.waitUntilExit()
-        if p.terminationStatus != 0 {
-            throw NSError(
-                domain: "KSPackager", code: Int(p.terminationStatus),
-                userInfo: [
-                    NSLocalizedDescriptionKey:
-                        "Compress-Archive exited \(p.terminationStatus)"
-                ])
-        }
+        try KSZipArchiver.zip(directory: dir, to: archive)
     }
 
     /// Async variant of `createZip(from:to:)` that suspends instead of
-    /// blocking the calling thread on `Process.waitUntilExit()`.
-    /// Resumes once PowerShell exits via `terminationHandler`.
+    /// blocking the calling thread on the (now in-process) compression work.
     internal static func createZipAsync(
         from dir: URL,
         to archive: URL
     ) async throws {
-        let p = Self.makeZipProcess(from: dir, to: archive)
-        try await withCheckedThrowingContinuation {
-            (cont: CheckedContinuation<Void, any Error>) in
-            p.terminationHandler = { proc in
-                if proc.terminationStatus == 0 {
-                    cont.resume()
-                } else {
-                    cont.resume(
-                        throwing: NSError(
-                            domain: "KSPackager",
-                            code: Int(proc.terminationStatus),
-                            userInfo: [
-                                NSLocalizedDescriptionKey:
-                                    "Compress-Archive exited \(proc.terminationStatus)"
-                            ]))
-                }
-            }
-            do {
-                try p.run()
-            } catch {
-                cont.resume(throwing: error)
-            }
-        }
-    }
-
-    /// Builds the `Process` invocation shared by sync/async zip helpers.
-    /// All untrusted path data is passed through environment variables,
-    /// not interpolated into the PowerShell script.
-    private static func makeZipProcess(
-        from dir: URL,
-        to archive: URL
-    ) -> Process {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe")
-        let script = """
-            $ErrorActionPreference = 'Stop';
-            Add-Type -AssemblyName System.IO.Compression.FileSystem;
-            $src = $env:KS_PKG_SRC;
-            $dst = $env:KS_PKG_DST;
-            if (Test-Path -LiteralPath $dst) { Remove-Item -LiteralPath $dst -Force; }
-            [System.IO.Compression.ZipFile]::CreateFromDirectory($src, $dst);
-            """
-        p.arguments = [
-            "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-            "-Command", script,
-        ]
-        var env = ProcessInfo.processInfo.environment
-        env["KS_PKG_SRC"] = dir.path
-        env["KS_PKG_DST"] = archive.path
-        p.environment = env
-        return p
+        try await KSZipArchiver.zipAsync(directory: dir, to: archive)
     }
 }

@@ -164,6 +164,30 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--nsis-signtool-cmd "<template>"` | Windows: codesign the NSIS installer after `makensis`. Same template syntax as `--signtool-cmd`. Requires `--nsis`. |
 | `--no-auto-fetch-web-view2` | Disable automatic fetching of the WebView2 SDK on Windows. |
 | `--webview2-sdk-version <ver>` | WebView2 SDK version when auto-fetching. |
+| `--timings` / `--no-timings` | Print stage-by-stage wall-clock timings after the build. **Default: ON**. The summary distinguishes `WALL` (real elapsed time) from the stage sum when parallel stages overlap. |
+| `--timings-json <path>` | Also write machine-readable timings to JSON (`{ totalMs, stageSumMs, stages: [...] }`). Path is resolved relative to cwd. |
+| `--parallel-build` / `--no-parallel-build` | Run the frontend build in parallel with `swift build`. **Default: ON** when `build.buildCommand` is set; ignored under `--dryrun` or `--skip-frontend`. The first `swift build` runs against the *current* `Resources/`; if `sync-resources` then changes any file, an incremental finalize pass re-bundles them. |
+
+#### Build pipeline stages
+
+`kalsae build` runs the following stages (visible in `--timings`):
+
+| Stage | Notes |
+|---|---|
+| `config` / `config-load` | Locate and parse `Kalsae.json`. |
+| `clean` | Only when `--clean` is passed. |
+| `wv2-precheck` | Windows: ensure `Vendor/WebView2/` is populated; auto-fetches the SDK on first run. Cached fast-path is ~10 ms. |
+| `frontend` | Runs `build.buildCommand` from `Kalsae.json`. Skipped with `--skip-frontend`. |
+| `validate-dist` | Asserts dist directory exists and is non-empty (unless `--allow-missing-dist`). |
+| `sync-resources` | Incrementally mirrors dist into `Sources/<target>/Resources` (rsync-style: size + mtime gate, orphan removal). Refuses to run when dist and Resources/ overlap. |
+| `swift-build` | `swift build -c <config>` (in parallel mode: spawn-to-exit wall-clock). |
+| `swift-build-finalize` | Parallel mode only, when sync changed files: incremental rebuild to refresh the bundled `Resources/`. |
+| `post-build` | `--exe-name` rename + WebView2Loader.dll staging on Windows. |
+| `package` | When `--no-package` is not set. |
+
+**Parallel mode (default ON)**: `swift build` is spawned immediately while the frontend chain runs concurrently. `sync-resources` is intentionally deferred until after both branches finish to avoid a write/read race on the resource bundle. Real-world savings depend heavily on whether the frontend actually mutates dist — when dist is unchanged, finalize is skipped and savings approach `min(frontend, swift-build)`.
+
+**Resource sync safety**: `sync-resources` requires `build.frontendDist` to point to a directory that is *neither* equal to nor nested under (nor a parent of) `Sources/<target>/Resources/`. Overlapping configurations trigger a clear `ℹ Skipping resource sync: ... overlaps ...` message and the sync is skipped with no changes — the rest of the build still runs.
 
 #### Packaging
 

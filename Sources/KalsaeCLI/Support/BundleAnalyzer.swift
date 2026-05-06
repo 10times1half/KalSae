@@ -26,7 +26,10 @@ public struct KSBundleReport: Sendable, CustomStringConvertible {
             for (name, bytes) in largestFiles {
                 let pct = totalBytes > 0 ? Double(bytes) / Double(totalBytes) * 100 : 0
                 lines.append(
-                    "    • \(name)  \(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)) (\(String(format: "%.1f", pct))%)")
+                    "    • \(name)  "
+                        + "\(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))"
+                        + " (\(String(format: "%.1f", pct))%)"
+                )
             }
         }
         if !warnings.isEmpty {
@@ -55,7 +58,7 @@ public enum KSBundleAnalyzer {
     /// 분석할 때 무시할 파일 확장자/이름 패턴.
     private static let ignoredExtensions: Set<String> = [
         // 소스맵 — 프로덕션에 불필요
-        "map",
+        "map"
     ]
 
     private static let ignoredNames: Set<String> = [
@@ -73,10 +76,11 @@ public enum KSBundleAnalyzer {
         var warnings: [String] = []
         var suggestions: [String] = []
 
-        guard let enumerator = fm.enumerator(
-            at: distURL,
-            includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey],
-            options: [.skipsHiddenFiles])
+        guard
+            let enumerator = fm.enumerator(
+                at: distURL,
+                includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey],
+                options: [.skipsHiddenFiles])
         else {
             return KSBundleReport(
                 totalFiles: 0, totalBytes: 0, totalBytesFormatted: "0 bytes",
@@ -115,7 +119,9 @@ public enum KSBundleAnalyzer {
         let totalMB = Double(totalBytes) / 1_048_576.0
         if totalMB > 1.0 {
             suggestions.append(
-                "Bundle is \(String(format: "%.1f", totalMB)) MB. Consider code-splitting, tree-shaking, and lazy-loading.")
+                "Bundle is \(String(format: "%.1f", totalMB)) MB. Consider code-splitting, "
+                    + "tree-shaking, and lazy-loading."
+            )
         }
 
         let htmlFiles = allFiles.filter { $0.ext == "html" }
@@ -151,15 +157,16 @@ public enum KSBundleAnalyzer {
     ///   - distURL: 프론트엔드 빌드 산출물 디렉터리
     ///   - stripSourceMaps: 소스맵(.map) 파일 제거 여부
     ///   - stripExtensions: 추가로 제거할 확장자 목록
-    /// - Returns: 제거된 파일 수와 절약된 바이트 수
+    /// - Returns: 제거된 파일 수, 제거 실패 파일 수, 절약된 바이트 수
     @discardableResult
     public static func strip(
         distURL: URL,
         stripSourceMaps: Bool,
         stripExtensions: [String] = []
-    ) -> (removed: Int, savedBytes: Int) {
+    ) -> (removed: Int, failed: Int, savedBytes: Int) {
         let fm = FileManager.default
         var removed = 0
+        var failed = 0
         var savedBytes = 0
 
         var extensionsToStrip = Set(stripExtensions.map { $0.lowercased() })
@@ -172,7 +179,7 @@ public enum KSBundleAnalyzer {
                 at: distURL,
                 includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey],
                 options: [.skipsHiddenFiles])
-        else { return (0, 0) }
+        else { return (0, 0, 0) }
 
         for case let fileURL as URL in enumerator {
             guard let values = try? fileURL.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey]),
@@ -187,11 +194,11 @@ public enum KSBundleAnalyzer {
                     removed += 1
                     savedBytes += size
                 } catch {
-                    // 개별 파일 삭제 실패는 무시하고 계속
+                    failed += 1
                 }
             }
         }
 
-        return (removed, savedBytes)
+        return (removed, failed, savedBytes)
     }
 }

@@ -25,7 +25,15 @@ $excludeDirRegex = @(
     '\\.git\\',
     '\\.build\\',
     '\\node_modules\\',
-    '\\Vendor\\WebView2\\'
+    '\\Vendor\\WebView2\\',
+    # Demo bundle assets are minified JS chunks; their compressed byte
+    # sequences trigger false positives on the mojibake patterns below.
+    '\\Sources\\KalsaeDemo\\Resources\\assets\\',
+    '\\Sources\\KalsaeDemo\\dist-bench\\',
+    # Build / packaging outputs (mirror .gitignore).
+    '\\dist\\',
+    '\\out\\',
+    '\\release\\'
 )
 
 # Signatures that commonly indicate mojibake in this repository.

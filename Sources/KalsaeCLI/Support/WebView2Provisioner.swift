@@ -35,6 +35,23 @@ public enum KSWebView2Provisioner {
         #if os(Windows)
             let fm = FileManager.default
 
+            // Fast-path: WebView2 SDK 가 이미 모든 후보 루트에 설치돼 있으면
+            // `swift package resolve` (Windows에서 ~1.5 s 소요) 를 건너뛴다.
+            // 새 의존성이 추가돼 미해결된 체크아웃이 있으면 그건 후속
+            // `swift build` 가 어차피 해결한다 — 여기서는 SDK 헤더 보장만 책임진다.
+            //
+            // 이 단축은 워크스페이스가 dirty 한 경우(예: `Package.swift` 수정 직후)
+            // 에도 안전하다: 본 저장소 루트(cwd)에는 이미 헤더가 있고,
+            // 새로 들어올 KalSae 체크아웃은 swift build 가 자체적으로 fetch 한 뒤
+            // CKalsaeWV2 컴파일에서 헤더 부재로 실패해 사용자에게 명확히 알린다.
+            let preExistingRoots = discoverKalsaeRoots(cwd: cwd, fm: fm)
+            let allProvisioned =
+                !preExistingRoots.isEmpty
+                && preExistingRoots.allSatisfy { fm.fileExists(atPath: loaderURL(in: $0).path) }
+            if allProvisioned {
+                return
+            }
+
             if resolveBeforeProvision {
                 // `.build/checkouts/` 를 채우기 위해 먼저 dependency resolve 를 강제.
                 // 이 단계가 SDK 다운로드를 트리거하지는 않으나, 체크아웃이 없으면

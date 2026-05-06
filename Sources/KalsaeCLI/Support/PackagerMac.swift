@@ -121,8 +121,13 @@ extension KSPackager {
                 stripSourceMaps: opts.stripSourceMaps,
                 stripExtensions: opts.stripExtensions)
             if stripResult.removed > 0 {
-                print(
-                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))")
+                let msg =
+                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))"
+                print(msg)
+            }
+            if stripResult.failed > 0 {
+                warnings.append(
+                    "Failed to strip \(stripResult.failed) file(s) from frontend bundle (locked or read-only).")
             }
         } else {
             warnings.append("Frontend dist directory not found; .app will have no web assets.")
@@ -222,30 +227,31 @@ extension KSPackager {
         }
     }
 
-    /// macOS/Linux에서 `ditto`(있을 때) 또는 `zip` CLI로 압축한다.
-    /// Windows에서 호출되지 않으므로 `Compress-Archive`는 사용하지 않는다.
+    /// macOS는 `ditto`(코드사이닝 xattr 보존)로 압축하고, Linux는 순수 Swift
+    /// `KSZipArchiver`로 압축한다. Windows에서는 호출되지 않지만 안전한
+    /// 폴백을 둔다.
     internal static func createZipMac(from src: URL, to archive: URL) throws {
         #if os(Windows)
-            // Windows에서는 .app 패키징 자체가 호출되지 않지만, 안전을 위해 fallback.
-            try createZip(from: src.deletingLastPathComponent(), to: archive)
-        #else
+            // Windows에서는 .app 패키징이 호출되지 않지만, 안전을 위해 폴백.
+            try KSZipArchiver.zipKeepingParent(directory: src, to: archive)
+        #elseif os(macOS)
+            // macOS는 ditto로 처리: codesign에 필요한 확장 속성(xattr)을 보존한다.
             let process = Process()
-            // ditto는 macOS 표준; Linux 폴백은 zip.
-            if FileManager.default.fileExists(atPath: "/usr/bin/ditto") {
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-                process.arguments = ["-c", "-k", "--keepParent", src.path, archive.path]
-            } else {
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
-                process.arguments = ["-r", "-q", archive.path, src.lastPathComponent]
-                process.currentDirectoryURL = src.deletingLastPathComponent()
-            }
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            process.arguments = ["-c", "-k", "--keepParent", src.path, archive.path]
             try process.run()
             process.waitUntilExit()
             if process.terminationStatus != 0 {
                 throw NSError(
                     domain: "KSPackager", code: Int(process.terminationStatus),
-                    userInfo: [NSLocalizedDescriptionKey: "Archive exited \(process.terminationStatus)"])
+                    userInfo: [
+                        NSLocalizedDescriptionKey:
+                            "ditto exited \(process.terminationStatus)"
+                    ])
             }
+        #else
+            // Linux: 순수 Swift zip (파일 핸들 / 외부 zip CLI 의존성 제거).
+            try KSZipArchiver.zipKeepingParent(directory: src, to: archive)
         #endif
     }
 }

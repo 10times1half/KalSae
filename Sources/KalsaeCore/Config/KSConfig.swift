@@ -49,12 +49,8 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.deepLink = deepLink
     }
 
-    // `security` 등 필수가 아닌 섹션은 JSON에서 생략 가능하도록 한다.
-    private enum CodingKeys: String, CodingKey {
-        case app, build, windows, security, tray, menu, notifications
-        case autostart, deepLink
-    }
-
+    // `security` 등 필수가 아닌 섹션은 JSON에서 생략 가능하도록 custom init을 제공한다.
+    // CodingKeys는 synthesize되므로 명시하지 않는다.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.app = try c.decode(KSAppInfo.self, forKey: .app)
@@ -133,11 +129,8 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
         self.bundleReport = bundleReport
     }
 
-    private enum CodingKeys: String, CodingKey {
-        case frontendDist, devServerURL, devCommand, buildCommand
-        case stripSourceMaps, stripExtensions, bundleReport
-    }
-
+    // 기본값이 있는 필드들을 JSON에서 생략 가능하도록 custom init을 제공한다.
+    // CodingKeys는 synthesize되므로 명시하지 않는다.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.frontendDist = try c.decode(String.self, forKey: .frontendDist)

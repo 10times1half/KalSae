@@ -25,20 +25,34 @@
     /// 첫 `KSWV2_CreateEnvironment` 호출 이전에만 효과가 있으므로
     /// `WebView2Host.createEnvironmentSync` 의 진입부에서 호출한다.
     internal enum KSWebView2LoaderResolver {
-        /// 한 번만 시도하면 충분하다 — InitOnce 가 이후 호출을 무시한다.
-        nonisolated(unsafe) private static var didEnsure: Bool = false
+        /// `nonisolated(unsafe)` 정적 변수 대신 `NSLock`로 보호되는 공유 상태.
+        /// `KSCommandRegistry`와 동일한 `final class @unchecked Sendable` 패턴을 사용하여
+        /// Swift 6 strict concurrency 검사에 안전하게 한 번만 초기화한다.
+        private final class State: @unchecked Sendable {
+            private let lock = NSLock()
+            private var didEnsure: Bool = false
+
+            /// `work`는 최초 1회만 실행된다. InitOnce semantics를 가진다.
+            func ensureOnce(_ work: () -> Void) {
+                lock.lock()
+                let already = didEnsure
+                didEnsure = true
+                lock.unlock()
+                if !already { work() }
+            }
+        }
+        private static let state = State()
 
         static func ensureLoaderDir(executableDir: URL) {
-            if didEnsure { return }
-            didEnsure = true
+            state.ensureOnce {
+                guard let dir = locateLoaderDirectory(executableDir: executableDir)
+                else { return }
 
-            guard let dir = locateLoaderDirectory(executableDir: executableDir)
-            else { return }
-
-            KSLog.logger("platform.windows.webview").debug(
-                "WebView2Loader.dll directory resolved -> \(dir)")
-            dir.withUTF16Pointer { ptr in
-                KSWV2_SetLoaderSearchDirectory(ptr)
+                KSLog.logger("platform.windows.webview").debug(
+                    "WebView2Loader.dll directory resolved -> \(dir)")
+                dir.withUTF16Pointer { ptr in
+                    KSWV2_SetLoaderSearchDirectory(ptr)
+                }
             }
         }
 
@@ -67,37 +81,36 @@
             var result: [URL] = [executableDir]
 
             let arch = currentArch()
-            // EXE 부모를 거슬러 올라가며 `.build/checkouts` 를 찾는다.
-            // SwiftPM 레이아웃은 `<cwd>/.build/<triple>/<config>/<exe>` 또는
-            // `<cwd>/.build/<config>/<exe>` 이므로 `executableDir` 에서 위로
-            // 최대 4단계까지 본다.
+            // EXE 부모를 거슬러 올라가며 `.build` 디렉터리를 찾는다.
+            // 고정된 깊이(0..<5) 대신 `.build` 마커를 명시적으로 탐색하여 SwiftPM
+            // 레이아웃이 변경되거나 출력 디렉터리가 깊어져도 동작하도록 한다.
+            // 파일 시스템 루트에 도달하면 중단한다.
             var cursor: URL? = executableDir
-            for _ in 0..<5 {
-                guard let current = cursor else { break }
-                let checkouts = current.appendingPathComponent("checkouts")
-                var isDir: ObjCBool = false
-                if fileManager.fileExists(
-                    atPath: checkouts.path, isDirectory: &isDir),
-                    isDir.boolValue
-                {
-                    if let entries = try? fileManager.contentsOfDirectory(
-                        at: checkouts,
-                        includingPropertiesForKeys: [.isDirectoryKey],
-                        options: [.skipsHiddenFiles])
+            while let current = cursor {
+                if current.lastPathComponent == ".build" {
+                    let checkouts = current.appendingPathComponent("checkouts")
+                    var isDir: ObjCBool = false
+                    if fileManager.fileExists(
+                        atPath: checkouts.path, isDirectory: &isDir),
+                        isDir.boolValue
                     {
-                        for entry in entries
-                        where entry.lastPathComponent.lowercased().contains("kalsae")
+                        if let entries = try? fileManager.contentsOfDirectory(
+                            at: checkouts,
+                            includingPropertiesForKeys: [.isDirectoryKey],
+                            options: [.skipsHiddenFiles])
                         {
-                            let native =
-                                entry
-                                .appendingPathComponent("Sources")
-                                .appendingPathComponent("CKalsaeWV2")
-                                .appendingPathComponent("Vendor")
-                                .appendingPathComponent("WebView2")
-                                .appendingPathComponent("runtimes")
-                                .appendingPathComponent(arch)
-                                .appendingPathComponent("native")
-                            result.append(native)
+                            for entry in entries where entry.lastPathComponent.lowercased().contains("kalsae") {
+                                let native =
+                                    entry
+                                    .appendingPathComponent("Sources")
+                                    .appendingPathComponent("CKalsaeWV2")
+                                    .appendingPathComponent("Vendor")
+                                    .appendingPathComponent("WebView2")
+                                    .appendingPathComponent("runtimes")
+                                    .appendingPathComponent(arch)
+                                    .appendingPathComponent("native")
+                                result.append(native)
+                            }
                         }
                     }
                     break

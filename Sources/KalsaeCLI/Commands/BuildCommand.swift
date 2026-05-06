@@ -109,40 +109,198 @@ struct BuildCommand: ParsableCommand {
     )
     var nsisSigntoolCmd: String? = nil
 
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help: "Print stage-by-stage wall-clock timings after the build (default ON).")
+    var timings: Bool = true
+
+    @Option(
+        name: .long,
+        help: "Write machine-readable timings JSON to this path (relative to cwd).")
+    var timingsJson: String? = nil
+
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Run frontend build in parallel with `swift build` (Phase 2). Default ON when `build.buildCommand` is set; ignored otherwise. The first swift build runs against current Resources/; if sync-resources changes any file afterwards, an incremental finalize pass re-bundles them."
+    )
+    var parallelBuild: Bool = true
+
     func run() throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
-        let configURL = try resolveConfigURL(cwd: cwd, fm: fm)
-        let config = try loadConfig(configURL: configURL)
+        var timer = KSBuildTimings()
+        let runStart = ContinuousClock().now
 
-        if clean { try runClean(cwd: cwd, fm: fm) }
-
-        if !skipFrontend {
-            try runFrontendBuildIfNeeded(config: config, cwd: cwd)
-        } else {
-            print("⏭  Skipping frontend build (--skip-frontend)")
+        let configURL = try timer.measure("config") {
+            try resolveConfigURL(cwd: cwd, fm: fm)
         }
-        try validateFrontendDist(config: config, configURL: configURL, cwd: cwd, fm: fm)
-        try syncFrontendResourcesIfNeeded(config: config, configURL: configURL, cwd: cwd, fm: fm)
-        try validateWebView2Preconditions(cwd: cwd, fm: fm)
+        let config = try timer.measure("config-load") {
+            try loadConfig(configURL: configURL)
+        }
+
+        if clean {
+            try timer.measure("clean") { try runClean(cwd: cwd, fm: fm) }
+        }
 
         let configuration = debug ? "debug" : "release"
         let args = KSBuildPlan.swiftBuildArguments(debug: debug, target: target)
-        print("🔨  swift \(args.joined(separator: " "))")
-        if dryrun {
-            print("(--dryrun) skipping execution")
+
+        let hasFrontendCmd =
+            !skipFrontend
+            && KSBuildPlan.normalizedCommand(config.build.buildCommand) != nil
+        let useParallel = parallelBuild && !dryrun && hasFrontendCmd
+
+        if !useParallel {
+            // Serial path (default before Phase 2; preserved for --no-parallel-build,
+            // --dryrun, or when no frontend buildCommand is configured).
+            try timer.measure("frontend") {
+                if !skipFrontend {
+                    try runFrontendBuildIfNeeded(config: config, cwd: cwd)
+                } else {
+                    print("⏭  Skipping frontend build (--skip-frontend)")
+                }
+            }
+            try timer.measure("validate-dist") {
+                try validateFrontendDist(config: config, configURL: configURL, cwd: cwd, fm: fm)
+            }
+            try timer.measure("sync-resources") {
+                _ = try syncFrontendResourcesIfNeeded(
+                    config: config, configURL: configURL, cwd: cwd, fm: fm)
+            }
+            try timer.measure("wv2-precheck") {
+                try validateWebView2Preconditions(cwd: cwd, fm: fm)
+            }
+
+            print("🔨  swift \(args.joined(separator: " "))")
+            if dryrun {
+                print("(--dryrun) skipping execution")
+            } else {
+                try timer.measure("swift-build") {
+                    try shell(command: "swift", arguments: args)
+                }
+                print("✔  Build complete (\(configuration))")
+                try timer.measure("post-build") {
+                    try renameOutputBinaryIfNeeded(
+                        config: config, configuration: configuration, cwd: cwd, fm: fm)
+                    KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+                }
+            }
         } else {
-            try shell(command: "swift", arguments: args)
+            // 병렬 경로 (Phase 2): frontend chain이 동시에 실행되는 동안 `swift build`를 즉시 spawn합니다.
+            // 첫 번째 swift build는 *현재* Resources/를 대상으로 수행됩니다 — sync-resources는
+            // resource bundle에 대한 쓰기/읽기 경쟁 조건(write/read race)을 방지하기 위해
+            // 의도적으로 swift-build 완료 후까지 지연시킵니다.
+            // sync 과정에서 파일이 변경된 경우, finalize incremental swift build가
+            // 해당 파일들을 artifact에 다시 복사합니다.
+            //
+            // wv2-precheck는 swift build를 spawn하기 **전에** 반드시 실행되어야 합니다:
+            // Windows에서 fresh checkout(또는 `--clean` 이후) 상태에는 WebView2 헤더가 없으며,
+            // `Vendor/WebView2/`가 채워질 때까지 C++ shim이 컴파일되지 않습니다.
+            // 여기서 캐시된 fast-path는 ~9 ms이므로 병렬성을 저해하지 않습니다.
+            try timer.measure("wv2-precheck") {
+                try validateWebView2Preconditions(cwd: cwd, fm: fm)
+            }
+
+            print("🔨  swift \(args.joined(separator: " ")) (parallel with frontend)")
+            let clock = ContinuousClock()
+            let swiftSpawnStart = clock.now
+            let swiftProc = try spawn(command: "swift", arguments: args)
+
+            var frontendError: (any Error)? = nil
+            do {
+                try timer.measure("frontend") {
+                    try runFrontendBuildIfNeeded(config: config, cwd: cwd)
+                }
+                try timer.measure("validate-dist") {
+                    try validateFrontendDist(
+                        config: config, configURL: configURL, cwd: cwd, fm: fm)
+                }
+            } catch {
+                frontendError = error
+            }
+
+            // frontend 실패가 발생하더라도 항상 swift-build를 reap합니다.
+            // 기록된 duration은 spawn 시점부터 exit까지의 wall-clock 시간(실제 경과 시간)이므로,
+            // timing table은 post-frontend 대기 시간 창이 아니라 실제 빌드 비용을 정확하게 반영합니다.
+            swiftProc.waitUntilExit()
+            timer.record("swift-build", duration: clock.now - swiftSpawnStart)
+
+            if let err = frontendError {
+                if swiftProc.terminationStatus != 0 {
+                    // 두 분기 모두 실패한 경우, frontend 에러를 primary로 throw하되
+                    // swift build 종료 코드도 같이 보고해 사용자가 두 실패를 모두 인지하게 한다.
+                    print(
+                        "⚠  Both frontend and swift build failed "
+                            + "(swift build exit \(swiftProc.terminationStatus)); "
+                            + "reporting frontend error.")
+                } else {
+                    print("⚠  Frontend chain failed; swift build succeeded but is being discarded.")
+                }
+                throw err
+            }
+            if swiftProc.terminationStatus != 0 {
+                throw ShellError.nonZeroExit(swiftProc.terminationStatus)
+            }
             print("✔  Build complete (\(configuration))")
-            try renameOutputBinaryIfNeeded(
-                config: config, configuration: configuration, cwd: cwd, fm: fm)
-            // 빌드된 EXE 옆에 WebView2Loader.dll 을 배치 — `swift build` 산출 폴더는
-            // SwiftPM 이 자동으로 채우지 않으므로 CLI 가 명시적으로 옮긴다.
-            KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+
+            // Sync after both branches have finished — no race on Resources/.
+            let syncChanged = try timer.measure("sync-resources") {
+                try syncFrontendResourcesIfNeeded(
+                    config: config, configURL: configURL, cwd: cwd, fm: fm)
+            }
+
+            if syncChanged {
+                // Finalize: SwiftPM incremental rebuild that only re-copies the
+                // changed bundle resources. Compilation is already cached.
+                print("🔁  Resources changed — running incremental finalize pass…")
+                try timer.measure("swift-build-finalize") {
+                    try shell(command: "swift", arguments: args)
+                }
+            }
+
+            try timer.measure("post-build") {
+                try renameOutputBinaryIfNeeded(
+                    config: config, configuration: configuration, cwd: cwd, fm: fm)
+                KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+            }
         }
 
         if package {
-            try runPackage(configuration: configuration, configURL: configURL, config: config)
+            try timer.measure("package") {
+                try runPackage(configuration: configuration, configURL: configURL, config: config)
+            }
+        }
+
+        // 병렬 경로에서는 stage 합산이 실제 wall-clock과 다르므로 명시적으로 기록.
+        let runEnd = ContinuousClock().now
+        let runDuration = runEnd - runStart
+        let runNs =
+            UInt64(max(0, runDuration.components.seconds)) * 1_000_000_000
+            + UInt64(max(0, runDuration.components.attoseconds / 1_000_000_000))
+        timer.wallClockNanoseconds = runNs
+
+        try emitTimings(timer, cwd: cwd)
+    }
+
+    private func emitTimings(_ timer: KSBuildTimings, cwd: URL) throws {
+        if timings {
+            print(timer.summary())
+        }
+        guard let rel = timingsJson, !rel.isEmpty else { return }
+        let url = URL(fileURLWithPath: rel, relativeTo: cwd)
+        do {
+            let data = try timer.jsonData()
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            print("📝  Timings written to \(url.path)")
+        } catch {
+            // 사용자가 명시적으로 --timings-json 을 지정했으므로 실패는 hard error.
+            // 빌드 산출물은 이미 생성된 시점이지만, 사용자에게 보고 실패를 분명히 알려야 한다.
+            throw ValidationError(
+                "Failed to write timings JSON to \(url.path): \(error)")
         }
     }
 
@@ -219,13 +377,12 @@ struct BuildCommand: ParsableCommand {
                 throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
             }
 
+            // dist 해석은 sync 경로(syncFrontendResourcesIfNeeded)와 동일한 헬퍼를 써
+            // --config 가 외부 디렉터리를 가리키더라도 cwd 기준으로 일관되게 처리.
             let distURL: URL? = {
-                if let d = dist {
-                    return URL(fileURLWithPath: d, relativeTo: cwd)
-                }
-                let candidate = configURL.deletingLastPathComponent()
-                    .appendingPathComponent(info.frontendDist)
-                return fm.fileExists(atPath: candidate.path) ? candidate : nil
+                let resolved = KSBuildPlan.resolveDistURL(
+                    config: config, configURL: configURL, cwd: cwd, distOverride: dist)
+                return fm.fileExists(atPath: resolved.path) ? resolved : nil
             }()
 
             let vendorRoot: URL? = {
@@ -335,13 +492,11 @@ struct BuildCommand: ParsableCommand {
                 throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
             }
 
+            // dist 해석은 sync 경로와 동일한 헬퍼를 써 cwd 기준 일관성 보장 (Windows와 동일).
             let distURL: URL? = {
-                if let d = dist {
-                    return URL(fileURLWithPath: d, relativeTo: cwd)
-                }
-                let candidate = configURL.deletingLastPathComponent()
-                    .appendingPathComponent(info.frontendDist)
-                return fm.fileExists(atPath: candidate.path) ? candidate : nil
+                let resolved = KSBuildPlan.resolveDistURL(
+                    config: config, configURL: configURL, cwd: cwd, distOverride: dist)
+                return fm.fileExists(atPath: resolved.path) ? resolved : nil
             }()
 
             let outputURL: URL = {
@@ -452,13 +607,21 @@ struct BuildCommand: ParsableCommand {
         #endif
     }
 
+    /// Returns `true` when any file was copied or removed. The parallel build
+    /// path uses this to decide whether to re-run `swift build` to refresh
+    /// the bundled `Resources/` (Phase 2 finalize pass).
+    ///
+    /// 실제 sync 로직은 `KSResourceSyncManager` 로 분리되어 있다 — 본 함수는
+    /// CLI 옵션 (`--sync-resources`, `--target`, `--dist`) 을 dist/Resources URL
+    /// 한 쌍으로 해석하고 결과를 사용자 친화적 메시지로 출력하는 책임만 진다.
+    @discardableResult
     private func syncFrontendResourcesIfNeeded(
         config: KSConfig,
         configURL: URL,
         cwd: URL,
         fm: FileManager
-    ) throws {
-        guard syncResources else { return }
+    ) throws -> Bool {
+        guard syncResources else { return false }
 
         let distURL = KSBuildPlan.resolveDistURL(
             config: config,
@@ -473,58 +636,33 @@ struct BuildCommand: ParsableCommand {
             .appendingPathComponent(executableName)
             .appendingPathComponent("Resources")
 
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: resourcesURL.path, isDirectory: &isDir), isDir.boolValue else {
-            return
-        }
+        let report = try KSResourceSyncManager.sync(
+            distURL: distURL,
+            resourcesURL: resourcesURL,
+            fm: fm)
 
-        let normDist = distURL.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
-        let normResources = resourcesURL.standardizedFileURL.path.replacingOccurrences(of: "\\", with: "/")
-        if normDist == normResources {
-            return
-        }
-
-        let preserved = Set(["kalsae.json", "Kalsae.json"])
-        let existing = try fm.contentsOfDirectory(
-            at: resourcesURL,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles])
-        for item in existing where !preserved.contains(item.lastPathComponent) {
-            try fm.removeItem(at: item)
-        }
-
-        let enumerator = fm.enumerator(
-            at: distURL,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles])
-
-        while let src = enumerator?.nextObject() as? URL {
-            let relRaw = src.path.replacingOccurrences(of: distURL.path, with: "")
-            let rel = relRaw.trimmingCharacters(in: CharacterSet(charactersIn: "\\/"))
-            if rel.isEmpty { continue }
-
-            let dst = resourcesURL.appendingPathComponent(rel)
-
-            let values = try src.resourceValues(forKeys: [.isDirectoryKey])
-            if values.isDirectory == true {
-                try fm.createDirectory(at: dst, withIntermediateDirectories: true)
-                continue
+        if let reason = report.skippedReason {
+            // 데모처럼 dist 와 Resources/ 가 겹치는 합법적 케이스 — 건너뛴 이유를 안내.
+            if reason.contains("overlaps") {
+                print(
+                    "ℹ  Skipping resource sync: \(reason). "
+                        + "Configure `build.frontendDist` to a separate directory to enable sync.")
             }
-
-            if preserved.contains(dst.lastPathComponent), fm.fileExists(atPath: dst.path) {
-                continue
-            }
-
-            try fm.createDirectory(
-                at: dst.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
-            if fm.fileExists(atPath: dst.path) {
-                try fm.removeItem(at: dst)
-            }
-            try fm.copyItem(at: src, to: dst)
+            return false
         }
 
-        print("📁  Synced frontend dist to \(resourcesURL.path)")
+        if report.copied == 0 && report.skipped > 0 && report.removed == 0 {
+            print("📁  Frontend dist already in sync (\(report.skipped) files unchanged)")
+        } else {
+            print(
+                "📁  Synced frontend dist to \(resourcesURL.path) "
+                    + "(\(report.copied) copied, \(report.skipped) unchanged, "
+                    + "\(report.removed) removed)")
+        }
+        if report.failed > 0 {
+            print("⚠  Failed to copy \(report.failed) file(s) during sync.")
+        }
+        return report.didMutate
     }
 
     /// `Kalsae.json`에서 패키징에 필요한 메타데이터만 파싱한다.
