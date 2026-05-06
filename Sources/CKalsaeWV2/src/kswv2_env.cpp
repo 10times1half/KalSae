@@ -15,6 +15,10 @@ using namespace Microsoft::WRL;
 
 // MARK: - Environment
 
+extern "C" void KSWV2_SetLoaderSearchDirectory(const wchar_t *dir) {
+    KSWV2_Loader_SetDir(dir);
+}
+
 extern "C" int32_t KSWV2_CreateEnvironment(
     const wchar_t *browser_executable_folder,
     const wchar_t *user_data_folder,

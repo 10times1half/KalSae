@@ -13,5 +13,10 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: true,
+    watch: {
+      // SwiftPM 빌드 산출물은 vite HMR 대상이 아니다.
+      // 무시하지 않으면 swift build 중 EBUSY/scandir 오류로 dev 서버가 종료된다.
+      ignored: ['**/.build/**', '**/.swiftpm/**', '**/Sources/**/Resources/dist/**'],
+    },
   },
 })

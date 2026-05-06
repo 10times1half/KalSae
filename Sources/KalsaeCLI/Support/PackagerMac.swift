@@ -36,6 +36,10 @@ extension KSPackager {
         public var copyright: String?
         public var codesignIdentity: String?  // 인터페이스만 — 실제 호출은 후속 hook
         public var zip: Bool
+        /// 패키징 시 소스맵(.map) 파일을 자동 제거한다.
+        public var stripSourceMaps: Bool
+        /// 패키징 시 추가로 제거할 파일 확장자 목록.
+        public var stripExtensions: [String]
 
         public init(
             executablePath: URL,
@@ -51,7 +55,9 @@ extension KSPackager {
             category: String = "public.app-category.utilities",
             copyright: String? = nil,
             codesignIdentity: String? = nil,
-            zip: Bool = false
+            zip: Bool = false,
+            stripSourceMaps: Bool = true,
+            stripExtensions: [String] = []
         ) {
             self.executablePath = executablePath
             self.configPath = configPath
@@ -67,6 +73,8 @@ extension KSPackager {
             self.copyright = copyright
             self.codesignIdentity = codesignIdentity
             self.zip = zip
+            self.stripSourceMaps = stripSourceMaps
+            self.stripExtensions = stripExtensions
         }
     }
 
@@ -106,6 +114,16 @@ extension KSPackager {
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             // dist 내용을 Resources/ 직접 복사 (Resources/dist/ 이 아니라 Resources/index.html 식).
             try copyContents(of: dist, into: resources)
+
+            // Strip 불필요한 파일 (소스맵 등)
+            let stripResult = KSBundleAnalyzer.strip(
+                distURL: resources,
+                stripSourceMaps: opts.stripSourceMaps,
+                stripExtensions: opts.stripExtensions)
+            if stripResult.removed > 0 {
+                print(
+                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))")
+            }
         } else {
             warnings.append("Frontend dist directory not found; .app will have no web assets.")
         }

@@ -136,6 +136,9 @@ struct BuildCommand: ParsableCommand {
             print("✔  Build complete (\(configuration))")
             try renameOutputBinaryIfNeeded(
                 config: config, configuration: configuration, cwd: cwd, fm: fm)
+            // 빌드된 EXE 옆에 WebView2Loader.dll 을 배치 — `swift build` 산출 폴더는
+            // SwiftPM 이 자동으로 채우지 않으므로 CLI 가 명시적으로 옮긴다.
+            KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
         }
 
         if package {
@@ -253,7 +256,9 @@ struct BuildCommand: ParsableCommand {
                 iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
                 vendorRuntimeRoot: vendorRoot,
                 bootstrapperPath: bootstrapper.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                zip: zip)
+                zip: zip,
+                stripSourceMaps: config.build.stripSourceMaps,
+                stripExtensions: config.build.stripExtensions)
 
             print("📦  Packaging \(info.appName) v\(info.version) (\(archEnum.rawValue), \(policy.rawValue))")
             let report = try KSPackager.run(opts)
@@ -358,7 +363,9 @@ struct BuildCommand: ParsableCommand {
                 identifier: info.identifier,
                 architecture: archEnum,
                 iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                zip: zip)
+                zip: zip,
+                stripSourceMaps: config.build.stripSourceMaps,
+                stripExtensions: config.build.stripExtensions)
 
             print("📦  Packaging \(info.appName).app v\(info.version) (\(archEnum.rawValue))")
             let report = try KSPackager.runMac(opts)
@@ -423,6 +430,12 @@ struct BuildCommand: ParsableCommand {
                 fm: fm)
         } catch let error as KSBuildPlanError {
             throw ValidationError(error.description)
+        }
+
+        // 번들 분석 리포트 (bundleReport 옵션이 true일 때)
+        if config.build.bundleReport {
+            let report = KSBundleAnalyzer.analyze(distURL: distURL)
+            print(report.description)
         }
     }
 

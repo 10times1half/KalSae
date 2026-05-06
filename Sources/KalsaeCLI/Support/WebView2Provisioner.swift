@@ -169,4 +169,105 @@ public enum KSWebView2Provisioner {
         print("⬇️  WebView2 SDK not found in \(installRoot.path) — fetching...")
         try shell(command: shellName, arguments: args, in: installRoot.path)
     }
+
+    /// `WebView2Loader.dll` 을 `cwd/.build/<configuration>/` 에 복사한다.
+    ///
+    /// `CKalsaeWV2` 는 `LoadLibraryW("WebView2Loader.dll")` 로 런타임에 로더를
+    /// 동적 로드하므로, 빌드 산출 EXE 옆에 DLL 이 없으면
+    /// `HRESULT 0x8007007E (ERROR_MOD_NOT_FOUND)` 로 환경 생성에 실패한다.
+    /// `swift run` / `swift build` 는 SDK 디렉터리에서 DLL 을 자동 복사하지 않으므로
+    /// CLI 가 명시적으로 옮겨준다. 이미 동일 파일이 있으면 건너뛴다.
+    ///
+    /// - Parameters:
+    ///   - cwd: 컨슈머 프로젝트 루트.
+    ///   - configuration: `"debug"` 또는 `"release"`.
+    ///   - architecture: NuGet 패키지 내 `runtimes/<arch>/native` 의 `<arch>`.
+    ///     기본값은 `"win-x64"` — 현재 `Package.swift` 가 x64 만 링크 가능.
+    public static func stageLoaderDLL(
+        cwd: URL,
+        configuration: String,
+        architecture: String = "win-x64"
+    ) {
+        #if os(Windows)
+            let fm = FileManager.default
+            // SDK 가 설치된 첫 번째 루트에서 로더를 찾는다.
+            let roots = discoverKalsaeRoots(cwd: cwd, fm: fm)
+            let candidate = roots.lazy.compactMap { root -> URL? in
+                let dll =
+                    root
+                    .appendingPathComponent("Sources")
+                    .appendingPathComponent("CKalsaeWV2")
+                    .appendingPathComponent("Vendor")
+                    .appendingPathComponent("WebView2")
+                    .appendingPathComponent("runtimes")
+                    .appendingPathComponent(architecture)
+                    .appendingPathComponent("native")
+                    .appendingPathComponent("WebView2Loader.dll")
+                return fm.fileExists(atPath: dll.path) ? dll : nil
+            }.first
+
+            guard let source = candidate else {
+                print(
+                    "⚠  WebView2Loader.dll source not found under any Kalsae checkout"
+                        + " (looked in .build/checkouts/*/Sources/CKalsaeWV2/Vendor/WebView2/runtimes/\(architecture)/native)."
+                )
+                return
+            }
+
+            // 후보 출력 디렉터리:
+            //   .build/<configuration>/                       (구버전 SwiftPM / 일부 호스트)
+            //   .build/<triple>/<configuration>/              (Windows: x86_64-unknown-windows-msvc 등)
+            // 둘 다 EXE 가 만들어질 수 있으므로 두 곳 모두 staging 한다.
+            var dests: [URL] = [
+                cwd.appendingPathComponent(".build").appendingPathComponent(configuration)
+            ]
+            let buildDir = cwd.appendingPathComponent(".build")
+            if let entries = try? fm.contentsOfDirectory(
+                at: buildDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])
+            {
+                for entry in entries {
+                    let triplePath = entry.appendingPathComponent(configuration)
+                    var isDir: ObjCBool = false
+                    if fm.fileExists(atPath: triplePath.path, isDirectory: &isDir),
+                        isDir.boolValue
+                    {
+                        dests.append(triplePath)
+                    }
+                }
+            }
+
+            for dest in dests {
+                do {
+                    try fm.createDirectory(
+                        at: dest, withIntermediateDirectories: true)
+                } catch {
+                    print("⚠  Could not create \(dest.path): \(error)")
+                    continue
+                }
+                let dst = dest.appendingPathComponent("WebView2Loader.dll")
+
+                // 동일 크기면 스킵.
+                if let srcAttrs = try? fm.attributesOfItem(atPath: source.path),
+                    let dstAttrs = try? fm.attributesOfItem(atPath: dst.path),
+                    let sSize = srcAttrs[.size] as? NSNumber,
+                    let dSize = dstAttrs[.size] as? NSNumber,
+                    sSize == dSize
+                {
+                    continue
+                }
+
+                if fm.fileExists(atPath: dst.path) {
+                    try? fm.removeItem(at: dst)
+                }
+                do {
+                    try fm.copyItem(at: source, to: dst)
+                    print("📎  Staged WebView2Loader.dll → \(dst.path)")
+                } catch {
+                    print("⚠  Failed to stage WebView2Loader.dll to \(dst.path): \(error)")
+                }
+            }
+        #endif
+    }
 }

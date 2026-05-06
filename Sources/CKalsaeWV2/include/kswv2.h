@@ -48,6 +48,13 @@ typedef void (*KSWV2NavigationCompletedCB)(
 
 // MARK: - Environment
 
+/// `WebView2Loader.dll` 을 `LoadLibraryW` 하기 전에 검색 경로 맨 앞에
+/// 끼워 넣을 디렉터리를 등록한다. 첫 번째 환경 생성(`KSWV2_CreateEnvironment`
+/// 또는 `KSWV2_GetAvailableBrowserVersion`) **이전에만** 효과가 있다.
+/// `dir`이 NULL이면 no-op. 동일 호출은 한 번만 적용되는 InitOnce 보호하의
+/// 단발성 설정이다.
+void KSWV2_SetLoaderSearchDirectory(const wchar_t *dir);
+
 int32_t KSWV2_CreateEnvironment(
     const wchar_t *browser_executable_folder,   // NULL 가능
     const wchar_t *user_data_folder,            // NULL 가능

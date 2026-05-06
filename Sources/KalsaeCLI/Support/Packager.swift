@@ -40,6 +40,10 @@ public enum KSPackager {
         public var vendorRuntimeRoot: URL?  // Vendor/WebView2/runtimes/<arch>/
         public var bootstrapperPath: URL?  // MicrosoftEdgeWebview2Setup.exe (optional)
         public var zip: Bool  // Create <output>.zip when true
+        /// 패키징 시 소스맵(.map) 파일을 자동 제거한다.
+        public var stripSourceMaps: Bool
+        /// 패키징 시 추가로 제거할 파일 확장자 목록.
+        public var stripExtensions: [String]
 
         public init(
             projectRoot: URL,
@@ -55,7 +59,9 @@ public enum KSPackager {
             iconPath: URL? = nil,
             vendorRuntimeRoot: URL? = nil,
             bootstrapperPath: URL? = nil,
-            zip: Bool = false
+            zip: Bool = false,
+            stripSourceMaps: Bool = true,
+            stripExtensions: [String] = []
         ) {
             self.projectRoot = projectRoot
             self.executablePath = executablePath
@@ -71,6 +77,8 @@ public enum KSPackager {
             self.vendorRuntimeRoot = vendorRuntimeRoot
             self.bootstrapperPath = bootstrapperPath
             self.zip = zip
+            self.stripSourceMaps = stripSourceMaps
+            self.stripExtensions = stripExtensions
         }
     }
 
@@ -120,6 +128,16 @@ public enum KSPackager {
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             let dstResources = opts.output.appendingPathComponent("Resources")
             try copyTree(from: dist, to: dstResources)
+
+            // Strip 불필요한 파일 (소스맵 등)
+            let stripResult = KSBundleAnalyzer.strip(
+                distURL: dstResources,
+                stripSourceMaps: opts.stripSourceMaps,
+                stripExtensions: opts.stripExtensions)
+            if stripResult.removed > 0 {
+                print(
+                    "  🗑  Stripped \(stripResult.removed) file(s) (\(KSBundleReport.formatBytes(stripResult.savedBytes)))")
+            }
         } else {
             warnings.append("Frontend dist directory not found; skipping Resources/.")
         }

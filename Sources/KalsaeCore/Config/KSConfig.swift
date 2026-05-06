@@ -104,16 +104,48 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
     public var devCommand: String?
     /// CLI가 `frontendDist`를 생성하기 위해 실행하는 명령어.
     public var buildCommand: String?
+    /// 패키징 시 소스맵(.map) 파일을 자동 제거한다.
+    /// 프로덕션 번들 크기를 줄이고 소스 코드 노출을 방지한다.
+    /// 기본값은 `true` — thin frontend 원칙에 따라 프로덕션에서 소스맵은 불필요하다.
+    public var stripSourceMaps: Bool
+    /// 패키징 시 추가로 제거할 파일 확장자 목록 (예: `["md", "br"]`).
+    /// 소문자로 지정하며, 선행 `.`은 붙이지 않는다.
+    public var stripExtensions: [String]
+    /// `kalsae build` 시 번들 분석 리포트를 출력한다.
+    /// 기본값은 `true` — 개발자가 번들 구성을 인지하도록 돕는다.
+    public var bundleReport: Bool
 
     public init(
         frontendDist: String = "dist",
         devServerURL: String = "http://localhost:5173",
         devCommand: String? = nil,
-        buildCommand: String? = nil
+        buildCommand: String? = nil,
+        stripSourceMaps: Bool = true,
+        stripExtensions: [String] = [],
+        bundleReport: Bool = true
     ) {
         self.frontendDist = frontendDist
         self.devServerURL = devServerURL
         self.devCommand = devCommand
         self.buildCommand = buildCommand
+        self.stripSourceMaps = stripSourceMaps
+        self.stripExtensions = stripExtensions
+        self.bundleReport = bundleReport
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case frontendDist, devServerURL, devCommand, buildCommand
+        case stripSourceMaps, stripExtensions, bundleReport
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.frontendDist = try c.decode(String.self, forKey: .frontendDist)
+        self.devServerURL = try c.decode(String.self, forKey: .devServerURL)
+        self.devCommand = try c.decodeIfPresent(String.self, forKey: .devCommand)
+        self.buildCommand = try c.decodeIfPresent(String.self, forKey: .buildCommand)
+        self.stripSourceMaps = try c.decodeIfPresent(Bool.self, forKey: .stripSourceMaps) ?? true
+        self.stripExtensions = try c.decodeIfPresent([String].self, forKey: .stripExtensions) ?? []
+        self.bundleReport = try c.decodeIfPresent(Bool.self, forKey: .bundleReport) ?? true
     }
 }

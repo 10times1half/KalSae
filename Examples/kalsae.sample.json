@@ -10,7 +10,10 @@
     "frontendDist": "dist",
     "devServerURL": "http://localhost:5173",
     "devCommand": "npm run dev",
-    "buildCommand": "npm run build"
+    "buildCommand": "npm run build",
+    "stripSourceMaps": true,
+    "stripExtensions": [],
+    "bundleReport": true
   },
   "windows": [
     {

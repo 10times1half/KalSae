@@ -95,6 +95,11 @@ struct DevCommand: ParsableCommand {
             throw ValidationError(error.description)
         }
 
+        // `swift run` 이 만들 EXE 옆에 WebView2Loader.dll 을 미리 배치한다.
+        // 그렇지 않으면 LoadLibraryW 가 실패해
+        // CreateCoreWebView2EnvironmentWithOptions 가 0x8007007E 를 반환한다.
+        KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: "debug")
+
         let configURL = resolveConfigURLIfPresent(cwd: cwd, fm: fm)
         let appConfig = try loadConfigIfPresent(configURL)
         let plan = KSDevPlan.make(

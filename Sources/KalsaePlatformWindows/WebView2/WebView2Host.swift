@@ -117,6 +117,11 @@
             // 실행 파일 옆 `kalsae.runtime.json`에서 fixed 런타임 / 사용자
             // 데이터 재정의 값을 해석한다.
             let exeDir = WebView2Callbacks.executableDirectory()
+            // `swift build` / `swift run` 처럼 EXE 옆에 `WebView2Loader.dll`
+            // 이 staging 되지 않은 경우라도 SDK 체크아웃에서 직접 로드할 수
+            // 있도록 검색 경로를 prepend 한다. 첫 환경 생성 이전에만 효과가
+            // 있으므로 이 시점에서 호출한다.
+            KSWebView2LoaderResolver.ensureLoaderDir(executableDir: exeDir)
             let resolved = KSWebView2Runtime.resolve(
                 executableDir: exeDir, identifier: WebView2Callbacks.appIdentifier())
             // 윈도우별 userDataPath 오버라이드는 runtime.json 결과보다 우선한다.
