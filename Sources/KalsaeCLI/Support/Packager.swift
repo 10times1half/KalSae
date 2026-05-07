@@ -23,6 +23,22 @@ public enum KSPackager {
             case .x86: return "win-x86"
             }
         }
+
+        /// Win32 SxS manifest `processorArchitecture` 값.
+        ///
+        /// 스펙(MSDN "Application Manifests")이 허용하는 값은
+        /// `x86 | amd64 | arm64 | ia64 | msil | *` 뿐이다. 우리는 CLI 입력과
+        /// 출력 디렉터리 표면에서 `x64` 표기를 쓰므로 manifest 작성 직전
+        /// 한 번만 `amd64` 로 변환한다. 이 변환을 빠뜨리면 OS SxS 로더가
+        /// `processorArchitecture="x64"` 를 거부해 EXE 시작 자체가 실패한다
+        /// ("side-by-side 구성이 잘못되어...").
+        public var manifestProcessorArchitecture: String {
+            switch self {
+            case .x64: return "amd64"
+            case .arm64: return "arm64"
+            case .x86: return "x86"
+            }
+        }
     }
 
     public struct Options: Sendable {
@@ -113,6 +129,14 @@ public enum KSPackager {
         let dstExe = opts.output.appendingPathComponent(exeName)
         try fm.copyItem(at: opts.executablePath, to: dstExe)
 
+        // 1.5) WebView2Loader.dll — `CKalsaeWV2` 가 런타임에 `LoadLibraryW`
+        // 로 동적 로드한다. EXE 옆에 없으면 `HRESULT 0x8007007E`
+        // (ERROR_MOD_NOT_FOUND) 로 환경 생성에 실패한다. 시스템에 Edge
+        // WebView2 가 깔린 머신에서는 search path 폴백으로 우연히
+        // 동작할 수 있으나, 깨끗한 머신/오프라인 배포에서는 즉시 실패하므로
+        // 패키지에 항상 포함시킨다.
+        copyLoaderDLL(opts: opts, warnings: &warnings)
+
         // 2) Side-by-side manifest (DPI awareness, asInvoker)
         let manifestURL = opts.output.appendingPathComponent("\(exeName).manifest")
         try renderManifest(opts: opts).write(
@@ -123,6 +147,16 @@ public enum KSPackager {
         // 3. Kalsae.json ?ㅼ젙.
         let dstConfig = opts.output.appendingPathComponent("Kalsae.json")
         try fm.copyItem(at: opts.configPath, to: dstConfig)
+
+        // 3.1 패키저는 frontend dist 를 항상 `Resources/` 로 복사하므로 소스
+        // `Kalsae.json` 의 `build.frontendDist`(예: "dist")가 그대로 남으면
+        // 런타임에 `<exeDir>/<frontendDist>` 가 존재하지 않아 KSApp.boot 가 dev 서버
+        // fallback 으로 빠지면서 흰 화면 + chrome-error 가 된다. release 빌드에서는
+        // `security.devtools` 도 안전하게 끈다(KSSecurityConfig.devtools 문서화 동작).
+        try KSPackager.rewritePackagedConfig(
+            at: dstConfig,
+            frontendDist: "Resources",
+            disableDevtools: true)
 
         // 4) Frontend assets
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
@@ -205,6 +239,57 @@ public enum KSPackager {
             warnings: warnings)
     }
 
+    // MARK: - Packaged config rewrite
+
+    /// 패키저가 만든 `Kalsae.json` 을 패키지 산출물 레이아웃에 맞게 다시 쓴다.
+    ///
+    /// 패키저는 frontend dist 폴더를 자체 명명 규칙(`Resources/` for Windows/Linux,
+    /// inline for macOS)으로 복사하기 때문에, 원본 `Kalsae.json` 의
+    /// `build.frontendDist` 가 다른 이름(예: "dist")으로 남아 있으면 런타임의
+    /// `<configDir>/<frontendDist>` 해석이 빗나가 dev 서버 fallback → 흰 화면이 된다.
+    ///
+    /// `clearDevServerURL` 이 true 면(기본값) `build.devServerURL` 을 `"about:blank"`
+    /// 으로 강제 덮어쓴다. 산출물에 `http://localhost:5173` 같은 잔존 dev URL 이
+    /// 남아 있으면 `KSApp.boot` 의 release 가드가 들어가도 사용자가 직접 config
+    /// 를 수정해 dev 분기로 빠질 수 있어, 패키저 단계에서 함께 무력화하면
+    /// "패키징 산출물이 우연히 dev 서버를 시도 → 흰 화면" 회귀를 차단한다.
+    /// 키를 삭제하지 않고 `"about:blank"` 로 두는 이유는 `KSConfig.build.devServerURL`
+    /// 이 non-optional `String` 이라 누락 시 디코드가 실패하기 때문이다.
+    ///
+    /// JSONSerialization 으로 파싱→수정→재직렬화하여 Codable 모델이 모르는 미래
+    /// 필드도 보존한다.
+    static func rewritePackagedConfig(
+        at url: URL,
+        frontendDist: String,
+        disableDevtools: Bool,
+        clearDevServerURL: Bool = true
+    ) throws {
+        let data = try Data(contentsOf: url)
+        guard var root = try JSONSerialization.jsonObject(with: data, options: [])
+                as? [String: Any]
+        else { return }
+
+        var build = (root["build"] as? [String: Any]) ?? [:]
+        build["frontendDist"] = frontendDist
+        if clearDevServerURL {
+            // release 산출물에서 `KSApp.boot` 의 dev-server 분기를 원천 차단.
+            // `isRemoteURL("about:blank")` 가 false 이므로 자동 호환된다.
+            build["devServerURL"] = "about:blank"
+        }
+        root["build"] = build
+
+        if disableDevtools {
+            var security = (root["security"] as? [String: Any]) ?? [:]
+            security["devtools"] = false
+            root["security"] = security
+        }
+
+        let out = try JSONSerialization.data(
+            withJSONObject: root,
+            options: [.prettyPrinted, .sortedKeys])
+        try out.write(to: url, options: [.atomic])
+    }
+
     // MARK: - Manifest
 
     private static func renderManifest(opts: Options) -> String {
@@ -217,7 +302,7 @@ public enum KSPackager {
             type="win32"
             name="\(opts.identifier)"
             version="\(normalizedVersion(opts.version))"
-            processorArchitecture="\(opts.architecture.rawValue)"/>
+            processorArchitecture="\(opts.architecture.manifestProcessorArchitecture)"/>
             <description>\(opts.appName)</description>
             <dependency>
             <dependentAssembly>
@@ -268,6 +353,76 @@ public enum KSPackager {
     }
 
     // MARK: - WebView2 Runtime Helpers
+
+    /// `WebView2Loader.dll` 을 패키지 출력 루트에 복사한다.
+    ///
+    /// 후보 소스 위치(우선순위 순):
+    ///   1. `opts.projectRoot/Vendor/WebView2/runtimes/<arch>/native/WebView2Loader.dll`
+    ///      (Kalsae 본 저장소를 직접 빌드하는 경우)
+    ///   2. `opts.projectRoot/.build/checkouts/*/Sources/CKalsaeWV2/Vendor/WebView2/runtimes/<arch>/native/WebView2Loader.dll`
+    ///      (Kalsae 를 SwiftPM 의존성으로 사용하는 컨슈머 프로젝트)
+    ///
+    /// 어떤 후보도 찾지 못하면 hard error 가 아니라 warning 만 남긴다 — 시스템에
+    /// Edge WebView2 가 설치된 머신에서는 search path 폴백으로 동작할 수 있고,
+    /// 깨끗한 머신에 배포하기 직전에 사용자가 인지하면 충분하다.
+    private static func copyLoaderDLL(
+        opts: Options,
+        warnings: inout [String]
+    ) {
+        let fm = FileManager.default
+        let arch = opts.architecture.vendorRuntimeFolder
+
+        var candidates: [URL] = []
+        candidates.append(
+            opts.projectRoot
+                .appendingPathComponent("Vendor")
+                .appendingPathComponent("WebView2")
+                .appendingPathComponent("runtimes")
+                .appendingPathComponent(arch)
+                .appendingPathComponent("native")
+                .appendingPathComponent("WebView2Loader.dll"))
+
+        let checkouts =
+            opts.projectRoot
+            .appendingPathComponent(".build")
+            .appendingPathComponent("checkouts")
+        if let children = try? fm.contentsOfDirectory(
+            at: checkouts,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])
+        {
+            for child in children {
+                let dll =
+                    child
+                    .appendingPathComponent("Sources")
+                    .appendingPathComponent("CKalsaeWV2")
+                    .appendingPathComponent("Vendor")
+                    .appendingPathComponent("WebView2")
+                    .appendingPathComponent("runtimes")
+                    .appendingPathComponent(arch)
+                    .appendingPathComponent("native")
+                    .appendingPathComponent("WebView2Loader.dll")
+                candidates.append(dll)
+            }
+        }
+
+        guard let src = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else {
+            warnings.append(
+                "WebView2Loader.dll not found in Vendor/WebView2/runtimes/\(arch)/native — "
+                    + "the packaged app will fail to start on machines without a system-installed WebView2 runtime.")
+            return
+        }
+
+        let dst = opts.output.appendingPathComponent("WebView2Loader.dll")
+        do {
+            if fm.fileExists(atPath: dst.path) {
+                try fm.removeItem(at: dst)
+            }
+            try fm.copyItem(at: src, to: dst)
+        } catch {
+            warnings.append("Failed to stage WebView2Loader.dll: \(error)")
+        }
+    }
 
     private static func copyBootstrapper(
         opts: Options,

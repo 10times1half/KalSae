@@ -56,8 +56,16 @@ extension KSApp {
     ) -> ServingMode {
         let devIsRemote = isRemoteURL(devServerURL)
         // 호출자/윈도우가 명시 URL을 안 줬고 dev 서버가 살아있으면 dev 우선.
+        // release 빌드에서는 dev 서버 분기를 차단해 패키징 산출물이 우연히
+        // `http://localhost:5173` 같은 잔존 dev URL 로 navigate 하지 않도록
+        // 한다(잔존 시 Vite 부재 → `chrome-error://` → 흰 화면). 동일 보호는
+        // `KSApp.boot` 의 `security.devtools` 강제 off 와 동일 신호(`#if !DEBUG`)를
+        // 사용해 정책 일관성을 맞춘다.
         if urlOverride == nil, windowURL == nil, devIsRemote {
-            return .devServer
+            #if DEBUG
+                return .devServer
+            #endif
+            // release: 가상 호스트 / fallback 분기로 떨어진다.
         }
         if let resourceRoot, isDirectory(resourceRoot) {
             return .virtualHost(resourceRoot)

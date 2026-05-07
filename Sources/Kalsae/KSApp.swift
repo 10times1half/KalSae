@@ -152,6 +152,15 @@ public final class KSApp {
         resourceRoot: URL? = nil,
         configure: (KSCommandRegistry) async throws(KSError) -> Void
     ) async throws(KSError) -> KSApp {
+        // 0. 릴리스 빌드에서는 `security.devtools` 를 강제로 끈다 — `KSSecurityConfig.devtools`
+        //    의 문서화된 동작이며, 패키징된 산출물에서 우클릭 → "검사" 가 노출되지 않도록 한다.
+        //    SwiftPM 은 debug 구성에서만 `-DDEBUG` 를 정의하므로 `#if !DEBUG` 가
+        //    release 의 신뢰할 수 있는 신호가 된다.
+        var config = config
+        #if !DEBUG
+            config.security.devtools = false
+        #endif
+
         // 1. 윈도우 선택.
         let window = try selectWindow(from: config, label: windowLabel)
 
@@ -285,6 +294,20 @@ public final class KSApp {
             windowURL: window.url,
             devServerURL: config.build.devServerURL,
             servingMode: servingMode)
+
+        // 부팅 진단 로그 — 흰 화면 / chrome-error 신고 시 즉시 원인 식별 가능.
+        // servingMode 가 dev 서버를 골랐는지, 가상 호스트인지, 어떤 URL 로
+        // 첫 navigate 가 일어나는지 한 줄로 남긴다.
+        let servingDescription: String = {
+            switch servingMode {
+            case .virtualHost(let root): return "virtualHost(\(root.path))"
+            case .devServer: return "devServer"
+            case .fallback: return "fallback"
+            }
+        }()
+        KSLog.logger("kalsae.app").info(
+            "boot serving=\(servingDescription) startURL=\(url) devServerURL=\(config.build.devServerURL)"
+        )
 
         #if os(Windows)
             try concrete.startPrepared(url: url, devtools: config.security.devtools)
