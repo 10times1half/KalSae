@@ -471,45 +471,50 @@ kalsae build --target KalsaePlatformIOS --arch arm64 --icon ./AppIcon.png
 
 ---
 
-## 4. 구현 계획
 
-### Phase 1: iOS 패키저 (예상: 3일)
+## 4. 구현 계획 (2026-05-09 보완)
 
+### Phase 0: 설계/문서 보완 (병렬)
 | 작업 | 파일 | 설명 |
 |------|------|------|
-| 1.1 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | `KSPackager.IOSOptions` + `runIOS(_:)` |
-| 1.2 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | iOS Info.plist 템플릿 |
-| 1.3 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | LaunchScreen.storyboard 생성 |
-| 1.4 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | 아이콘 리사이즈 + `AppIcon.appiconset` 생성 |
-| 1.5 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | `rewritePackagedConfig` 호출 통합 |
+| 0.1 | `Docs/RFCs/RFC-006-ios-release.md` | ATS(네트워크 보안), 아이콘 Asset Catalog, 번들 자산 경로, 기본 핸들러, 보안 헤더, 개발 워크플로 등 보완사항 명시 |
 
-### Phase 2: BuildCommand iOS 분기 (예상: 1일)
-
+### Phase 1: 패키저/CLI/번들 구조 (순차)
 | 작업 | 파일 | 설명 |
 |------|------|------|
-| 2.1 | `Sources/KalsaeCLI/Commands/BuildCommand.swift` | `runPackageIOS` 메서드 추가 |
-| 2.2 | `Sources/KalsaeCLI/Commands/BuildCommand.swift` | iOS `--arch` 검증 로직 |
+| 1.1 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | `KSPackager.IOSOptions` + `runIOS(_:)` 구현, Info.plist ATS 기본값 false, 옵션화 |
+| 1.2 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | 아이콘 Asset Catalog(`.xcassets`) → `Assets.car` 생성 또는 CFBundleIcons 직접 지정, 리사이즈 macOS 전용 명확화 |
+| 1.3 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | `frontendDist` 번들 상대 rewrite, 번들 내 자산 위치 일치 |
+| 1.4 | `Sources/KalsaeCLI/Support/PackagerIOS.swift` | 보안 헤더(`X-Content-Type-Options`, `Referrer-Policy`) 추가 |
+| 1.5 | `Sources/KalsaeCLI/Commands/BuildCommand.swift` | iOS 분기 및 arch 검증 추가 |
 
-### Phase 3: iOS PAL 안정화 (예상: 2일)
-
+### Phase 2: PAL/핸들러/런타임 (병렬)
 | 작업 | 파일 | 설명 |
 |------|------|------|
-| 3.1 | `Sources/KalsaePlatformIOS/PAL/KSiOSDialogBackend.swift` | 기본 UIKit 핸들러 구현 |
-| 3.2 | `Sources/KalsaePlatformIOS/PAL/KSiOSMenuBackend.swift` | UIMenu 기반 컨텍스트 메뉴 |
+| 2.1 | `Sources/KalsaePlatformIOS/PAL/KSiOSDialogBackend.swift` | 기본 UIKit 핸들러 내장, retain cycle 없는 패턴 적용 |
+| 2.2 | `Sources/KalsaePlatformIOS/PAL/KSiOSMenuBackend.swift` | UIMenu 기반 컨텍스트 메뉴 구현 |
+| 2.3 | `Sources/KalsaePlatformIOS/WebKit/KSiOSWebViewHost.swift` | 보안 헤더 추가, 번들 기준 자산 탐색 |
+| 2.4 | `Sources/KalsaePlatformIOS/KSiOSPlatform.swift` | 번들 기준 자산 탐색, `UIApplicationMain`/`@main` 진입점 제약 문서화 |
 
-### Phase 4: 테스트 강화 (예상: 2일)
-
+### Phase 3: 테스트/문서화 (병렬)
 | 작업 | 파일 | 설명 |
 |------|------|------|
-| 4.1 | `Tests/KalsaePlatformIOSTests/IOSPALIntegrationTests.swift` | 시뮬레이터 통합 테스트 추가 |
-| 4.2 | `.github/workflows/` | iOS 시뮬레이터 CI 단계 추가 |
+| 3.1 | `Tests/KalsaePlatformIOSTests/IOSPALIntegrationTests.swift` | 통합 테스트 강화 (핸들러, IPC, 자산 로딩 등) |
+| 3.2 | `.github/workflows/` | iOS 시뮬레이터 CI 단계 추가 |
+| 3.3 | `README.md`, `Docs/CLI.md`, `Docs/RFCs/RFC-006-ios-release.md` | 개발 워크플로, 진입점, 번들 구조, ATS/아이콘/자산 경로 등 최신화 |
 
-### Phase 5: 문서화 (예상: 0.5일)
+---
 
-| 작업 | 파일 | 설명 |
-|------|------|------|
-| 5.1 | `README.md` | iOS 상태 업데이트 |
-| 5.2 | `Docs/CLI.md` | iOS 빌드/패키징 가이드 |
+### 주요 보완/결정사항 요약
+
+- **ATS(네트워크 보안)**: Info.plist의 `NSAllowsArbitraryLoads`는 기본 false, 필요시만 옵트인
+- **아이콘**: Asset Catalog(`.xcassets`) → `Assets.car`로 컴파일, fallback 시 CFBundleIcons 직접 지정
+- **자산 경로**: 패키저가 `frontendDist`를 번들 상대 경로로 rewrite, 런타임은 `Bundle.main` 기준 자산 탐색
+- **보안 헤더**: `X-Content-Type-Options`, `Referrer-Policy` 등 Linux/macOS와 동일하게 적용
+- **핸들러**: `KSiOSDialogBackend` 등 기본 구현 내장, retain cycle 없는 패턴 적용
+- **진입점**: `UIApplicationMain` 직접 호출과 `@main` 진입점 공존/제약 명확히 문서화
+- **아이콘 리사이즈**: macOS에서만 동작, 구현 예시 명확화
+- **개발 워크플로**: 시뮬레이터 개발/테스트 경로, `kalsae dev` 대체 워크플로 문서화
 
 ---
 
