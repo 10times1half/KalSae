@@ -30,10 +30,13 @@ public enum KSBuildPlan {
         return raw
     }
 
-    public static func swiftBuildArguments(debug: Bool, target: String?) -> [String] {
+    public static func swiftBuildArguments(debug: Bool, target: String?, jobs: Int? = nil) -> [String] {
         var args = ["build", "-c", debug ? "debug" : "release"]
         if let target {
             args += ["--target", target]
+        }
+        if let jobs {
+            args += ["-j", "\(jobs)"]
         }
         return args
     }

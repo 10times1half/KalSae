@@ -18,6 +18,11 @@ struct DevCommand: ParsableCommand {
     var target: String? = nil
 
     @Option(
+        name: [.customShort("j"), .long],
+        help: "Maximum number of parallel jobs forwarded to swift run (default: CPU count).")
+    var jobs: Int? = nil
+
+    @Option(
         name: .long,
         help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json when present).")
     var config: String? = nil
@@ -146,6 +151,9 @@ struct DevCommand: ParsableCommand {
 
         var args = ["run"]
         if let t = target { args += [t] }
+        // `-j` 는 swift run 의 underlying build 에 전달되므로 `--` 구분자
+        // **앞** 에 놓는다. (`--` 뒤는 애플 자체 인자로 전달됨.)
+        if let jobs { args += ["-j", "\(jobs)"] }
         let extraAppArgs = Self.parseShellArgs(appArgs)
         if !extraAppArgs.isEmpty {
             args.append("--")

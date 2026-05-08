@@ -16,6 +16,11 @@ struct BuildCommand: ParsableCommand {
     @Option(name: .shortAndLong, help: "Executable target to build (optional).")
     var target: String? = nil
 
+    @Option(
+        name: [.customShort("j"), .long],
+        help: "Maximum number of parallel swift build jobs (default: CPU count).")
+    var jobs: Int? = nil
+
     @Flag(
         name: .long, inversion: .prefixedNo,
         help:
@@ -144,7 +149,7 @@ struct BuildCommand: ParsableCommand {
         }
 
         let configuration = debug ? "debug" : "release"
-        let args = KSBuildPlan.swiftBuildArguments(debug: debug, target: target)
+        let args = KSBuildPlan.swiftBuildArguments(debug: debug, target: target, jobs: jobs)
 
         let hasFrontendCmd =
             !skipFrontend

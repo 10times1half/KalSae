@@ -27,10 +27,11 @@
 | 항목 | 결정 |
 |------|------|
 | 증분 복사 범위 | output 디렉터리 삭제 제거 + 전체 증분화 |
-| `--jobs` 플래그 | `BuildCommand`에만 추가 (`DevCommand` 제외) |
+| Output 청소 정책 | `.kalsae-pkg-fingerprint.json` 기반 자동 clean (정책/아키텍처/exeName/icon/version/identifier 변경 시 전체 삭제 후 재생성) |
+| `--jobs` 플래그 | `BuildCommand` + `DevCommand` 양쪽 (`swift run` 도 `-j` 포워딩 지원) |
 | `stageLoaderDLL` | known triple 직접 검사로 교체 |
+| Fingerprint zip 포함 여부 | zip 산출물에서 제외 (배포물에 내부 메타데이터 노출 차단) |
 | macOS Packager | 이번 범위에서 제외 (속도 이슈 미보고) |
-| `DevCommand` | 이번 범위에서 제외 |
 
 ---
 
@@ -40,7 +41,21 @@
 
 수정 파일: `Sources/KalsaeCLI/Support/Packager.swift`
 
-#### (a) output 디렉터리 전체 삭제 제거
+#### (a) output 디렉터리 청소를 fingerprint 기반으로 전환
+
+무조건 전체 삭제 대신, 직전 빌드의 산출물 메타데이터(fingerprint)를 비교하여
+**의미 있는 변경이 있을 때만** 전체 삭제 후 재생성한다. 일치하면 증분 빌드.
+
+**Fingerprint 스키마** (`<output>/.kalsae-pkg-fingerprint.json`):
+
+| 키 | 의미 |
+|---|---|
+| `policy` | `evergreen` / `fixed` / `auto` — 전환 시 stale `webview2-runtime/` 발생 |
+| `architecture` | `x64` / `arm64` / `x86` — 전환 시 잘못된 아키텍처 DLL 잔존 |
+| `exeName` | exe 베이스명(기본: appName) — 전환 시 이전 `<old>.exe`/`.manifest` 잔존 |
+| `iconName` | `.ico` 파일명 (없으면 빈 문자열) — 변경 시 이전 아이콘 잔존 |
+| `version` | manifest version 변경 추적 |
+| `identifier` | manifest identity 변경 추적 |
 
 ```swift
 // 변경 전 — run() 상단:
@@ -50,7 +65,14 @@ if fm.fileExists(atPath: opts.output.path) {
 try fm.createDirectory(at: opts.output, withIntermediateDirectories: true)
 
 // 변경 후:
+let fingerprintURL = opts.output.appendingPathComponent(".kalsae-pkg-fingerprint.json")
+let currentFP = Fingerprint.from(opts)
+let previousFP = Fingerprint.load(at: fingerprintURL)
+if previousFP != currentFP, fm.fileExists(atPath: opts.output.path) {
+    try fm.removeItem(at: opts.output)
+}
 try fm.createDirectory(at: opts.output, withIntermediateDirectories: true)
+// (run() 종료 직전에 fingerprint 기록 — zip 생성 후/전 별도 처리, 아래 (d) 참조)
 ```
 
 #### (b) 개별 파일 복사를 안전한 덮어쓰기로 전환
@@ -104,6 +126,27 @@ if fm.fileExists(atPath: dstResources.path) {
 2. orphan 제거 (dist에 없는 파일 삭제)
 3. 변경 복사 (size+mtime 비교, 1초 슬랙 허용)
 
+`preserved: []` 를 넘기는 이유: 패키저 output 의 `Resources/` 에는 dist 의 frontend
+자산만 들어간다 (`Kalsae.json` 은 output 루트에 별도 배치 — step 3 참조). 따라서
+보존해야 할 sentinel 파일이 없다.
+
+#### (d) Fingerprint 기록 + zip 산출물에서 제외
+
+run() 종료 시점(zip 생성 직후, return 직전)에 새 fingerprint 를 기록한다. zip 생성
+흐름은 fingerprint 파일이 zip 안에 들어가지 않도록 다음 순서를 강제한다:
+
+```swift
+// (1) zip 생성 — 이 시점에는 .kalsae-pkg-fingerprint.json 이 아직 없음
+if opts.zip { try createZip(from: opts.output, to: archive) }
+
+// (2) zip 생성 이후에 fingerprint 기록 — 다음 빌드의 incremental 판단에만 사용
+try currentFP.write(to: fingerprintURL)
+```
+
+이 순서는 **zip 산출물에는 fingerprint 가 절대 포함되지 않음** 을 구조적으로 보장한다
+(zip 호출 시점에 파일이 디스크에 존재하지 않으므로). KSZipArchiver 의 별도 exclude
+API 가 불필요하다.
+
 ### 3.2 `--jobs` 플래그 추가 (Phase B)
 
 #### `BuildDevPlan.swiftBuildArguments` 시그니처 확장
@@ -127,7 +170,7 @@ public static func swiftBuildArguments(debug: Bool, target: String?, jobs: Int? 
 }
 ```
 
-#### `BuildCommand`에 `--jobs` 옵션 선언
+#### `BuildCommand` 에 `--jobs` 옵션 선언
 
 수정 파일: `Sources/KalsaeCLI/Commands/BuildCommand.swift`
 
@@ -144,14 +187,39 @@ var jobs: Int? = nil
 let args = KSBuildPlan.swiftBuildArguments(debug: debug, target: target, jobs: jobs)
 ```
 
+#### `DevCommand` 에 `--jobs` 옵션 선언
+
+수정 파일: `Sources/KalsaeCLI/Commands/DevCommand.swift`
+
+`swift run` 도 `-j N` 을 underlying build 에 전달한다. `appArgs` 의 `--` 구분자
+**앞** 에 두어야 swift 가 인식한다.
+
+```swift
+@Option(
+    name: [.customShort("j"), .long],
+    help: "Maximum number of parallel jobs forwarded to swift run.")
+var jobs: Int? = nil
+
+// ... run() 내부:
+var args = ["run"]
+if let t = target { args += [t] }
+if let jobs { args += ["-j", "\(jobs)"] }   // ← `--` 앞에 위치
+let extraAppArgs = Self.parseShellArgs(appArgs)
+if !extraAppArgs.isEmpty { args.append("--"); args += extraAppArgs }
+```
+
 사용 예:
 ```powershell
 # Defender 경합 환경에서 병렬도를 줄임
 kalsae build -j 4
+kalsae dev -j 2
 
 # CI에서 최대 병렬
 kalsae build -j 16
 ```
+
+`--jobs` 와 `--parallel-build` 는 직교한다 — 전자는 `swift build` 의 **내부**
+병렬도이고 후자는 frontend chain 과 swift build 사이의 **외부** 병렬화이다.
 
 ### 3.3 `stageLoaderDLL` known triple 직접 검사 (Phase C)
 
@@ -201,39 +269,54 @@ I/O 호출이 `.build/` 내 항목 수 N에서 상수 2~3으로 감소한다.
 
 | 파일 | 변경 유형 |
 |------|----------|
-| `Sources/KalsaeCLI/Support/Packager.swift` | output 삭제 제거, `safeCopy` 추가, `copyTree` → sync 교체 |
-| `Sources/KalsaeCLI/Support/BuildDevPlan.swift` | `swiftBuildArguments()` 시그니처 확장 |
+| `Sources/KalsaeCLI/Support/Packager.swift` | Fingerprint helper 추가, output 청소를 fingerprint 비교로 전환, `safeCopy` 추가, `copyTree` → sync 교체, fingerprint 기록 |
+| `Sources/KalsaeCLI/Support/BuildDevPlan.swift` | `swiftBuildArguments()` 시그니처 확장 (`jobs:`) |
 | `Sources/KalsaeCLI/Commands/BuildCommand.swift` | `--jobs` 옵션 선언 + 전달 |
+| `Sources/KalsaeCLI/Commands/DevCommand.swift` | `--jobs` 옵션 선언 + `swift run` 인자 삽입 |
 | `Sources/KalsaeCLI/Support/WebView2Provisioner.swift` | `stageLoaderDLL()` triple 검사 전환 |
 | `Sources/KalsaeCLI/Support/ResourceSyncManager.swift` | 변경 없음 (sync() 재사용) |
-| `Tests/KalsaeCLITests/PackagerTests.swift` | 기존 테스트 통과 확인 |
+| `Tests/KalsaeCLITests/PackagerTests.swift` | 회귀 테스트 추가: incremental + 정책 전환 cleanup |
+| `Tests/KalsaeCLITests/BuildDevPlanTests.swift` | `jobs:` 인자 단위 테스트 추가 |
+| `Tests/KalsaeCLITests/WebView2ProvisionerTests.swift` (신규) | `stageLoaderDLL` known-triple 동작 테스트 |
 
 ---
 
 ## 5. 검증
 
 1. `swift build` 성공
-2. `swift test --filter "PackagerTests"` — 기존 테스트 통과
-3. 수동 검증: `kalsae build` 2회 연속 실행 → 2회차에서 Resources/ 복사 건수 감소
-   확인 (`--timings` 비교)
-4. `kalsae build -j 4` — swift build에 `-j 4` 전달 확인
-5. `kalsae build --timings` — 각 단계 타이밍 정상 출력
+2. `swift test --filter "Packager"` / `--filter "BuildPlan"` / `--filter "WebView2Provisioner"` — 신규/기존 테스트 통과
+3. **2회차 incremental 회귀 테스트**: 동일 옵션으로 `KSPackager.run` 2회 호출 시
+   `Resources/` 내 파일 mtime 이 1회차와 동일함을 확인
+4. **정책 전환 cleanup 회귀 테스트**: `policy: .fixed` 로 1회 빌드 후 `policy: .evergreen`
+   으로 2회 빌드 시 `webview2-runtime/` 디렉터리가 자동 정리됨을 확인
+5. **`swiftBuildArguments` 단위 테스트**: `jobs: 4` → `["-j", "4"]` 포함, `jobs: nil`
+   → 미포함 확인
+6. **`stageLoaderDLL` known triple 단위 테스트** (Windows): 임시 `.build/` 에 known
+   triple 디렉터리와 bogus 디렉터리를 만든 뒤 known triple 에만 DLL 이 staging 됨을 확인
+7. 수동 검증: `kalsae build` 2회 연속 실행 → 2회차에서 `--timings` 의 `package` 단계
+   소요 시간 감소 확인
+8. `kalsae build -j 4` — swift build 에 `-j 4` 전달 확인
+9. `kalsae dev -j 2` — swift run 에 `-j 2` 전달 확인
+10. `kalsae build --timings` — 각 단계 타이밍 정상 출력
+11. **zip 산출물에 fingerprint 미포함 확인** (수동 또는 테스트): `--zip` 으로 빌드한 후
+    zip 내부에 `.kalsae-pkg-fingerprint.json` 이 없는지 확인
 
 ---
 
 ## 6. 범위 경계
 
 ### 포함
-- `Packager.run()` 증분화
-- `--jobs` 플래그 (`BuildCommand`)
+- `Packager.run()` 증분화 + fingerprint 기반 자동 clean
+- `--jobs` 플래그 (`BuildCommand` + `DevCommand`)
 - `stageLoaderDLL` known triple 최적화
 
 ### 제외
-- `DevCommand` 변경
 - `PackagerMac` 증분화 (macOS 빌드 속도 이슈 미보고)
 - `ResourceSyncManager` 자체 변경
 - `swift build` 컴파일러/링커 자체 최적화
 - Windows Defender 제외 설정 (사용자 OS 설정 — 문서 안내만)
+- Fingerprint 외 다른 incremental 휴리스틱 (예: content hash) — 빌드 속도가 핵심
+  목표이고 fingerprint 의 6개 키만으로 알려진 회귀 시나리오를 모두 커버한다
 
 ---
 

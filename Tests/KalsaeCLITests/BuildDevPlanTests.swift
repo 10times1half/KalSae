@@ -27,6 +27,28 @@ struct BuildPlanTests {
         #expect(args == ["build", "-c", "debug", "--target", "demo-app"])
     }
 
+    @Test("swift build arguments forward --jobs as -j N when provided")
+    func buildArgsWithJobs() {
+        let args = KSBuildPlan.swiftBuildArguments(
+            debug: false, target: nil, jobs: 4)
+        #expect(args == ["build", "-c", "release", "-j", "4"])
+    }
+
+    @Test("swift build arguments omit -j when jobs is nil")
+    func buildArgsWithoutJobs() {
+        let args = KSBuildPlan.swiftBuildArguments(
+            debug: false, target: nil, jobs: nil)
+        #expect(args == ["build", "-c", "release"])
+        #expect(!args.contains("-j"))
+    }
+
+    @Test("swift build arguments place -j after --target")
+    func buildArgsJobsAfterTarget() {
+        let args = KSBuildPlan.swiftBuildArguments(
+            debug: true, target: "demo-app", jobs: 2)
+        #expect(args == ["build", "-c", "debug", "--target", "demo-app", "-j", "2"])
+    }
+
     @Test("build command normalization trims whitespace")
     func normalizeBuildCommand() {
         #expect(KSBuildPlan.normalizedCommand("  npm run build  ") == "npm run build")

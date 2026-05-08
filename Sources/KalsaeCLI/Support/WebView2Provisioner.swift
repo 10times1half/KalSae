@@ -235,23 +235,27 @@ public enum KSWebView2Provisioner {
             //   .build/<configuration>/                       (구버전 SwiftPM / 일부 호스트)
             //   .build/<triple>/<configuration>/              (Windows: x86_64-unknown-windows-msvc 등)
             // 둘 다 EXE 가 만들어질 수 있으므로 두 곳 모두 staging 한다.
+            //
+            // 알려진 Windows MSVC triple 만 직접 검사해 `.build/` 전체
+            // 순회의 fileExists 호출을 절감한다 (RFC-002 §3.3). 향후
+            // Swift 툴체인 이 새 triple naming 을 도입하면 행 추가 필요.
             var dests: [URL] = [
                 cwd.appendingPathComponent(".build").appendingPathComponent(configuration)
             ]
             let buildDir = cwd.appendingPathComponent(".build")
-            if let entries = try? fm.contentsOfDirectory(
-                at: buildDir,
-                includingPropertiesForKeys: [.isDirectoryKey],
-                options: [.skipsHiddenFiles])
-            {
-                for entry in entries {
-                    let triplePath = entry.appendingPathComponent(configuration)
-                    var isDir: ObjCBool = false
-                    if fm.fileExists(atPath: triplePath.path, isDirectory: &isDir),
-                        isDir.boolValue
-                    {
-                        dests.append(triplePath)
-                    }
+            let knownTriples = [
+                "x86_64-unknown-windows-msvc",
+                "aarch64-unknown-windows-msvc",
+            ]
+            for triple in knownTriples {
+                let triplePath = buildDir
+                    .appendingPathComponent(triple)
+                    .appendingPathComponent(configuration)
+                var isDir: ObjCBool = false
+                if fm.fileExists(atPath: triplePath.path, isDirectory: &isDir),
+                    isDir.boolValue
+                {
+                    dests.append(triplePath)
                 }
             }
 

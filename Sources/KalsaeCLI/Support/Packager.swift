@@ -118,8 +118,15 @@ public enum KSPackager {
         let fm = FileManager.default
         var warnings: [String] = []
 
-        // Reset output directory.
-        if fm.fileExists(atPath: opts.output.path) {
+        // Output 디렉터리 청소 정책 (RFC-002 §3.1(a)):
+        // 직전 빌드의 fingerprint 와 이번 빌드의 fingerprint 를 비교해, 정책/아키텍처/
+        // exeName/icon/version/identifier 중 하나라도 바뀌면 stale 산출물(예:
+        // 정책 전환 시 남는 webview2-runtime/, 아키텍처 변경 시 잘못된 DLL 등)을
+        // 제거하기 위해 output 전체를 삭제한다. 동일하면 증분 빌드.
+        let fingerprintURL = opts.output.appendingPathComponent(".kalsae-pkg-fingerprint.json")
+        let currentFP = Fingerprint.from(opts)
+        let previousFP = Fingerprint.load(at: fingerprintURL)
+        if fm.fileExists(atPath: opts.output.path), previousFP != currentFP {
             try fm.removeItem(at: opts.output)
         }
         try fm.createDirectory(at: opts.output, withIntermediateDirectories: true)
@@ -127,7 +134,7 @@ public enum KSPackager {
         // 1) Executable
         let exeName = "\(opts.appName).exe"
         let dstExe = opts.output.appendingPathComponent(exeName)
-        try fm.copyItem(at: opts.executablePath, to: dstExe)
+        try safeCopy(from: opts.executablePath, to: dstExe, fm: fm)
 
         // 1.5) WebView2Loader.dll — `CKalsaeWV2` 가 런타임에 `LoadLibraryW`
         // 로 동적 로드한다. EXE 옆에 없으면 `HRESULT 0x8007007E`
@@ -146,7 +153,7 @@ public enum KSPackager {
 
         // 3. Kalsae.json ?ㅼ젙.
         let dstConfig = opts.output.appendingPathComponent("Kalsae.json")
-        try fm.copyItem(at: opts.configPath, to: dstConfig)
+        try safeCopy(from: opts.configPath, to: dstConfig, fm: fm)
 
         // 3.1 패키저는 frontend dist 를 항상 `Resources/` 로 복사하므로 소스
         // `Kalsae.json` 의 `build.frontendDist`(예: "dist")가 그대로 남으면
@@ -161,7 +168,21 @@ public enum KSPackager {
         // 4) Frontend assets
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             let dstResources = opts.output.appendingPathComponent("Resources")
-            try copyTree(from: dist, to: dstResources)
+            // 증분 sync (RFC-002 §3.1(c)):
+            // dst 가 이미 있으면 KSResourceSyncManager.sync 로 size+mtime 비교 증분
+            // 복사. 최소 빌드(dst 미존재)는 기존 전체 복사로 폴백.
+            // `preserved: []` — 패키저 output 의 `Resources/` 에는 dist 의 frontend
+            // 자산만 들어가고 (`Kalsae.json` 은 step 3 에서 output 루트에 별도 배치),
+            // sentinel 보존 대상이 없다.
+            if fm.fileExists(atPath: dstResources.path) {
+                _ = try KSResourceSyncManager.sync(
+                    distURL: dist,
+                    resourcesURL: dstResources,
+                    preserved: [],
+                    fm: fm)
+            } else {
+                try fm.copyItem(at: dist, to: dstResources)
+            }
 
             // Strip 불필요한 파일 (소스맵 등)
             let stripResult = KSBundleAnalyzer.strip(
@@ -184,7 +205,7 @@ public enum KSPackager {
         // 5) Icon (optional)
         if let icon = opts.iconPath, fm.fileExists(atPath: icon.path) {
             let dst = opts.output.appendingPathComponent(icon.lastPathComponent)
-            try fm.copyItem(at: icon, to: dst)
+            try safeCopy(from: icon, to: dst, fm: fm)
         }
 
         // 6) WebView2 runtime policy materialization
@@ -217,6 +238,10 @@ public enum KSPackager {
         try runtimeData.write(to: runtimeURL)
 
         // 7) Optional zip archive
+        // Fingerprint 는 zip 생성 이후에 기록한다 (RFC-002 §3.1(d)). 이렇게
+        // 하면 zip 호출 시점에 파일이 디스크에 존재하지 않아
+        // KSZipArchiver 의 exclude API 로직 없이도 구조적으로 산출물에
+        // 포함되지 않음을 보장한다.
         var zipPath: String? = nil
         if opts.zip {
             let archive = opts.output.deletingLastPathComponent()
@@ -230,6 +255,16 @@ public enum KSPackager {
             } catch {
                 warnings.append("Failed to create zip: \(error)")
             }
+        }
+
+        // 8) Fingerprint 기록 — 다음 빌드의 incremental 여부 판단에만 사용.
+        // zip 생성 이후에 하는 이유는 위 (7) 의 설명 참조. 기록 실패가
+        // 치명적이지는 않으므로 warning 으로만 남긴다 (다음 빌드에서
+            // fingerprint 부재로 취급 → 자동 전체 재생성).
+        do {
+            try currentFP.write(to: fingerprintURL)
+        } catch {
+            warnings.append("Failed to write packaging fingerprint: \(error)")
         }
 
         return Report(
@@ -439,7 +474,7 @@ public enum KSPackager {
             return
         }
         let dst = opts.output.appendingPathComponent("MicrosoftEdgeWebview2Setup.exe")
-        try fm.copyItem(at: src, to: dst)
+        try safeCopy(from: src, to: dst)
     }
 
     /// 패키지 디렉터리에 WebView2 evergreen 부트스트랩이 들어 있으면 그 파일명을
@@ -471,6 +506,15 @@ public enum KSPackager {
 
     // MARK: - File System Helpers
 
+    /// 증분 빌드 안전 덤프. dst 가 이미 존재하면 `removeItem` 후 복사하여
+    /// `NSFileWriteFileExistsError` 를 회피한다.
+    private static func safeCopy(from src: URL, to dst: URL, fm: FileManager = .default) throws {
+        if fm.fileExists(atPath: dst.path) {
+            try fm.removeItem(at: dst)
+        }
+        try fm.copyItem(at: src, to: dst)
+    }
+
     private static func copyTree(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
         if fm.fileExists(atPath: dst.path) {
@@ -499,5 +543,44 @@ public enum KSPackager {
         to archive: URL
     ) async throws {
         try await KSZipArchiver.zipAsync(directory: dir, to: archive)
+    }
+
+    // MARK: - Fingerprint (RFC-002 §3.1)
+
+    /// 패키지 산출물의 핵심 옵션 스냅샷. `<output>/.kalsae-pkg-fingerprint.json`
+    /// 에 기록되어 다음 빌드의 incremental 가능 여부를 판단한다.
+    /// 정책/아키텍처/exeName/icon/version/identifier 중 하나라도 바뀌면 stale
+    /// 산출물(예: 이전 정책의 `webview2-runtime/`, 잘못된 아키텍처 DLL, 이전
+    /// 이름의 exe/manifest, 이전 아이콘 파일) 이 남을 수 있어 output 전체를
+    /// 재생성한다.
+    internal struct Fingerprint: Codable, Equatable {
+        let policy: String
+        let architecture: String
+        let exeName: String
+        let iconName: String
+        let version: String
+        let identifier: String
+
+        static func from(_ opts: Options) -> Fingerprint {
+            Fingerprint(
+                policy: opts.policy.rawValue,
+                architecture: opts.architecture.rawValue,
+                exeName: "\(opts.appName).exe",
+                iconName: opts.iconPath?.lastPathComponent ?? "",
+                version: opts.version,
+                identifier: opts.identifier)
+        }
+
+        static func load(at url: URL) -> Fingerprint? {
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(Fingerprint.self, from: data)
+        }
+
+        func write(to url: URL) throws {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(self)
+            try data.write(to: url, options: [.atomic])
+        }
     }
 }
