@@ -149,6 +149,45 @@ struct KSCommandRegistryConcurrencyTests {
             #expect(r.isSuccess)
         }
     }
+
+    // RFC-005 §4.7: built-in commands (`__ks.*`) bypass the rate limiter so
+    // user code's token budget isn't consumed by framework-internal calls.
+    @Test("Rate limit: exempt prefix bypasses token bucket")
+    func rateLimitExemptPrefixBypasses() async {
+        let registry = KSCommandRegistry()
+        await registry.setRateLimit(KSCommandRateLimit(rate: 1, burst: 2))
+        await registry.register("__ks.window.startDrag") { _ in .success(Data()) }
+        await registry.register("user.cmd") { _ in .success(Data()) }
+
+        // Far beyond burst (2) — exempt command must always succeed.
+        for _ in 0..<10 {
+            let r = await registry.dispatch(name: "__ks.window.startDrag", args: Data())
+            #expect(r.isSuccess, "exempt command must bypass rate limit")
+        }
+
+        // User commands still consume the bucket: first 2 succeed, 3rd fails.
+        _ = await registry.dispatch(name: "user.cmd", args: Data())
+        _ = await registry.dispatch(name: "user.cmd", args: Data())
+        let r = await registry.dispatch(name: "user.cmd", args: Data())
+        switch r {
+        case .failure(let err):
+            #expect(err.code == .rateLimited)
+        case .success:
+            Issue.record("expected user.cmd to be rate-limited")
+        }
+    }
+
+    // KSCommandRateLimit must remain Codable-backwards-compatible: configs
+    // without `exemptPrefixes` should fall back to the default `["__ks."]`.
+    @Test("KSCommandRateLimit: missing exemptPrefixes decodes to default")
+    func rateLimitDecodesLegacyConfig() throws {
+        let legacyJSON = #"{"rate":50,"burst":100}"#
+        let data = Data(legacyJSON.utf8)
+        let limit = try JSONDecoder().decode(KSCommandRateLimit.self, from: data)
+        #expect(limit.rate == 50)
+        #expect(limit.burst == 100)
+        #expect(limit.exemptPrefixes == ["__ks."])
+    }
 }
 extension Result {
     fileprivate var isSuccess: Bool {

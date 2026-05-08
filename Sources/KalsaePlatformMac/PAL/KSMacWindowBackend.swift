@@ -258,6 +258,15 @@
             return try await host.capturePreview(format: format)
         }
 
+        // MARK: - startDrag (RFC-005 §4.6)
+
+        public func startDrag(_ handle: KSWindowHandle) async throws(KSError) {
+            try await runMain(handle) { window in
+                guard let event = NSApp.currentEvent else { return }
+                window.nsWindow.performDrag(with: event)
+            }
+        }
+
         // MARK: - Internals
 
         private func runMain(

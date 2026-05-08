@@ -176,6 +176,14 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Full PAL: windows, menus, tray, dialogs, notifications (UserNotifications),
   clipboard, shell, accelerators, autostart (SMAppService), deep link (Launch
   Services), single instance (NSRunningApp), window state persistence.
+- Security: `setDefaultContextMenusEnabled` / `setAllowExternalDrop` apply via
+  WKUserScript (preventDefault on `contextmenu` / `dragover` / `drop`).
+  `installSecurityHandlers(allowPopups:openExternal:)` installs a WKUIDelegate
+  (popup blocking + media-capture deny) and WKNavigationDelegate (external URL
+  routing) — wired in `runOnMain()` (RFC-008 §2.1–2.3).
+- **Known gaps:** `installFileDropEmitter` is a best-effort warning stub;
+  proper external file-drop forwarding requires NSWindow draggingDestination
+  integration (deferred).
 
 ### Linux
 
@@ -191,8 +199,14 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Virtual host serves `ks://app/` only (`https://app.kalsae/` is Windows-only —
   WebKitGTK cannot intercept `http(s)`); responses include CSP +
   `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer`.
+- Security: WebKit signal handlers in CKalsaeGtk enforce `contextMenu`,
+  `allowExternalDrop`, and `allowPopups` (via `decide-policy` for new-window
+  actions, with external URL routing) — wired in `runOnMain()` (RFC-008 §2.4).
+  Menu/tray clicks route through `KSLinuxCommandRouter` to JS + commandRegistry
+  (RFC-008 §2.6); `appMenu` / `windowMenu` install in `runOnMain()` (§2.5).
 - **Stubs (planned):** system-wide global hot-keys (deferred — no standard
-  Wayland protocol), tray submenus (v1 ships with flat menus only).
+  Wayland protocol), tray submenus (v1 ships with flat menus only),
+  `installFileDropEmitter` (WebKitGTK does not expose external drop interception).
 
 ### iOS
 
@@ -200,6 +214,9 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - PAL surfaces: windows, dialogs, menus, notifications (UNNotification), shell,
   clipboard, deep link.
 - WebView bridge: `WKWebView` + `WKUserContentController` message handler.
+- Security: same WKUserScript + WKUIDelegate / WKNavigationDelegate pattern as
+  macOS (RFC-008 §4.2). `installFileDropEmitter` is a stub (UIDropInteraction
+  integration deferred).
 
 ### Android
 
@@ -214,7 +231,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   `KSAndroidDemoHost` with Kotlin host instead.
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows/macOS = 풀 PAL. Linux = 풀 PAL (글로벌 단축키/트레이 서브메뉴는 Wayland 표준 부재로 스텁). iOS = PAL 구현 + `run()` 완전 연결. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델)._
+_🇰🇷 Windows = 풀 PAL. macOS = 풀 PAL (RFC-008 §2.1~2.3 보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풀 PAL (RFC-008 §2.4~2.6 보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러(RFC-008 §4.2) 적용. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델)._
 
 ---
 

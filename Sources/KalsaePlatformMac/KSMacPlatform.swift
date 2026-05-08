@@ -119,7 +119,18 @@
             }
             if !config.security.allowExternalDrop {
                 host.setAllowExternalDrop(false)
+                try? host.installFileDropEmitter()
             }
+
+            // RFC-008 §2.3: 팝업 차단 + 외부 URL 라우팅. Windows 패턴과 통일.
+            let shellRef = _shell
+            let allowPopups = config.security.allowPopups
+            try host.installSecurityHandlers(
+                allowPopups: allowPopups,
+                openExternal: { urlStr in
+                    guard let url = URL(string: urlStr) else { return }
+                    Task.detached { try? await shellRef.openExternal(url) }
+                })
 
             let url = Self.resolveStartURL(
                 windowURL: window.url,
@@ -426,8 +437,25 @@
         public func setWindowStateSaveSink(_ sink: (@MainActor (KSPersistedWindowState) -> Void)?) {
             window.setWindowStateSaveSink(sink)
         }
-        public func setDefaultContextMenusEnabled(_ enabled: Bool) { _ = enabled }
-        public func setAllowExternalDrop(_ allow: Bool) { _ = allow }
+        // RFC-008 §2.1: 컨텍스트 메뉴 / 외부 드롭 토글을 실제 WKWebView 설정으로 위임.
+        public func setDefaultContextMenusEnabled(_ enabled: Bool) {
+            webview.setDefaultContextMenusEnabled(enabled)
+        }
+        public func setAllowExternalDrop(_ allow: Bool) {
+            webview.setAllowExternalDrop(allow)
+        }
+        // RFC-008 §2.2: 파일 드롭 emitter 설치(현재 best-effort 경고 stub).
+        public func installFileDropEmitter() throws(KSError) {
+            try webview.installFileDropEmitter()
+        }
+        // RFC-008 §2.3: 팝업 차단 + 외부 URL 라우팅 + 권한 거부 핸들러.
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            try webview.installSecurityHandlers(
+                allowPopups: allowPopups, openExternal: openExternal)
+        }
 
         /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
         ///
@@ -440,18 +468,25 @@
             httpScope: KSHTTPScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
-            appDirectory: URL? = nil
+            appDirectory: URL? = nil,
+            // RFC-008 #2.13: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
+            // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
+            windows: (any KSWindowBackend)? = nil,
+            shell: (any KSShellBackend)? = nil,
+            clipboard: (any KSClipboardBackend)? = nil,
+            notifications: (any KSNotificationBackend)? = nil,
+            dialogs: (any KSDialogBackend)? = nil
         ) async {
             let handle = mainHandle
             let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
             let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
             await KSBuiltinCommands.register(
                 into: registry,
-                windows: KSMacWindowBackend(registry: registry),
-                shell: KSMacShellBackend(),
-                clipboard: KSMacClipboardBackend(),
-                notifications: KSMacNotificationBackend(),
-                dialogs: KSMacDialogBackend(),
+                windows: windows ?? KSMacWindowBackend(registry: registry),
+                shell: shell ?? KSMacShellBackend(),
+                clipboard: clipboard ?? KSMacClipboardBackend(),
+                notifications: notifications ?? KSMacNotificationBackend(),
+                dialogs: dialogs ?? KSMacDialogBackend(),
                 mainWindow: mainProvider,
                 quit: quitBlock,
                 platformName: platformName,

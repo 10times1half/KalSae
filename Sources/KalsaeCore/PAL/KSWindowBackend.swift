@@ -140,6 +140,11 @@ public protocol KSWindowState: Sendable {
     func setOverlayIcon(
         _ handle: KSWindowHandle, iconPath: String?, description: String?
     ) async throws(KSError)
+
+    /// 현재 마우스 위치에서 창 드래그를 시작한다 (title bar 클릭 시뮬레이션).
+    /// CSS `app-region: drag` 영역에서 mousedown 시 JS 런타임이 호출한다.
+    /// 데스크톱(Win/Mac/Linux)에서만 의미가 있으며 모바일은 기본 no-op이다.
+    func startDrag(_ handle: KSWindowHandle) async throws(KSError)
 }
 public protocol KSWindowBackend:
     KSWindowLifecycle, KSWindowGeometry, KSWindowState
@@ -230,4 +235,7 @@ extension KSWindowState {
     public func setOverlayIcon(
         _ handle: KSWindowHandle, iconPath: String?, description: String?
     ) async throws(KSError) {}
+
+    /// 기본 no-op: 데스크톱 플랫폼(Win/Mac/Linux)이 재정의한다.
+    public func startDrag(_ handle: KSWindowHandle) async throws(KSError) {}
 }

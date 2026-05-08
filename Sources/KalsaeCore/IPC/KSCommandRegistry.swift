@@ -74,7 +74,13 @@ public actor KSCommandRegistry {
     /// invoke를 디스패치한다. 직렬화된 페이로드 또는 호출 실패 시
     /// JSON으로 인코딩된 `KSError`를 반환한다.
     public func dispatch(name: String, args: Data) async -> Result<Data, KSError> {
-        if !consumeToken() {
+        // 면제 프리픽스(`__ks.` 등)에 해당하는 명령은 토큰을 소비하지 않는다
+        // (RFC-005 §4.7). 내장 명령이 사용자 명령의 토큰을 소진하는 것을 방지.
+        let isExempt: Bool = {
+            guard let limit = rateLimit else { return true }
+            return limit.exemptPrefixes.contains(where: { name.hasPrefix($0) })
+        }()
+        if !isExempt && !consumeToken() {
             return .failure(.rateLimited(name))
         }
         if let allowlist, !allowlist.contains(name) {

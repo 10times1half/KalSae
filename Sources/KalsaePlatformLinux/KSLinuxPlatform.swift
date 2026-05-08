@@ -129,8 +129,48 @@
             #endif
             try host.start(url: url, devtools: effectiveDevtools)
 
+            // RFC-008 §2.4: 보안 설정 적용 — Win/Mac 패턴과 통일.
+            if config.security.contextMenu == .disabled {
+                host.setDefaultContextMenusEnabled(false)
+            }
+            if !config.security.allowExternalDrop {
+                host.setAllowExternalDrop(false)
+                try? host.installFileDropEmitter()
+            }
+            let shellRef = _shell
+            try host.installSecurityHandlers(
+                allowPopups: config.security.allowPopups,
+                openExternal: { urlStr in
+                    guard let u = URL(string: urlStr) else { return }
+                    Task.detached { try? await shellRef.openExternal(u) }
+                })
+
+            // RFC-008 #2.5: appMenu / windowMenu 설치 — Win/Mac 패턴과 통일.
+            if let appMenu = config.menu?.appMenu {
+                try await _menus.installAppMenu(appMenu)
+            }
+            if let windowMenu = config.menu?.windowMenu {
+                try await _menus.installWindowMenu(mainHandle, items: windowMenu)
+            }
+
             if let trayConfig = config.tray {
                 try? await _tray.install(trayConfig)
+            }
+
+            // RFC-008 #2.6: 메뉴/트레이 클릭을 JS `menu` 이벤트와
+            // commandRegistry.dispatch로 라우팅. Win/Mac 패턴과 통일.
+            KSLinuxCommandRouter.shared.clear()
+            KSLinuxCommandRouter.shared.subscribe { [weak host] command, itemID in
+                guard let host else { return }
+                struct MenuClickPayload: Encodable {
+                    let command: String
+                    let itemID: String?
+                }
+                try? host.emit("menu", payload: MenuClickPayload(command: command, itemID: itemID))
+                let registry = self.commandRegistry
+                Task.detached {
+                    _ = await registry.dispatch(name: command, args: Data("{}".utf8))
+                }
             }
 
             let autostartBackend: (any KSAutostartBackend)? = config.autostart.map { _ in
@@ -343,6 +383,24 @@
             try webview.setAssetRoot(root)
         }
 
+        // RFC-008 §2.4 — 보안 핸들러 프록시.
+        public func setDefaultContextMenusEnabled(_ enabled: Bool) {
+            webview.setDefaultContextMenusEnabled(enabled)
+        }
+        public func setAllowExternalDrop(_ allow: Bool) {
+            webview.setAllowExternalDrop(allow)
+        }
+        public func installFileDropEmitter() throws(KSError) {
+            try webview.installFileDropEmitter()
+        }
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            try webview.installSecurityHandlers(
+                allowPopups: allowPopups, openExternal: openExternal)
+        }
+
         /// 모든 `ks://` 에셋 응답에 대한 Content-Security-Policy 헤더를 설정한다.
         /// `addDocumentCreatedScript`에서 설치하는 메타 태그 폴백을 보완한다.
         public func setResponseCSP(_ csp: String) throws(KSError) {
@@ -463,19 +521,30 @@
             httpScope: KSHTTPScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
-            appDirectory: URL? = nil
+            appDirectory: URL? = nil,
+            // RFC-008 #2.14: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
+            // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
+            windows: (any KSWindowBackend)? = nil,
+            shell: (any KSShellBackend)? = nil,
+            clipboard: (any KSClipboardBackend)? = nil,
+            notifications: (any KSNotificationBackend)? = nil,
+            dialogs: (any KSDialogBackend)? = nil
         ) async {
-            let handle = KSLinuxWindowBackend().registerMainWindow(
+            // 공유 백엔드가 주입되면 그것을, 아니면 새 인스턴스를 사용해
+            // 메인 윈도우 핸들을 등록한다(이전 동작과 동일하지만 공유 시
+            // 동일 레지스트리에 등록되어 일관성이 확보된다).
+            let linuxWindows = (windows as? KSLinuxWindowBackend) ?? KSLinuxWindowBackend()
+            let handle = linuxWindows.registerMainWindow(
                 label: windowConfig.label, host: webview)
             let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
             let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
             await KSBuiltinCommands.register(
                 into: registry,
-                windows: KSLinuxWindowBackend(),
-                shell: KSLinuxShellBackend(),
-                clipboard: KSLinuxClipboardBackend(),
-                notifications: KSLinuxNotificationBackend(),
-                dialogs: KSLinuxDialogBackend(),
+                windows: linuxWindows,
+                shell: shell ?? KSLinuxShellBackend(),
+                clipboard: clipboard ?? KSLinuxClipboardBackend(),
+                notifications: notifications ?? KSLinuxNotificationBackend(),
+                dialogs: dialogs ?? KSLinuxDialogBackend(),
                 mainWindow: mainProvider,
                 quit: quitBlock,
                 platformName: platformName,

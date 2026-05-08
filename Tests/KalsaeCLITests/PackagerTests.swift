@@ -630,4 +630,34 @@ struct PackagerIncrementalTests {
         let fp = output.appendingPathComponent(".kalsae-pkg-fingerprint.json")
         #expect(fm.fileExists(atPath: fp.path))
     }
+
+    /// strip 옵션(stripSourceMaps / stripExtensions)도 fingerprint 키에 포함되므로
+    /// 토글 시 output 이 전체 재생성되어야 한다. 회귀 시 strip 비활성화로 전환해도
+    /// 이미 strip 된 산출물에 source map 이 다시 나타나지 않거나(혹은 그 반대)
+    /// 사용자 기대와 어긋난 incremental 결과가 남는다.
+    @Test("strip option toggle invalidates fingerprint and triggers full rebuild")
+    func stripOptionTogglesFingerprint() throws {
+        let fm = FileManager.default
+        let work = uniqueDir("strip-toggle")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let (baseOpts, dist, output) = try makeBaseOptions(in: work)
+        // dist 에 source map 동봉 — 첫 빌드는 strip 비활성으로 통과시켜 보존.
+        try writeText("/*map*/", to: dist.appendingPathComponent("style.css.map"))
+
+        var noStripOpts = baseOpts
+        noStripOpts.stripSourceMaps = false
+        _ = try KSPackager.run(noStripOpts)
+        let map = output.appendingPathComponent("Resources/style.css.map")
+        #expect(fm.fileExists(atPath: map.path), "strip 비활성 시 .map 파일이 보존되어야 한다")
+
+        // 사용자가 strip 옵션을 활성화 → fingerprint mismatch → 전체 재생성 후 strip 적용.
+        var stripOpts = baseOpts
+        stripOpts.stripSourceMaps = true
+        _ = try KSPackager.run(stripOpts)
+        #expect(
+            !fm.fileExists(atPath: map.path),
+            "strip 옵션 활성화 시 fingerprint 가 달라져 전체 재생성 + strip 이 적용되어야 한다")
+    }
 }

@@ -71,7 +71,22 @@
                             invoke(cmd, args) {
                               return new Promise((resolve, reject) => {
                                 const id = String(nextId++);
-                                pending.set(id, { resolve, reject });
+                                // 30초 높은 판 타임아웃. Swift 핸들러가 응답하지 않아도
+                                // pending Map이 누수되지 않고, JS 측 await가 영구적으로
+                                // block되지 않도록 보장한다 (RFC-005 §4.5).
+                                const timer = setTimeout(() => {
+                                  if (pending.has(id)) {
+                                    pending.delete(id);
+                                    reject(new KalsaeError({
+                                      code: 'timeout',
+                                      message: "invoke('" + cmd + "') timed out after 30000ms"
+                                    }));
+                                  }
+                                }, 30000);
+                                pending.set(id, {
+                                  resolve(v) { clearTimeout(timer); resolve(v); },
+                                  reject(e) { clearTimeout(timer); reject(e); },
+                                });
                                 nativePost({
                                   kind: 'invoke',
                                   id,

@@ -330,7 +330,13 @@
         }
 
         public func postJSON(_ json: String) throws(KSError) {
-            let script = "window.__KS_receive(\(json));"
+            // U+2028(Line Separator)/U+2029(Paragraph Separator)는 ECMAScript에서
+            // 라인 터미네이터이므로 문자열 리터럴 내부에서 구문 오류를
+            // 일으키어. JSONEncoder가 이스케이프하지 않으므로 수동 치환 (RFC-005 §4.8).
+            let safe = json
+                .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+                .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+            let script = "window.__KS_receive(\(safe));"
             webView.evaluateJavaScript(script) { _, err in
                 if let err {
                     KSLog.logger("platform.mac.webview")
@@ -346,6 +352,83 @@
         public func addDocumentCreatedScript(_ script: String) throws(KSError) {
             let us = WKUserScript(source: script, injectionTime: .atDocumentStart, forMainFrameOnly: false)
             userContentController.addUserScript(us)
+        }
+
+        // MARK: - RFC-008 §2.1~2.3 보안 핸들러
+
+        // 보안 델리게이트들은 `webView.uiDelegate` / `navigationDelegate`가 weak
+        // reference이므로 호스트가 강하게 보유한다.
+        private var securityDelegate: KSMacSecurityDelegate?
+        private var navigationDelegate: KSMacNavigationDelegate?
+        private var contextMenuScriptInstalled = false
+        private var externalDropScriptInstalled = false
+
+        /// RFC-008 §2.1 — 우클릭 컨텍스트 메뉴 비활성화.
+        ///
+        /// JS 레벨에서 `oncontextmenu`를 preventDefault한다. macOS WKWebView는
+        /// 페이지 컨텍스트 메뉴(우클릭) 자체를 비활성화하는 공식 API가 없어
+        /// 동일 효과를 얻기 위한 표준 패턴이다. DEBUG 빌드의 Web Inspector는
+        /// 별도 메뉴이므로 영향 없음.
+        public func setDefaultContextMenusEnabled(_ enabled: Bool) {
+            guard !enabled else { return }  // 활성화는 기본값이므로 no-op.
+            if contextMenuScriptInstalled { return }
+            contextMenuScriptInstalled = true
+            let us = WKUserScript(
+                source: KSMacSecurityScripts.disableContextMenu,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false)
+            userContentController.addUserScript(us)
+        }
+
+        /// RFC-008 §2.1 — 외부 파일 드롭 비활성화.
+        ///
+        /// `dataTransfer.types`가 'Files'인 경우만 preventDefault한다. 페이지
+        /// 내부 드래그(텍스트/요소)에는 영향 없음.
+        public func setAllowExternalDrop(_ allow: Bool) {
+            guard !allow else { return }
+            if externalDropScriptInstalled { return }
+            externalDropScriptInstalled = true
+            let us = WKUserScript(
+                source: KSMacSecurityScripts.disableExternalDrop,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false)
+            userContentController.addUserScript(us)
+        }
+
+        /// RFC-008 §2.3 — 팝업 차단 + 외부 URL 라우팅 + 권한 거부.
+        ///
+        /// Windows의 `installSecurityHandlers(allowPopups:openExternal:)` 와 동등.
+        /// `allowPopups=false`이면 `window.open` / `target=_blank` 새 윈도우
+        /// 요청을 차단하고 `openExternal`로 라우팅한다. 마이크/카메라 권한은
+        /// 항상 거부된다.
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            let sec = securityDelegate ?? KSMacSecurityDelegate()
+            sec.allowPopups = allowPopups
+            sec.openExternal = openExternal
+            self.securityDelegate = sec
+            self.webView.uiDelegate = sec
+
+            let nav = navigationDelegate ?? KSMacNavigationDelegate()
+            nav.openExternal = openExternal
+            self.navigationDelegate = nav
+            self.webView.navigationDelegate = nav
+        }
+
+        /// RFC-008 §2.2 — 외부 파일 드롭 이벤트를 JS로 emit.
+        ///
+        /// macOS에서는 WKWebView가 NSView로서 자체 드래그 처리를 한다. 본
+        /// 메서드는 `setAllowExternalDrop(false)`와 함께 쓰일 때 의미가 있으나,
+        /// macOS WKWebView는 NSDraggingDestination을 외부에서 가로채는 공식
+        /// API가 없어 NSWindow 단위로만 가능하다. v1에서는 **best-effort 경고**로
+        /// 등록만 받고 실제 emit은 다음 릴리스에서 NSWindow draggingDestination
+        /// 통합으로 다룬다.
+        public func installFileDropEmitter() throws(KSError) {
+            log.warning(
+                "macOS installFileDropEmitter() is a stub — file drop forwarding requires "
+                    + "NSWindow draggingDestination integration; tracked as Phase 4 follow-up.")
         }
 
         // MARK: - 확장 PAL 인터페이스

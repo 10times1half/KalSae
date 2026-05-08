@@ -107,6 +107,18 @@ struct KSGtkHost {
     /* 키보드 가속기 (window-scoped). */
     GtkShortcutController *shortcut_controller;  /* owned, attached to window */
     GHashTable            *shortcuts_by_id;      /* (gchar*) id -> KSGtkAccelEntry* */
+
+    /* RFC-008 §2.4 — WebView 보안 핸들러.
+     * context_menu_enabled: 0이면 모든 우클릭 컨텍스트 메뉴를 차단.
+     * external_drop_allowed: 0이면 GtkDropTarget을 비활성으로 표시.
+     * popup_blocking_enabled: 0이면 디폴트(허용); 1이면 새 윈도우 요청을 차단하고
+     *   external_url_handler 콜백으로 라우팅한다.
+     * 시그널은 on_app_activate에서 한 번만 연결되며, 이후 동작은 플래그를 본다. */
+    int  context_menu_enabled;        /* 1 (default) = 활성, 0 = 차단 */
+    int  external_drop_allowed;       /* 1 (default) = 허용, 0 = 차단 */
+    int  popup_blocking_enabled;      /* 0 (default) = 허용, 1 = 차단+라우팅 */
+    void (*external_url_handler)(const char *url, void *ctx);
+    void  *external_url_handler_ctx;
 };
 
 /* 단축키 엔트리 — 등록 해제를 위해 GtkShortcut과 트램폴린 컨텍스트를 보관. */
@@ -134,6 +146,16 @@ static void clear_string(char **slot)
 static void on_kb_scheme_request(WebKitURISchemeRequest *req,
                                  gpointer user_data);
 /* close-request 핸들러 전방 선언 */
+
+/* RFC-008 §2.4 — WebView 보안 시그널 핸들러 전방 선언. */
+static gboolean on_security_context_menu(WebKitWebView *view,
+                                         WebKitContextMenu *menu,
+                                         WebKitHitTestResult *hit,
+                                         gpointer user_data);
+static gboolean on_security_decide_policy(WebKitWebView *view,
+                                          WebKitPolicyDecision *decision,
+                                          WebKitPolicyDecisionType type,
+                                          gpointer user_data);
 
 /* close-request 핸들러: 인터셉터가 켜진 경우 창을 닫지 않고
  * JS beforeClose 이벤트를 발사한다. */
@@ -194,6 +216,52 @@ static void on_script_message(WebKitUserContentManager *ucm,
     if (!json) return;
     host->on_message(json, host->on_message_ctx);
     g_free(json);
+}
+
+/* RFC-008 §2.4 — context-menu 시그널 핸들러.
+ * `context_menu_enabled == 0`일 때 TRUE를 반환해 기본 메뉴를 차단한다. */
+static gboolean on_security_context_menu(WebKitWebView *view,
+                                         WebKitContextMenu *menu,
+                                         WebKitHitTestResult *hit,
+                                         gpointer user_data)
+{
+    (void) view; (void) menu; (void) hit;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host) return FALSE;
+    /* enabled=1(기본): 기본 메뉴 표시(반환 FALSE). */
+    /* enabled=0: 메뉴 억제(반환 TRUE). */
+    return host->context_menu_enabled ? FALSE : TRUE;
+}
+
+/* RFC-008 §2.4 — decide-policy 시그널 핸들러.
+ * popup_blocking_enabled가 켜져 있을 때 NEW_WINDOW_ACTION 결정을 차단하고
+ * external_url_handler로 라우팅한다. NAVIGATION_ACTION은 정상 통과. */
+static gboolean on_security_decide_policy(WebKitWebView *view,
+                                          WebKitPolicyDecision *decision,
+                                          WebKitPolicyDecisionType type,
+                                          gpointer user_data)
+{
+    (void) view;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host) return FALSE;
+    if (!host->popup_blocking_enabled) return FALSE;
+    if (type != WEBKIT_POLICY_DECISION_TYPE_NEW_WINDOW_ACTION) return FALSE;
+
+    WebKitNavigationPolicyDecision *npd =
+        WEBKIT_NAVIGATION_POLICY_DECISION(decision);
+    WebKitNavigationAction *action =
+        webkit_navigation_policy_decision_get_navigation_action(npd);
+    if (action) {
+        WebKitURIRequest *req = webkit_navigation_action_get_request(action);
+        if (req) {
+            const char *uri = webkit_uri_request_get_uri(req);
+            if (uri && host->external_url_handler) {
+                host->external_url_handler(uri, host->external_url_handler_ctx);
+            }
+        }
+    }
+    webkit_policy_decision_ignore(decision);
+    return TRUE;
 }
 
 static void on_app_activate(GtkApplication *app, gpointer user_data)
@@ -289,6 +357,12 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
     g_signal_connect(win, "close-request",
                      G_CALLBACK(on_close_request), host);
 
+    /* RFC-008 §2.4 — WebView 보안 시그널 1회 연결. */
+    g_signal_connect(view, "context-menu",
+                     G_CALLBACK(on_security_context_menu), host);
+    g_signal_connect(view, "decide-policy",
+                     G_CALLBACK(on_security_decide_policy), host);
+
     if (host->on_activate) {
         host->on_activate(host->on_activate_ctx);
     }
@@ -307,6 +381,11 @@ KSGtkHost *ks_gtk_host_new(const char *app_id,
     h->width  = width  > 0 ? width  : 1024;
     h->height = height > 0 ? height : 768;
     h->pending_scripts = g_ptr_array_new_with_free_func(g_free);
+
+    /* RFC-008 §2.4 — 보안 플래그 기본값(허용). */
+    h->context_menu_enabled  = 1;
+    h->external_drop_allowed = 1;
+    h->popup_blocking_enabled = 0;
 
     h->app = gtk_application_new(h->app_id, G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect(h->app, "activate",
@@ -1253,6 +1332,38 @@ void ks_gtk_host_set_close_handler(KSGtkHost *host,
     host->close_handler     = cb;
     host->close_handler_ctx = ctx;
 }
+
+/* ================================================================
+ * RFC-008 §2.4 — WebView 보안 핸들러 공개 API
+ * ================================================================ */
+
+void ks_gtk_host_set_context_menu_enabled(KSGtkHost *host, int enabled)
+{
+    if (!host) return;
+    host->context_menu_enabled = enabled ? 1 : 0;
+}
+
+void ks_gtk_host_set_allow_external_drop(KSGtkHost *host, int allow)
+{
+    if (!host) return;
+    host->external_drop_allowed = allow ? 1 : 0;
+    /* GTK4 GtkDropTarget은 WebView 위젯이 자체 등록한다. WebKit이 외부에서
+     * 가로챌 깔끔한 API가 없어, 본 토글은 JS 쪽 preventDefault 스크립을
+     * 추가 주입하는 것으로 보강한다(KSLinuxPlatform 측에서 user script로). */
+}
+
+void ks_gtk_host_set_popup_blocking(
+    KSGtkHost *host,
+    int enabled,
+    void (*on_external_url)(const char *url, void *ctx),
+    void *ctx)
+{
+    if (!host) return;
+    host->popup_blocking_enabled  = enabled ? 1 : 0;
+    host->external_url_handler    = on_external_url;
+    host->external_url_handler_ctx = ctx;
+}
+
 
 void ks_gtk_host_set_keep_above(KSGtkHost *host, int enabled)
 {

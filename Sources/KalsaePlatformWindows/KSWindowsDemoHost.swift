@@ -360,14 +360,22 @@
             httpScope: KSHTTPScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
-            appDirectory: URL? = nil
+            appDirectory: URL? = nil,
+            // RFC-008 #2.15: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
+            // 있도록 한다. 이 매개변수가 nil이면 새 인스턴스를 만들어
+            // 기존 동작을 유지한다(외부 호출자 호환).
+            windows: (any KSWindowBackend)? = nil,
+            shell: (any KSShellBackend)? = nil,
+            clipboard: (any KSClipboardBackend)? = nil,
+            notifications: (any KSNotificationBackend)? = nil,
+            dialogs: (any KSDialogBackend)? = nil
         ) async {
             let mainLabel = window.label
-            let windowsBackend = KSWindowsWindowBackend()
-            let shellBackend = KSWindowsShellBackend()
-            let clipboardBackend = KSWindowsClipboardBackend()
-            let notificationBackend = KSWindowsNotificationBackend()
-            let dialogBackend = KSWindowsDialogBackend()
+            let windowsBackend = windows ?? KSWindowsWindowBackend()
+            let shellBackend = shell ?? KSWindowsShellBackend()
+            let clipboardBackend = clipboard ?? KSWindowsClipboardBackend()
+            let notificationBackend = notifications ?? KSWindowsNotificationBackend()
+            let dialogBackend = dialogs ?? KSWindowsDialogBackend()
 
             let mainProvider: @Sendable () -> KSWindowHandle? = { [weak self] in
                 // 재생성이 제대로 동작하도록 매번 살아있는 HWND를 조회한다.
@@ -402,16 +410,9 @@
                 deepLink: deepLink,
                 appDirectory: appDirectory)
 
-            // Windows 전용: `KSRuntimeJS`의 `app-region: drag` mousedown 히트
-            // 테스트에서 사용하는 드래그 영역 헬퍼. 살아있는 HWND를 조회해
-            // 윈도우에게 비-클라이언트 이동 루프로 진입하도록 요청한다.
-            await registry.register("__ks.window.startDrag") { [weak self] _ in
-                await MainActor.run {
-                    self?.window.startDrag()
-                }
-                // 빈 성공 페이로드(KSBuiltinCommands.Empty와 동일).
-                return .success(Data("{}".utf8))
-            }
+            // `__ks.window.startDrag`는 RFC-005에서 KSBuiltinCommands+Window가
+            // 등록하므로 데모 호스트의 로컬 등록은 제거되었다. 등록은
+            // `KSWindowsWindowBackend.startDrag`로 위임된다.
         }
 
         // MARK: - 자동 승격 1회 경고

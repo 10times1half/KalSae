@@ -129,19 +129,30 @@
             httpScope: KSHTTPScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
-            appDirectory: URL? = nil
+            appDirectory: URL? = nil,
+            // RFC-008 #2.11: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
+            // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
+            windows: (any KSWindowBackend)? = nil,
+            shell: (any KSShellBackend)? = nil,
+            clipboard: (any KSClipboardBackend)? = nil,
+            notifications: (any KSNotificationBackend)? = nil,
+            dialogs: (any KSDialogBackend)? = nil
         ) async {
-            let windowBackend = KSAndroidWindowBackend()
+            // 공유 백엔드가 주입되면 그것을, 아니면 새 인스턴스를 사용해
+            // 메인 윈도우 핸들을 등록한다. 핸들이 동일 인스턴스에 등록되어
+            // `__ks.window.*` 명령이 일관되게 동작한다.
+            let windowBackend: KSAndroidWindowBackend =
+                (windows as? KSAndroidWindowBackend) ?? KSAndroidWindowBackend()
             let handle: KSWindowHandle? = try? await windowBackend.create(windowConfig)
             let mainProvider: @Sendable () -> KSWindowHandle? = { handle }
             let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
             await KSBuiltinCommands.register(
                 into: registry,
                 windows: windowBackend,
-                shell: shellBackend,
-                clipboard: clipboardBackend,
-                notifications: notificationBackend,
-                dialogs: dialogBackend,
+                shell: shell as? KSAndroidShellBackend ?? shellBackend,
+                clipboard: clipboard as? KSAndroidClipboardBackend ?? clipboardBackend,
+                notifications: notifications as? KSAndroidNotificationBackend ?? notificationBackend,
+                dialogs: dialogs as? KSAndroidDialogBackend ?? dialogBackend,
                 mainWindow: mainProvider,
                 quit: quitBlock,
                 platformName: platformName,

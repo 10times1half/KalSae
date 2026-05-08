@@ -13,6 +13,20 @@
                                     (function () {
                           if (window.__KS_) return;
 
+                          // 플랫폼 측에서 `invoke`가 reject하는 오류 객체는
+                          // 항상 이 클래스의 인스턴스여서 `instanceof KalsaeError`로
+                          // `.code`를 안전하게 읽을 수 있다.
+                          class KalsaeError extends Error {
+                            constructor(payload) {
+                              const p = (payload && typeof payload === 'object') ? payload : {};
+                              super(p.message || String(payload || 'Kalsae error'));
+                              this.name = 'KalsaeError';
+                              this.code = p.code || 'internal';
+                              this.data = (p.data === undefined) ? null : p.data;
+                            }
+                          }
+                          window.KalsaeError = KalsaeError;
+
                           const pending = new Map();
                           const listeners = new Map();
                           let nextId = 1;
@@ -32,7 +46,7 @@
                                 const p = pending.get(msg.id);
                                 if (!p) return;
                                 pending.delete(msg.id);
-                                if (msg.isError) p.reject(msg.payload);
+                                if (msg.isError) p.reject(new KalsaeError(msg.payload));
                                 else p.resolve(msg.payload);
                                 break;
                               }
@@ -51,7 +65,20 @@
                             invoke(cmd, args) {
                               return new Promise((resolve, reject) => {
                                 const id = String(nextId++);
-                                pending.set(id, { resolve, reject });
+                                // 30초 판 타임아웃 (RFC-005 §4.5)
+                                const timer = setTimeout(() => {
+                                  if (pending.has(id)) {
+                                    pending.delete(id);
+                                    reject(new KalsaeError({
+                                      code: 'timeout',
+                                      message: "invoke('" + cmd + "') timed out after 30000ms"
+                                    }));
+                                  }
+                                }, 30000);
+                                pending.set(id, {
+                                  resolve(v) { clearTimeout(timer); resolve(v); },
+                                  reject(e) { clearTimeout(timer); reject(e); },
+                                });
                                 nativePost({
                                   kind: 'invoke',
                                   id,
@@ -76,8 +103,136 @@
                             },
                           });
 
-                          window.__KS_ = KB;
-                          if (!window.Kalsae) window.Kalsae = KB;
+                          // 편의를 위한 단축 함수. `KB` 객체에 위임한다.
+                          function call(name, args) { return KB.invoke(name, args); }
+
+                          // ---- 윈도우 ----
+                          const Win = Object.freeze({
+                            minimize:         () => call('__ks.window.minimize'),
+                            maximize:         () => call('__ks.window.maximize'),
+                            restore:          () => call('__ks.window.restore'),
+                            toggleMaximize:   () => call('__ks.window.toggleMaximize'),
+                            isMinimized:      () => call('__ks.window.isMinimized'),
+                            isMaximized:      () => call('__ks.window.isMaximized'),
+                            isFullscreen:     () => call('__ks.window.isFullscreen'),
+                            isNormal:         () => call('__ks.window.isNormal'),
+                            setFullscreen:    (enabled, window) => call('__ks.window.setFullscreen', { enabled: !!enabled, window: window || null }),
+                            setAlwaysOnTop:   (enabled, window) => call('__ks.window.setAlwaysOnTop', { enabled: !!enabled, window: window || null }),
+                            center:           () => call('__ks.window.center'),
+                            setPosition:      (x, y, window) => call('__ks.window.setPosition', { x: x|0, y: y|0, window: window || null }),
+                            getPosition:      () => call('__ks.window.getPosition'),
+                            getSize:          () => call('__ks.window.getSize'),
+                            setSize:          (width, height, window) => call('__ks.window.setSize', { width: width|0, height: height|0, window: window || null }),
+                            setMinSize:       (width, height, window) => call('__ks.window.setMinSize', { width: width|0, height: height|0, window: window || null }),
+                            setMaxSize:       (width, height, window) => call('__ks.window.setMaxSize', { width: width|0, height: height|0, window: window || null }),
+                            setTitle:         (title, window) => call('__ks.window.setTitle', { title: String(title), window: window || null }),
+                            show:             () => call('__ks.window.show'),
+                            hide:             () => call('__ks.window.hide'),
+                            focus:            () => call('__ks.window.focus'),
+                            close:            () => call('__ks.window.close'),
+                            reload:           () => call('__ks.window.reload'),
+                            setTheme:         (theme, window) => call('__ks.window.setTheme', { theme: String(theme || 'system'), window: window || null }),
+                            setBackgroundColor: (r, g, b, a, window) => call('__ks.window.setBackgroundColor', { r: (r|0)&0xFF, g: (g|0)&0xFF, b: (b|0)&0xFF, a: a === undefined ? 255 : (a|0)&0xFF, window: window || null }),
+                            setCloseInterceptor: (enabled, window) => call('__ks.window.setCloseInterceptor', { enabled: !!enabled, window: window || null }),
+                            setZoom:          (factor, window) => call('__ks.window.setZoom', { factor: Number(factor) || 1.0, window: window || null }),
+                            getZoom:          () => call('__ks.window.getZoom'),
+                            print:            (opts) => call('__ks.window.print', { systemDialog: !!(opts && opts.systemDialog), window: (opts && opts.window) || null }),
+                            capturePreview:   (opts) => call('__ks.window.capturePreview', { format: (opts && opts.format) || 'png', window: (opts && opts.window) || null }),
+                            displays:         () => call('__ks.window.displays'),
+                            currentDisplay:   (window) => call('__ks.window.currentDisplay', window ? { window } : {}),
+                            setTaskbarProgress: (type, value, window) => call('__ks.window.setTaskbarProgress', { progress: { type: String(type || 'none'), value: value !== undefined ? Number(value) : undefined }, window: window || null }),
+                            setOverlayIcon:   (iconPath, description, window) => call('__ks.window.setOverlayIcon', { iconPath: iconPath || null, description: description || null, window: window || null }),
+                            startDrag:        () => call('__ks.window.startDrag'),
+                          });
+
+                          // ---- 셸 ----
+                          const Shell = Object.freeze({
+                            openExternal:     (url) => call('__ks.shell.openExternal', { url: String(url) }),
+                            showItemInFolder: (path) => call('__ks.shell.showItemInFolder', { url: String(path) }),
+                            moveToTrash:      (path) => call('__ks.shell.moveToTrash', { url: String(path) }),
+                          });
+
+                          // ---- 다이얼로그 ----
+                          const Dialog = Object.freeze({
+                            openFile:     (opts) => call('__ks.dialog.openFile', opts || {}),
+                            saveFile:     (opts) => call('__ks.dialog.saveFile', opts || {}),
+                            selectFolder: (opts) => call('__ks.dialog.selectFolder', opts || {}),
+                            message:      (opts) => call('__ks.dialog.message', opts || {}),
+                          });
+
+                          // ---- 클립보드 ----
+                          const Clipboard = Object.freeze({
+                            readText:  () => call('__ks.clipboard.readText'),
+                            writeText: (text) => call('__ks.clipboard.writeText', { text: String(text) }),
+                            clear:     () => call('__ks.clipboard.clear'),
+                            hasFormat: (format) => call('__ks.clipboard.hasFormat', { format: String(format) }),
+                          });
+
+                          // ---- 앱 ----
+                          const App = Object.freeze({
+                            quit:        () => call('__ks.app.quit'),
+                            environment: () => call('__ks.environment'),
+                            hide:        () => call('__ks.window.hide'),
+                            show:        () => call('__ks.window.show'),
+                          });
+
+                          // ---- 이벤트 ----
+                          const Events = Object.freeze({
+                            on(event, cb)   { return KB.listen(event, cb); },
+                            off(event, cb)  {
+                              const set = listeners.get(event);
+                              if (set) set.delete(cb);
+                            },
+                            once(event, cb) {
+                              const off = KB.listen(event, (payload) => {
+                                try { off(); } finally { cb(payload); }
+                              });
+                              return off;
+                            },
+                            offAll(event)   {
+                              if (event === undefined) listeners.clear();
+                              else listeners.delete(event);
+                            },
+                            emit: KB.emit,
+                          });
+
+                          // ---- 로그 ----
+                          function logAt(level) {
+                            return function (...args) {
+                              const text = args.map(a =>
+                                (typeof a === 'string') ? a
+                                  : (a instanceof Error) ? (a.stack || a.message)
+                                  : (() => { try { return JSON.stringify(a); } catch (_) { return String(a); } })()
+                              ).join(' ');
+                              try { call('__ks.log', { level, message: text }).catch(() => {}); }
+                              catch (_) { /* registry may not be wired yet */ }
+                              const fn = console[level === 'trace' ? 'debug' : (level === 'warn' ? 'warn' : (level === 'error' ? 'error' : 'log'))];
+                              try { fn.apply(console, args); } catch (_) {}
+                            };
+                          }
+                          const Log = Object.freeze({
+                            trace: logAt('trace'),
+                            debug: logAt('debug'),
+                            info:  logAt('info'),
+                            warn:  logAt('warn'),
+                            error: logAt('error'),
+                          });
+
+                          const Root = Object.freeze({
+                            invoke: KB.invoke,
+                            listen: KB.listen,
+                            emit:   KB.emit,
+                            window: Win,
+                            shell:  Shell,
+                            dialog: Dialog,
+                            clipboard: Clipboard,
+                            app:    App,
+                            events: Events,
+                            log:    Log,
+                          });
+
+                          window.__KS_ = Root;
+                          if (!window.Kalsae) window.Kalsae = Root;
 
                           window.__KS_receive = handleInbound;
                         })();
@@ -125,6 +280,11 @@
             self.inbound = handler
         }
 
+        /// 현재 WKWebView의 frame bounds. RFC-008 #2.9 — 윈도우 상태 영속화의
+        /// 캡처 소스로 사용된다. iOS는 사용자가 조작 가능한 윈도우 위치/크기 개념이
+        /// 없어 화면 크기와 거의 동일한 값을 반환한다.
+        public var currentBounds: CGRect { webView.bounds }
+
         public func navigate(url: String) throws(KSError) {
             guard let u = URL(string: url) else {
                 throw KSError(code: .webviewInitFailed, message: "Invalid URL: \(url)")
@@ -137,7 +297,11 @@
         }
 
         public func postJSON(_ json: String) throws(KSError) {
-            let script = "window.__KS_receive(\(json));"
+            // RFC-005 §4.8: U+2028/U+2029 이스케이프
+            let safe = json
+                .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+                .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+            let script = "window.__KS_receive(\(safe));"
             webView.evaluateJavaScript(script) { _, err in
                 if let err {
                     KSLog.logger("platform.ios.webview")
@@ -156,6 +320,62 @@
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: false)
             userContentController.addUserScript(us)
+        }
+
+        // MARK: - RFC-008 §4.2 보안 핸들러 (macOS Phase 2와 동일 패턴)
+
+        private var securityDelegate: KSiOSSecurityDelegate?
+        private var navigationDelegate: KSiOSNavigationDelegate?
+        private var contextMenuScriptInstalled = false
+        private var externalDropScriptInstalled = false
+
+        /// 우클릭/롱프레스 컨텍스트 메뉴 비활성화. iOS에서는 텍스트 선택 메뉴와
+        /// 링크 롱프레스가 해당된다.
+        public func setDefaultContextMenusEnabled(_ enabled: Bool) {
+            guard !enabled else { return }
+            if contextMenuScriptInstalled { return }
+            contextMenuScriptInstalled = true
+            let us = WKUserScript(
+                source: KSiOSSecurityScripts.disableContextMenu,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false)
+            userContentController.addUserScript(us)
+        }
+
+        /// 외부 파일 드롭 비활성화. iOS는 데스크톱 드래그&드롭이 제한적이지만
+        /// iPadOS Drop interaction은 가능하므로 JS 차단을 적용한다.
+        public func setAllowExternalDrop(_ allow: Bool) {
+            guard !allow else { return }
+            if externalDropScriptInstalled { return }
+            externalDropScriptInstalled = true
+            let us = WKUserScript(
+                source: KSiOSSecurityScripts.disableExternalDrop,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: false)
+            userContentController.addUserScript(us)
+        }
+
+        /// 팝업 차단 + 외부 URL 라우팅 + 권한 거부.
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            let sec = securityDelegate ?? KSiOSSecurityDelegate()
+            sec.allowPopups = allowPopups
+            sec.openExternal = openExternal
+            self.securityDelegate = sec
+            self.webView.uiDelegate = sec
+
+            let nav = navigationDelegate ?? KSiOSNavigationDelegate()
+            nav.openExternal = openExternal
+            self.navigationDelegate = nav
+            self.webView.navigationDelegate = nav
+        }
+
+        /// 파일 드롭 emitter — iOS WKWebView는 외부 가로채기 API가 없어 stub.
+        public func installFileDropEmitter() throws(KSError) {
+            KSLog.logger("platform.ios.webview").warning(
+                "iOS installFileDropEmitter() is a stub — UIDropInteraction 통합은 후속 작업.")
         }
 
         public func openDevTools() throws(KSError) {

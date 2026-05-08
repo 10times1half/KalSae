@@ -131,6 +131,12 @@ struct BuildCommand: ParsableCommand {
     )
     var parallelBuild: Bool = true
 
+    func validate() throws {
+        if let jobs, jobs < 1 {
+            throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
+        }
+    }
+
     func run() throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)

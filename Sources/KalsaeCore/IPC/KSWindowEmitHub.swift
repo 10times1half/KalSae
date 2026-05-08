@@ -46,9 +46,17 @@ public final class KSWindowEmitHub: Sendable {
             }
             try sink(event, payload)
         } else {
+            // 한 sink가 throw해도 나머지 창에 계속 전파한다. 첫 에러만 보관 후
+            // 루프 종료 시 다시 던져 호출자가 알 수 있게 한다 (RFC-005 §4.3).
+            var firstError: KSError?
             for sink in sinks.values {
-                try sink(event, payload)
+                do {
+                    try sink(event, payload)
+                } catch {
+                    if firstError == nil { firstError = error }
+                }
             }
+            if let firstError { throw firstError }
         }
     }
 }

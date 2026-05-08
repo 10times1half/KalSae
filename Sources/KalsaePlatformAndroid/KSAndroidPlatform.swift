@@ -55,6 +55,16 @@
             configure: @Sendable (any KSPlatform) async throws(KSError) -> Void
         ) async throws(KSError) -> Never {
             _ = config
+            // RFC-008 #2.10: Android의 Activity 생명주기는 JVM이 관리하므로
+            // Swift `run()`이 메인 루프를 점유할 수 없다. 이 메서드는 영구
+            // 미지원이며, configure 클로저에서 백엔드(`self.windows` 등)에
+            // 접근하면 Kotlin 호스트와 분리된 인스턴스를 만지는 것이므로
+            // 의도대로 동작하지 않을 수 있음을 경고로 알린다.
+            KSLog.logger("platform.android").warning(
+                "KSAndroidPlatform.run() is permanently unsupported. The configure "
+                    + "closure will execute, but backends accessed via `self` are "
+                    + "decoupled from the Kotlin Activity host. Use KSApp.boot() with "
+                    + "KSAndroidDemoHost instead.")
             try await configure(self)
             throw KSError.unsupportedPlatform(
                 "KSAndroidPlatform.run() is permanently unsupported — Android lifecycle "
@@ -109,6 +119,9 @@
 
         public func close(_ handle: KSWindowHandle) async throws(KSError) {
             await registry.close(handle)
+            await MainActor.run {
+                KSWindowEmitHub.shared.unregister(label: handle.label)
+            }
         }
 
         public func show(_ handle: KSWindowHandle) async throws(KSError) {

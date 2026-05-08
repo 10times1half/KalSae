@@ -85,6 +85,12 @@ struct DevCommand: ParsableCommand {
         help: "WebView2 SDK version to fetch when auto-fetching (default: latest).")
     var webview2SdkVersion: String = "latest"
 
+    func validate() throws {
+        if let jobs, jobs < 1 {
+            throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
+        }
+    }
+
     func run() throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)

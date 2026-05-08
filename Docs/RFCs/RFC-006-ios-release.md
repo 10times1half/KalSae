@@ -5,7 +5,7 @@
 | 상태 | 초안 (Draft) |
 | 날짜 | 2026-05-09 |
 | 영향 범위 | `KalsaePlatformIOS`, `KalsaeCLI` (PackagerIOS, BuildCommand), `Kalsae` (KSApp) |
-| 관련 | RFC-002 (build-perf), `PackagerMac.swift`, `BuildCommand.swift` |
+| 관련 | `PackagerMac.swift`, `BuildCommand.swift` |
 
 ---
 

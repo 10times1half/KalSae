@@ -51,6 +51,7 @@
         public func close(_ handle: KSWindowHandle) async throws(KSError) {
             await MainActor.run {
                 KSiOSHandleRegistry.shared.unregister(handle)
+                KSWindowEmitHub.shared.unregister(label: handle.label)
             }
         }
 

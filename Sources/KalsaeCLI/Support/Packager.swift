@@ -508,12 +508,61 @@ public enum KSPackager {
 
     /// 증분 빌드 안전 덤프. dst 가 이미 존재하면 `removeItem` 후 복사하여
     /// `NSFileWriteFileExistsError` 를 회피한다.
+    ///
+    /// Windows 의 Defender / Search Indexer 가 방금 만든 exe/DLL 핸들을 잠시
+    /// 들고 있을 때 `removeItem` 또는 `copyItem` 이 `ERROR_SHARING_VIOLATION`
+    /// (Win32 32) 로 실패할 수 있다. 짧은 retry 로 대응한다 (RFC-002 follow-up).
     private static func safeCopy(from src: URL, to dst: URL, fm: FileManager = .default) throws {
-        if fm.fileExists(atPath: dst.path) {
-            try fm.removeItem(at: dst)
+        try retryingTransient {
+            if fm.fileExists(atPath: dst.path) {
+                try fm.removeItem(at: dst)
+            }
+            try fm.copyItem(at: src, to: dst)
         }
-        try fm.copyItem(at: src, to: dst)
     }
+
+    /// Windows 파일 잠금/공유 위반에 대한 짧은 backoff retry.
+    /// 비-Windows 에서는 한 번만 시도한다.
+    private static func retryingTransient(
+        attempts: Int = 3,
+        delay: TimeInterval = 0.05,
+        _ work: () throws -> Void
+    ) throws {
+        #if os(Windows)
+            var lastError: (any Error)?
+            for attempt in 0..<attempts {
+                do {
+                    try work()
+                    return
+                } catch let error as NSError where isTransientFileError(error) {
+                    lastError = error
+                    if attempt < attempts - 1 {
+                        Thread.sleep(forTimeInterval: delay)
+                    }
+                }
+            }
+            if let lastError { throw lastError }
+        #else
+            try work()
+        #endif
+    }
+
+    #if os(Windows)
+        private static func isTransientFileError(_ error: NSError) -> Bool {
+            // Win32 ERROR_SHARING_VIOLATION (32), ERROR_ACCESS_DENIED (5)
+            // — Foundation 은 이를 NSPOSIXErrorDomain (EBUSY/EACCES) 또는
+            // NSCocoaErrorDomain (NSFileWriteNoPermissionError) 로 노출한다.
+            if error.domain == NSPOSIXErrorDomain {
+                // EBUSY=16, EACCES=13 — ucrt errno 헤더 import 회피용 raw value.
+                return error.code == 16 || error.code == 13
+            }
+            if error.domain == NSCocoaErrorDomain {
+                return error.code == NSFileWriteNoPermissionError
+                    || error.code == NSFileWriteFileExistsError
+            }
+            return false
+        }
+    #endif
 
     private static func copyTree(from src: URL, to dst: URL) throws {
         let fm = FileManager.default
@@ -560,6 +609,10 @@ public enum KSPackager {
         let iconName: String
         let version: String
         let identifier: String
+        // RFC-002 follow-up: strip 옵션 토글 시에도 fingerprint mismatch 로 자동
+        // 전체 재생성. 미지정 시 false/[] 로 폴백되어 이전 빌드 schema 와도 호환.
+        var stripSourceMaps: Bool = false
+        var stripExtensions: [String] = []
 
         static func from(_ opts: Options) -> Fingerprint {
             Fingerprint(
@@ -568,7 +621,9 @@ public enum KSPackager {
                 exeName: "\(opts.appName).exe",
                 iconName: opts.iconPath?.lastPathComponent ?? "",
                 version: opts.version,
-                identifier: opts.identifier)
+                identifier: opts.identifier,
+                stripSourceMaps: opts.stripSourceMaps,
+                stripExtensions: opts.stripExtensions.sorted())
         }
 
         static func load(at url: URL) -> Fingerprint? {

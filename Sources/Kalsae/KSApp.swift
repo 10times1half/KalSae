@@ -473,6 +473,10 @@ public final class KSApp {
         }()
 
         // 모든 플랫폼: JS `__ks.*` 내장 명령 등록.
+        // RFC-008 #2.11~2.15: `KSPlatform`이 보유한 백엔드 인스턴스를 그대로
+        // 주입해 데모 호스트가 새 인스턴스를 만들지 않도록 한다. 이로써
+        // `__ks.window.create`로 만든 핸들과 `KSPlatform.windows`가 동일한
+        // 레지스트리를 공유한다.
         await concrete.registerBuiltinCommands(
             platformName: platform.name,
             shellScope: config.security.shell,
@@ -481,7 +485,12 @@ public final class KSApp {
             httpScope: config.security.http,
             autostart: autostartBackend,
             deepLink: deepLinkPair,
-            appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
+            appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
+            windows: platform.windows,
+            shell: platform.shell,
+            clipboard: platform.clipboard,
+            notifications: platform.notifications,
+            dialogs: platform.dialogs)
 
         let app = KSApp(
             config: config, registry: registry,

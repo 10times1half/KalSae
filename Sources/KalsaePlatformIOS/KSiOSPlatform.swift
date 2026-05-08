@@ -65,6 +65,19 @@
 
             let host = try KSiOSDemoHost(windowConfig: window, registry: commandRegistry)
 
+            // RFC-008 #2.9: 윈도우 상태 영속화. iOS는 UIKit이 layout을 관리하므로
+            // 캡처/복원의 의미가 제한적이지만 API 일관성을 위해 sink를 등록한다.
+            let stateStore: KSWindowStateStore? =
+                window.persistState
+                ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
+                : nil
+            if let store = stateStore {
+                let label = window.label
+                host.setWindowStateSaveSink { state in
+                    _ = store.save(label: label, state: state)
+                }
+            }
+
             let resourceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent(config.build.frontendDist)
             let servingMode = Self.decideServingMode(
@@ -129,8 +142,10 @@
                 deepLink: deepLinkPair,
                 appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
 
-            try await configure(self)
-
+            // RFC-008 #2.7: Win/Mac/Linux와 동일하게 `start()` 이후에
+            // `configure(self)`를 호출한다. 이전에는 configure가 먼저 호출되어
+            // configure 클로저 안에서 `host.emit()`을 부르면 웹뷰가 아직
+            // navigate 되지 않아 메시지가 유실되는 문제가 있었다.
             #if DEBUG
                 let effectiveDevtools = config.security.devtools
             #else
@@ -142,6 +157,24 @@
                     devServerURL: config.build.devServerURL,
                     servingMode: servingMode),
                 devtools: effectiveDevtools)
+
+            // RFC-008 §4.2: 보안 설정 적용 — Win/Mac/Linux 패턴과 통일.
+            if config.security.contextMenu == .disabled {
+                host.setDefaultContextMenusEnabled(false)
+            }
+            if !config.security.allowExternalDrop {
+                host.setAllowExternalDrop(false)
+                try? host.installFileDropEmitter()
+            }
+            let shellRef = _shell
+            try host.installSecurityHandlers(
+                allowPopups: config.security.allowPopups,
+                openExternal: { urlStr in
+                    guard let u = URL(string: urlStr) else { return }
+                    Task.detached { try? await shellRef.openExternal(u) }
+                })
+
+            try await configure(self)
 
             return host.runMessageLoop()
         }

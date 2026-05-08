@@ -84,6 +84,23 @@
             if case .failure(let e) = result { throw e }
         }
 
+        // MARK: startDrag (RFC-005 §4.6)
+
+        public func startDrag(_ handle: KSWindowHandle) async throws(KSError) {
+            let result: Result<Void, KSError> = await MainActor.run {
+                do {
+                    let win = try windowSync(for: handle)
+                    win.startDrag()
+                    return .success(())
+                } catch let e as KSError {
+                    return .failure(e)
+                } catch {
+                    return .failure(KSError(code: .internal, message: "\(error)"))
+                }
+            }
+            if case .failure(let e) = result { throw e }
+        }
+
         // MARK: - Private helpers
 
         /// `KSTaskbarProgress`를 `KSWV2_TaskbarState` + value (0–100)로 변환한다.

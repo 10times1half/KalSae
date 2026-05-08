@@ -254,5 +254,12 @@ extension KSBuiltinCommands {
                 h, iconPath: args.iconPath, description: args.description)
             return Empty()
         }
+
+        // 창 드래그 시작 (RFC-005 §4.6, 데스크톱 전용; 모바일 no-op).
+        await register(registry, "__ks.window.startDrag") { _ throws(KSError) -> Empty in
+            let h = try await resolver.resolve(window: nil)
+            try await windows.startDrag(h)
+            return Empty()
+        }
     }
 }

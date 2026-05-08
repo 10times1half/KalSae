@@ -62,6 +62,24 @@
             webViewHost.setCrossOriginIsolation(enabled)
         }
 
+        // RFC-008 §4.2 — 보안 핸들러 프록시.
+        public func setDefaultContextMenusEnabled(_ enabled: Bool) {
+            webViewHost.setDefaultContextMenusEnabled(enabled)
+        }
+        public func setAllowExternalDrop(_ allow: Bool) {
+            webViewHost.setAllowExternalDrop(allow)
+        }
+        public func installFileDropEmitter() throws(KSError) {
+            try webViewHost.installFileDropEmitter()
+        }
+        public func installSecurityHandlers(
+            allowPopups: Bool,
+            openExternal: (@MainActor (String) -> Void)?
+        ) throws(KSError) {
+            try webViewHost.installSecurityHandlers(
+                allowPopups: allowPopups, openExternal: openExternal)
+        }
+
         /// URL을 저장한다; 실제 탐색은 `UIWindow`이 존재하면
         /// `onWindowReady`에서 실행된다.
         public func start(url: String, devtools: Bool) throws(KSError) {
@@ -133,7 +151,29 @@
         public func setWindowStateSaveSink(
             _ sink: (@MainActor (KSPersistedWindowState) -> Void)?
         ) {
-            _ = sink
+            // RFC-008 #2.9: iOS는 UIKit이 윈도우 layout을 전적으로 관리하므로
+            // 사용자가 조작할 수 있는 위치/크기 개념이 사실상 없다. 그러나
+            // API 일관성을 위해 백그라운드 진입 시점(KSiOSLifecycleRelay)에서
+            // 화면 bounds를 캡처해 sink로 전달한다. 복원은 UIKit의 상태 복원
+            // 메커니즘이 담당하므로 본 호스트에서는 별도 적용 로직이 없다.
+            //
+            // 주의: 기존 `setOnSuspend`도 동일한 relay를 사용하므로 둘 중 하나만
+            // 사용해야 한다(나중에 호출된 콜백이 이전 콜백을 덮어쓴다).
+            guard let sink else {
+                KSiOSLifecycleRelay.shared.onSuspend = nil
+                return
+            }
+            KSiOSLifecycleRelay.shared.onSuspend = { [weak webViewHost] in
+                let bounds = webViewHost?.currentBounds ?? .zero
+                let state = KSPersistedWindowState(
+                    x: Int(bounds.origin.x),
+                    y: Int(bounds.origin.y),
+                    width: Int(bounds.size.width),
+                    height: Int(bounds.size.height),
+                    maximized: false,
+                    fullscreen: false)
+                sink(state)
+            }
         }
 
         /// JS `__ks.*` 내장 명령을 레지스트리에 등록한다.
@@ -148,18 +188,25 @@
             httpScope: KSHTTPScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
-            appDirectory: URL? = nil
+            appDirectory: URL? = nil,
+            // RFC-008 #2.12: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
+            // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
+            windows: (any KSWindowBackend)? = nil,
+            shell: (any KSShellBackend)? = nil,
+            clipboard: (any KSClipboardBackend)? = nil,
+            notifications: (any KSNotificationBackend)? = nil,
+            dialogs: (any KSDialogBackend)? = nil
         ) async {
             let cachedHandle = _mainHandle
             let mainProvider: @Sendable () -> KSWindowHandle? = { cachedHandle }
             let quitBlock: @Sendable () -> Void = { [weak self] in self?.requestQuit() }
             await KSBuiltinCommands.register(
                 into: registry,
-                windows: KSiOSWindowBackend(),
-                shell: KSiOSShellBackend(),
-                clipboard: KSiOSClipboardBackend(),
-                notifications: KSiOSNotificationBackend(),
-                dialogs: KSiOSDialogBackend(),
+                windows: windows ?? KSiOSWindowBackend(),
+                shell: shell ?? KSiOSShellBackend(),
+                clipboard: clipboard ?? KSiOSClipboardBackend(),
+                notifications: notifications ?? KSiOSNotificationBackend(),
+                dialogs: dialogs ?? KSiOSDialogBackend(),
                 mainWindow: mainProvider,
                 quit: quitBlock,
                 platformName: platformName,

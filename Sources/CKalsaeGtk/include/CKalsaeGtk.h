@@ -317,6 +317,30 @@ void ks_gtk_host_set_close_handler(KSGtkHost *host,
                                     KSGtkCloseHandlerFn cb,
                                     void *ctx);
 
+/* ----------------------------------------------------------------
+ * RFC-008 §2.4 — WebView 보안 핸들러
+ * ---------------------------------------------------------------- */
+
+/** 우클릭 컨텍스트 메뉴 활성화 토글. enabled=0이면 모든 기본 컨텍스트
+ *  메뉴(`Reload`, `Inspect`, `Copy` 등)를 차단한다. DEBUG에서도 일관된
+ *  동작 — Web Inspector는 별도 윈도우로 열린다. */
+void ks_gtk_host_set_context_menu_enabled(KSGtkHost *host, int enabled);
+
+/** 외부 파일 드롭 허용 토글. 본 함수는 플래그만 보관하며, 실제 차단은
+ *  JS 사용자 스크립으로 보강한다(WebKitGTK는 외부에서 GtkDropTarget을
+ *  가로챌 공식 API가 없음). */
+void ks_gtk_host_set_allow_external_drop(KSGtkHost *host, int allow);
+
+/** 팝업 차단(`window.open` / `target=_blank`) 토글 + 외부 URL 라우팅 콜백.
+ *  enabled=1이면 새 윈도우 요청을 차단하고 `on_external_url`을 호출한다.
+ *  enabled=0이면 디폴트 동작(허용)으로 복구된다. on_external_url=NULL은
+ *  라우팅 없이 차단만 수행한다. */
+void ks_gtk_host_set_popup_blocking(
+    KSGtkHost *host,
+    int enabled,
+    void (*on_external_url)(const char *url, void *ctx),
+    void *ctx);
+
 /** enabled=1일 때 다른 모든 윈도우 위에 유지하고
  *  enabled=0이면 일반 스태킹으로 복원한다.
  *  Wayland 컴포지터는 이 요청을 임묵 무시할 수 있다.         */

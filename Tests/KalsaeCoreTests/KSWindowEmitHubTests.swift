@@ -96,6 +96,33 @@ struct KSWindowEmitHubTests {
         #expect(recOld.events.isEmpty)
         #expect(recNew.events.count == 1)
     }
+
+    // RFC-005 §5.1: broadcast must continue past failing sinks and rethrow
+    // the first error — not abort on the first failure.
+    @Test("broadcast continues past failing sinks and rethrows first error")
+    func broadcastContinuesOnFailure() {
+        let hub = KSWindowEmitHub(_testIsolated: ())
+        let rec = ReceivedEvent()
+
+        // win-a always throws
+        hub.register(label: "win-a") { _, _ throws(KSError) in
+            throw KSError(code: .internal, message: "fail-a")
+        }
+        // win-b succeeds and records
+        hub.register(label: "win-b", sink: makeSink(label: "win-b", recorder: rec))
+        // win-c also throws (a different error)
+        hub.register(label: "win-c") { _, _ throws(KSError) in
+            throw KSError(code: .internal, message: "fail-c")
+        }
+
+        #expect(throws: KSError.self) {
+            try hub.emit(event: "ping", payload: "x", to: String?.none)
+        }
+
+        // win-b must have received the event despite win-a throwing first.
+        #expect(rec.events.count == 1)
+        #expect(rec.events[0].window == "win-b")
+    }
 }
 
 // ──────────────────────────────────────────────────────────────────────
