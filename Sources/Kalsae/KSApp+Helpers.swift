@@ -1,4 +1,7 @@
 internal import Foundation
+#if canImport(FoundationNetworking)
+    internal import FoundationNetworking
+#endif
 
 extension KSApp {
 
@@ -61,5 +64,44 @@ extension KSApp {
         if trimmed.lowercased() == "about:blank" { return false }
         let lower = trimmed.lowercased()
         return lower.hasPrefix("http://") || lower.hasPrefix("https://")
+    }
+
+    /// Best-effort reachability probe for a dev-server origin. Issues a single
+    /// `HEAD` (falling back to `GET`) and returns whether *any* HTTP response
+    /// was received within `timeout` seconds. Network errors, DNS failures, and
+    /// timeouts all return `false` — even non-2xx responses count as
+    /// "something is listening", which is enough to prefer the dev server.
+    ///
+    /// 동기 함수다 — `decideServingMode` 가 동기이므로 `DispatchSemaphore` 로
+    /// 결과를 기다린다. `decideServingMode` 는 부팅 1회만 호출되므로 200ms
+    /// 정도의 가벼운 블로킹은 허용 가능하다.
+    internal static func isDevServerReachable(
+        _ urlString: String, timeout: TimeInterval = 0.25
+    ) -> Bool {
+        guard let url = URL(string: urlString) else { return false }
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = timeout
+        cfg.timeoutIntervalForResource = timeout
+        let session = URLSession(configuration: cfg)
+        defer { session.finishTasksAndInvalidate() }
+
+        var req = URLRequest(url: url, timeoutInterval: timeout)
+        req.httpMethod = "HEAD"
+
+        let semaphore = DispatchSemaphore(value: 0)
+        // `nonisolated(unsafe)` so a single-shot mutation inside the URLSession
+        // delegate queue is reachable here without crossing isolation boundaries.
+        nonisolated(unsafe) var ok = false
+        let task = session.dataTask(with: req) { _, response, error in
+            if error == nil, response is HTTPURLResponse {
+                ok = true
+            }
+            semaphore.signal()
+        }
+        task.resume()
+        // 약간의 슬랙(50ms)을 더해 URLSession 내부 스케줄 지연을 흡수.
+        _ = semaphore.wait(timeout: .now() + timeout + 0.05)
+        if !ok { task.cancel() }
+        return ok
     }
 }

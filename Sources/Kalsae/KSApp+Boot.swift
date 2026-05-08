@@ -63,7 +63,16 @@ extension KSApp {
         // 사용해 정책 일관성을 맞춘다.
         if urlOverride == nil, windowURL == nil, devIsRemote {
             #if DEBUG
-                return .devServer
+                // DEBUG 에서도 dev 서버가 실제로 응답하지 않으면 가상 호스트로
+                // 폴백한다. Vite 가 안 떠 있을 때 `chrome-error://` 가 뜨는
+                // 흰 화면을 막는다. probe 가 200ms+슬랙 으로 짧기 때문에
+                // 부팅 지연은 사실상 무시 가능.
+                if isDevServerReachable(devServerURL) {
+                    return .devServer
+                }
+                KSLog.logger("kalsae.app").warning(
+                    "dev server unreachable at \(devServerURL); falling back to virtualHost/file"
+                )
             #endif
             // release: 가상 호스트 / fallback 분기로 떨어진다.
         }
