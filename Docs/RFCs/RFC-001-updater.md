@@ -52,8 +52,13 @@ let updater = KSUpdaterPlugin(config: KSUpdaterConfig(
     installMode: .quitAndInstall  // 또는 .installOnNextLaunch
 ))
 
-try await KSApp.shared.install([updater])
+// app은 KSApp.boot()이 반환한 인스턴스. boot() 이후, run() 이전에 호출한다.
+try await app.install([updater])
 ```
+
+> **설계 참고:** `KSUpdaterConfig`는 코드에서만 구성되며, `Kalsae.json`에
+> 별도 필드를 추가하지 않는다. updater는 선택적 플러그인(opt-in)이므로
+> config 스키마 오염을 방지하기 위함이다.
 
 ### 3.2 KSUpdaterConfig
 
@@ -74,6 +79,14 @@ public struct KSUpdaterConfig: Sendable {
     /// 프록시 URL (nil = 시스템 설정 사용)
     public var proxyURL: URL?
 }
+```
+
+> **앱 종료 접근 방식:** `KSApp`에는 싱글톤(`shared`)이 없다.
+> 플러그인은 `setup(_:)`에서 전달받는 `KSPluginContext`를 통해
+> 앱 종료를 요청한다. 이를 위해 구현 시 `KSPluginContext` 프로토콜에
+> `func quit()` 메서드를 추가한다 (§10 참조).
+
+```swift
 
 public enum KSInstallMode: Sendable {
     /// 다운로드 완료 즉시 앱 종료 후 인스톨러 실행
@@ -182,7 +195,23 @@ Tauri와 동일한 알고리즘을 채택한다. 이유:
 - 키 크기 작음 (32바이트 공개 키 → Base64 44자)
 - 빠른 검증 (RSA 대비 현저히 빠름)
 - 결정론적 서명 (랜덤 nonce 없음 → 재현 가능)
-- Swift의 `CryptoKit.Curve25519.Signing` API로 구현 가능
+- Swift의 `Curve25519.Signing` API로 구현 가능
+
+### 플랫폼별 import 전략
+
+macOS/iOS는 시스템 프레임워크 `CryptoKit`을 사용하고,
+Windows/Linux는 `CryptoKit`을 제공하지 않으므로 Apple의
+[swift-crypto](https://github.com/apple/swift-crypto) 패키지를 사용한다.
+
+```swift
+#if canImport(CryptoKit)
+import CryptoKit      // macOS, iOS
+#else
+import Crypto         // Windows, Linux (apple/swift-crypto)
+#endif
+```
+
+`Package.swift`에 조건부 의존성을 추가한다 (§10 참조).
 
 ### 서명 대상
 배포 파일 전체의 SHA-256 해시값(32바이트)에 대해 Ed25519 서명을 생성한다.
@@ -204,6 +233,9 @@ kalsae updater keygen
 ```
 
 ### 검증 흐름
+
+아래에서 사용하는 `checksumMismatch`, `signatureVerificationFailed`는
+현재 `KSError.Code`에 존재하지 않는 새 코드이다. 구현 시점에 추가한다 (§10 참조).
 
 ```
 다운로드 완료
@@ -248,8 +280,8 @@ Linux:   /tmp/kalsae-updates/{version}/{filename}
 let installer = downloadedPath
 // /S = 자동 무인 설치, /D=설치경로 (NSIS)
 Process.launchDetached(installer, args: ["/S"])
-// 앱 종료
-KSApp.shared.quit()
+// 앱 종료 — ctx는 setup()에서 캡처한 KSPluginContext
+ctx.quit()
 ```
 - **NSIS**: `/S` 무인 플래그. 인스톨러가 같은 경로에 덮어쓴다.
 - **MSI**: `msiexec /i {path} /qn REINSTALL=ALL REINSTALLMODE=vomus`
@@ -259,7 +291,7 @@ KSApp.shared.quit()
 // 1. hdiutil attach {dmg} -mountpoint /Volumes/KalsaeUpdate
 // 2. ditto /Volumes/KalsaeUpdate/{App.app} /Applications/{App.app}
 // 3. hdiutil detach /Volumes/KalsaeUpdate
-// 4. KSApp.shared.quit()
+// 4. ctx.quit()  — ctx는 setup()에서 캡처한 KSPluginContext
 //    → 재실행은 NSWorkspace.shared.open 또는 LaunchServices
 ```
 코드 서명 체크: macOS Gatekeeper가 `ditto` 후 첫 실행 시 자동 수행.
@@ -270,7 +302,7 @@ KSApp.shared.quit()
 // 2. 새 AppImage를 {현재경로}.new로 저장
 // 3. chmod +x {새경로}
 // 4. rename({새경로}, {현재경로})  — 원자적 교체
-// 5. KSApp.shared.quit()
+// 5. ctx.quit()  — ctx는 setup()에서 캡처한 KSPluginContext
 ```
 
 ---
@@ -307,8 +339,10 @@ KSApp.shared.quit()
 4. **TOCTOU 방지**: 검증(SHA-256 + Ed25519) 직후 파일 경로를 고정하고, 설치 호출
    전까지 파일을 이동하지 않는다.
 
-5. **중단 공격(downgrade attack) 방지**: 매니페스트의 버전이 현재 실행 중인 버전보다
+5. **다운그레이드 공격(downgrade attack) 방지**: 매니페스트의 버전이 현재 실행 중인
+   앱 버전(`config.app.version`, 즉 `Kalsae.json`의 `app.version` 필드)보다
    낮거나 같으면 업데이트를 제공하지 않는다. `mandatory: false`여도 동일.
+   *참고: `KSVersion.current`는 Kalsae 프레임워크 자체 버전이며 앱 버전과는 다르다.*
 
 6. **네트워크 오류 처리**: 타임아웃, DNS 실패, 비-2xx HTTP 응답 모두 `KSError`로
    래핑. 기존 설치 파일에는 영향을 주지 않는다.
@@ -322,10 +356,43 @@ RFC 승인 후 별도 사이클에서 구현한다.
 1. `Sources/KalsaePluginUpdater/` 모듈 신설
    - `KSUpdaterConfig.swift`, `KSUpdaterPlugin.swift`, `KSUpdateDownloader.swift`
    - `KSUpdateInstaller+Windows.swift`, `KSUpdateInstaller+Mac.swift`, `KSUpdateInstaller+Linux.swift`
-   - `KSUpdateSignatureVerifier.swift` (CryptoKit.Curve25519 사용)
-2. `Package.swift` 타겟/제품 추가
-3. `KalsaeCLI`에 `kalsae updater keygen` 서브커맨드 추가
-4. 테스트: `Tests/KalsaePluginUpdaterTests/`
+   - `KSUpdateSignatureVerifier.swift` (§5 플랫폼별 import 전략 참조)
+2. `KSError.Code`에 updater 전용 에러 코드 추가
+   - `checksumMismatch` — SHA-256 해시 불일치
+   - `signatureVerificationFailed` — Ed25519 서명 검증 실패
+   - `insecureURL` — `https://`가 아닌 URL 거부 (§9.1)
+3. `KSPluginContext` 프로토콜 확장
+   - `func quit()` 메서드 추가 — 플러그인이 앱 종료를 요청할 수 있도록
+   - `DefaultPluginContext`에서 `app.quit()` 위임 구현
+4. `Package.swift` 타겟/제품 추가 (`KalsaePluginProcess` 패턴 참조)
+   ```swift
+   // 의존성 (Windows/Linux에서 CryptoKit 미지원이므로 swift-crypto 필요)
+   .package(url: "https://github.com/apple/swift-crypto.git", from: "3.0.0"),
+
+   // 타겟
+   .target(
+       name: "KalsaePluginUpdater",
+       dependencies: [
+           "KalsaeCore",
+           .product(name: "Crypto", package: "swift-crypto",
+                    condition: .when(platforms: [.windows, .linux])),
+       ],
+       path: "Sources/KalsaePluginUpdater",
+       swiftSettings: commonSwiftSettings
+   ),
+   .library(
+       name: "KalsaePluginUpdater",
+       targets: ["KalsaePluginUpdater"]
+   ),
+   .testTarget(
+       name: "KalsaePluginUpdaterTests",
+       dependencies: ["KalsaePluginUpdater", "KalsaeCore"],
+       path: "Tests/KalsaePluginUpdaterTests",
+       swiftSettings: commonSwiftSettings
+   ),
+   ```
+5. `KalsaeCLI`에 `kalsae updater keygen` 서브커맨드 추가
+6. 테스트: `Tests/KalsaePluginUpdaterTests/`
    - 매니페스트 파싱 + 버전 비교 단위 테스트
    - 서명 검증 단위 테스트 (알려진 키 쌍으로 픽스처 사용)
    - 모의 HTTP 서버로 다운로드 흐름 통합 테스트
