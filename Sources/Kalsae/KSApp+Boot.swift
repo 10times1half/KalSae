@@ -84,7 +84,12 @@ extension KSApp {
 
     /// 윈도우에 로드할 실제 URL 문자열을 결정한다. 우선순위:
     /// 호출별 오버라이드 → 윈도우별 URL → 가상 호스트 기본값
-    /// → 라이브 dev 서버 → 원시 `devServerURL` 폴백.
+    /// → 라이브 dev 서버 → fallback 분기는 진단 `data:` URL 로 대체.
+    ///
+    /// `.fallback` 은 "가상 호스트도 없고 dev 서버도 응답하지 않는다"는 의미라
+    /// `devServerURL` 로 바로 navigate 하면 결국 `chrome-error://chromewebdata/`
+    /// 흰 화면이 된다. 대신 시도한 URL 과 다음 단계 안내가 든 진단 페이지를
+    /// 띄워 사용자가 즉시 원인을 알 수 있게 한다.
     static func resolveStartURL(
         urlOverride: String?,
         windowURL: String?,
@@ -102,8 +107,10 @@ extension KSApp {
                 // 핸들러를 등록할 수 없다. 크로스플랫폼에서 `ks://app/...`을 쓴다.
                 return "ks://app/index.html"
             #endif
-        case .devServer, .fallback:
+        case .devServer:
             return devServerURL
+        case .fallback:
+            return diagnosticDataURL(attemptedURL: devServerURL)
         }
     }
 

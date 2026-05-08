@@ -104,4 +104,70 @@ extension KSApp {
         if !ok { task.cancel() }
         return ok
     }
+
+    /// 가상 호스트도 없고 dev 서버도 응답하지 않는 폴백 상황에서 사용할
+    /// `data:text/html` URL 을 만든다. WebView 가 `chrome-error://...` 흰 화면
+    /// 대신 무엇이 일어났는지, 어떤 URL 을 시도했는지, 다음 단계가 무엇인지
+    /// 즉시 보여줄 수 있다.
+    ///
+    /// `data:` 스킴은 자체 origin 이라 호스트 CSP 와 충돌하지 않는다. 정적
+    /// 콘텐츠만 담고 인라인 스크립트를 쓰지 않으므로 보안 표면도 없다.
+    internal static func diagnosticDataURL(attemptedURL: String) -> String {
+        let safeURL = htmlEscape(attemptedURL)
+        let html = """
+            <!doctype html><html><head><meta charset="utf-8">\
+            <title>Kalsae — frontend not available</title>\
+            <style>\
+            body{font:14px/1.5 system-ui,sans-serif;margin:2.5rem;color:#222;background:#fafafa}\
+            h1{font-size:1.25rem;margin:0 0 .5rem}\
+            code{background:#eee;padding:1px 5px;border-radius:3px;font-size:.95em}\
+            ul{padding-left:1.25rem}\
+            li{margin:.25rem 0}\
+            .muted{color:#666;font-size:.9em;margin-top:1.5rem}\
+            </style></head><body>\
+            <h1>Kalsae: 프론트엔드를 불러올 수 없습니다</h1>\
+            <p>가상 호스트 자산 디렉터리도 없고, 설정된 dev 서버도 응답하지 않아 \
+            기본 페이지를 표시할 수 없습니다.</p>\
+            <p>시도한 dev 서버: <code>\(safeURL)</code></p>\
+            <h2 style="font-size:1rem;margin-top:1.5rem">다음 단계</h2>\
+            <ul>\
+            <li><code>kalsae build</code> 또는 <code>npm run build</code> 로 \
+            <code>build.frontendDist</code> 디렉터리를 생성했는지 확인하세요.</li>\
+            <li>개발 중이라면 dev 서버(예: <code>npm run dev</code>) 가 \
+            지정된 주소에서 응답하는지 확인하세요.</li>\
+            <li><code>Kalsae.json</code> 의 <code>build.devServerURL</code> / \
+            <code>build.frontendDist</code> 설정이 올바른지 확인하세요.</li>\
+            </ul>\
+            <p class="muted">This page is served as a <code>data:</code> URL by Kalsae \
+            because no frontend source could be reached.</p>\
+            </body></html>
+            """
+        // RFC 2397 - characters allowed: any printable except `#`, `%`, and
+        // some others. Percent-encode minimally for safety.
+        let allowed = CharacterSet.urlPathAllowed
+            .union(.urlQueryAllowed)
+            .union(CharacterSet(charactersIn: "<>\"' "))
+        let encoded =
+            html.addingPercentEncoding(withAllowedCharacters: allowed) ?? html
+        return "data:text/html;charset=utf-8,\(encoded)"
+    }
+
+    /// 진단 페이지에 임의의 사용자 입력(시도 URL)을 넣을 때 쓰는 최소 HTML
+    /// escaper. 외부 사용자 입력이 아닌 config 값이라 표면이 좁지만
+    /// 방어적으로 둔다.
+    private static func htmlEscape(_ s: String) -> String {
+        var out = ""
+        out.reserveCapacity(s.count)
+        for ch in s {
+            switch ch {
+            case "&": out += "&amp;"
+            case "<": out += "&lt;"
+            case ">": out += "&gt;"
+            case "\"": out += "&quot;"
+            case "'": out += "&#39;"
+            default: out.append(ch)
+            }
+        }
+        return out
+    }
 }
