@@ -72,6 +72,42 @@ struct BuildPlanTests {
             at: root.appendingPathComponent("dist"),
             allowMissingDist: true)
     }
+
+    @Test("dist validation fails when index.html is missing")
+    func distValidationMissingIndex() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("kalsae-dist-noindex-\(UUID().uuidString)")
+        let dist = root.appendingPathComponent("dist")
+        try fm.createDirectory(at: dist, withIntermediateDirectories: true)
+        // 산출물은 있지만 index.html 이 없는 상태를 흉내낸다.
+        try Data("console.log(0)".utf8).write(
+            to: dist.appendingPathComponent("app.js"))
+        defer { try? fm.removeItem(at: root) }
+
+        do {
+            try KSBuildPlan.validateFrontendDist(
+                at: dist, allowMissingDist: false)
+            Issue.record("Expected missing index.html to fail validation.")
+        } catch let error as KSBuildPlanError {
+            #expect(error.description.contains("index.html"))
+        }
+    }
+
+    @Test("dist validation passes when index.html present")
+    func distValidationWithIndex() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory
+            .appendingPathComponent("kalsae-dist-ok-\(UUID().uuidString)")
+        let dist = root.appendingPathComponent("dist")
+        try fm.createDirectory(at: dist, withIntermediateDirectories: true)
+        try Data("<html></html>".utf8).write(
+            to: dist.appendingPathComponent("index.html"))
+        defer { try? fm.removeItem(at: root) }
+
+        try KSBuildPlan.validateFrontendDist(
+            at: dist, allowMissingDist: false)
+    }
 }
 @Suite("KSDevPlan")
 struct DevPlanTests {

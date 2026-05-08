@@ -4,6 +4,7 @@ public import KalsaeCore
 public enum KSBuildPlanError: Error, CustomStringConvertible {
     case distNotFound(String)
     case distEmpty(String)
+    case missingIndex(String)
 
     public var description: String {
         switch self {
@@ -13,6 +14,9 @@ public enum KSBuildPlanError: Error, CustomStringConvertible {
         case .distEmpty(let path):
             return
                 "Frontend dist directory is empty at \(path). Run your frontend build first or pass --allow-missing-dist."
+        case .missingIndex(let path):
+            return
+                "Frontend dist at \(path) does not contain index.html. Kalsae loads index.html as the entry point — run your frontend build or pass --allow-missing-dist."
         }
     }
 }
@@ -65,6 +69,14 @@ public enum KSBuildPlan {
                 options: [.skipsHiddenFiles]))?.isEmpty == false
         guard hasEntries else {
             throw KSBuildPlanError.distEmpty(distURL.path)
+        }
+
+        // index.html sanity check — Kalsae 의 가상 호스트는 항상 `index.html` 을
+        // 엔트리로 로드한다 ([`KSApp+Boot.resolveStartURL`]). 빌드 산출물에
+        // 없으면 런타임에 흰 화면이 되므로 빌드 시점에서 차단한다.
+        let indexURL = distURL.appendingPathComponent("index.html")
+        guard fm.fileExists(atPath: indexURL.path) else {
+            throw KSBuildPlanError.missingIndex(distURL.path)
         }
     }
 }
