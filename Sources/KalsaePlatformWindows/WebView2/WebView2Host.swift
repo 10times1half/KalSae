@@ -28,9 +28,13 @@
         /// Internal so the handler-installation extension can verify init
         /// state without surface-leaking the COM pointer.
         internal private(set) var webviewPtr: KSWV2WebView?
-        // postJob용으로 백그라운드 스레드에서 접근한다. UI 스레드에서
-        // Win32Window.attach()와 동시에 한 번만 설정된다.
+        // postJob?⑹쑝濡?諛깃렇?쇱슫???ㅻ젅?쒖뿉???묎렐?쒕떎. UI ?ㅻ젅?쒖뿉??        // Win32Window.attach()? ?숈떆????踰덈쭔 ?ㅼ젙?쒕떎.
         nonisolated(unsafe) internal weak var ownerWindow: Win32Window?
+
+        /// Phase A4: Capability report populated during `initialize` based on
+        /// `KSWebViewPreferences` / `KSWebViewWindowsOptions` toggle results.
+        /// `nil` until preferences/envOptions are supplied.
+        internal private(set) var capabilityReport: KSWebViewCapabilityReport?
 
         /// Retained handler boxes. Held internal so the handler-installation
         /// extension can release/replace them.
@@ -50,11 +54,10 @@
 
         // MARK: - Synchronous creation with message pumping
         //
-        // WebView2는 완료 콜백을 생성 스레드의 STA 메시지 큐로 전달한다.
-        // 우리 UI 스레드가 바로 Swift async 실행기가 동작하는 메인 스레드이므로
-        // 이곳에서 continuation을 await하면 메시지 펄프가 굴주려 콜백이 절대
-        // 도착하지 못한다. 따라서 대기 중인 콜백이 일어날 때까지 로컬 메시지
-        // 펄프를 돌린다.
+        // WebView2???꾨즺 肄쒕갚???앹꽦 ?ㅻ젅?쒖쓽 STA 硫붿떆吏 ?먮줈 ?꾨떖?쒕떎.
+        // ?곕━ UI ?ㅻ젅?쒓? 諛붾줈 Swift async ?ㅽ뻾湲곌? ?숈옉?섎뒗 硫붿씤 ?ㅻ젅?쒖씠誘濡?        // ?닿납?먯꽌 continuation??await?섎㈃ 硫붿떆吏 ?꾪봽媛 援댁＜??肄쒕갚???덈?
+        // ?꾩갑?섏? 紐삵븳?? ?곕씪???湲?以묒씤 肄쒕갚???쇱뼱???뚭퉴吏 濡쒖뺄 硫붿떆吏
+        // ?꾪봽瑜??뚮┛??
 
         private var pendingEnv: KSWV2Env?
         private var pendingEnvError: KSError?
@@ -76,7 +79,24 @@
             hwnd: HWND, devtools: Bool,
             userDataFolderOverride: String?
         ) throws(KSError) {
-            let env = try createEnvironmentSync(userDataFolderOverride: userDataFolderOverride)
+            try initialize(
+                hwnd: hwnd, devtools: devtools,
+                userDataFolderOverride: userDataFolderOverride,
+                envOptions: nil)
+        }
+
+        /// Phase B: extended initializer that also takes Environment-level
+        /// options. `envOptions == nil` is equivalent to the legacy path.
+        func initialize(
+            hwnd: HWND, devtools: Bool,
+            userDataFolderOverride: String?,
+            envOptions: KSWebViewWindowsOptions?,
+            preferences: KSWebViewPreferences? = nil
+        ) throws(KSError) {
+            let env = try createEnvironmentSync(
+                userDataFolderOverride: userDataFolderOverride,
+                envOptions: envOptions,
+                mediaAutoplay: preferences?.mediaAutoplay)
             self.env = env
 
             let controller = try createControllerSync(env: env, hwnd: hwnd)
@@ -89,8 +109,12 @@
             }
             self.webviewPtr = webview
 
-            try KSHRESULT(KSWV2_SetDevToolsEnabled(webview, devtools ? 1 : 0))
-                .throwIfFailed(.webviewInitFailed, "put_AreDevToolsEnabled")
+            // Phase A4: legacy `devtools` ?몄옄蹂대떎 preferences 媛 ?곗꽑?쒕떎.
+            // preferences 媛 nil ?대㈃ ?꾨옒 applySettingsBundle ??湲곕낯媛?            // (debug=true / release=false) 媛 ?곸슜?쒕떎.
+            if preferences == nil {
+                try KSHRESULT(KSWV2_SetDevToolsEnabled(webview, devtools ? 1 : 0))
+                    .throwIfFailed(.webviewInitFailed, "put_AreDevToolsEnabled")
+            }
 
             var addScriptHR: Int32 = 0
             KSRuntimeJS.source.withUTF16Pointer { ptr in
@@ -101,34 +125,46 @@
                     .webviewInitFailed,
                     "AddScriptToExecuteOnDocumentCreated")
 
+            // Phase A4: ?좎뼵???좉? ?쇨큵 ?곸슜.
+            if preferences != nil || envOptions != nil {
+                self.capabilityReport = applySettingsBundle(
+                    preferences: preferences, windows: envOptions)
+            }
+
             log.info("WebView2 host '\(label)' ready")
         }
 
-        // `setDefaultContextMenusEnabled` / `setAllowExternalDrop` —
-        // `WebView2Host+Operations.swift` 참고.
+        // `setDefaultContextMenusEnabled` / `setAllowExternalDrop` ??        // `WebView2Host+Operations.swift` 李멸퀬.
 
         private func createEnvironmentSync(
-            userDataFolderOverride: String? = nil
+            userDataFolderOverride: String? = nil,
+            envOptions: KSWebViewWindowsOptions? = nil,
+            mediaAutoplay: KSWebViewMediaAutoplay? = nil
         ) throws(KSError) -> KSWV2Env {
             pendingEnv = nil
             pendingEnvError = nil
             pendingEnvDone = false
 
-            // 실행 파일 옆 `kalsae.runtime.json`에서 fixed 런타임 / 사용자
-            // 데이터 재정의 값을 해석한다.
+            // ?ㅽ뻾 ?뚯씪 ??`kalsae.runtime.json`?먯꽌 fixed ?고???/ ?ъ슜??            // ?곗씠???ъ젙??媛믪쓣 ?댁꽍?쒕떎.
             let exeDir = WebView2Callbacks.executableDirectory()
-            // `swift build` / `swift run` 처럼 EXE 옆에 `WebView2Loader.dll`
-            // 이 staging 되지 않은 경우라도 SDK 체크아웃에서 직접 로드할 수
-            // 있도록 검색 경로를 prepend 한다. 첫 환경 생성 이전에만 효과가
-            // 있으므로 이 시점에서 호출한다.
+            // `swift build` / `swift run` 泥섎읆 EXE ?놁뿉 `WebView2Loader.dll`
+            // ??staging ?섏? ?딆? 寃쎌슦?쇰룄 SDK 泥댄겕?꾩썐?먯꽌 吏곸젒 濡쒕뱶????            // ?덈룄濡?寃??寃쎈줈瑜?prepend ?쒕떎. 泥??섍꼍 ?앹꽦 ?댁쟾?먮쭔 ?④낵媛
+            // ?덉쑝誘濡????쒖젏?먯꽌 ?몄텧?쒕떎.
             KSWebView2LoaderResolver.ensureLoaderDir(executableDir: exeDir)
             let resolved = KSWebView2Runtime.resolve(
                 executableDir: exeDir, identifier: WebView2Callbacks.appIdentifier())
-            // 윈도우별 userDataPath 오버라이드는 runtime.json 결과보다 우선한다.
+            // ?덈룄?곕퀎 userDataPath ?ㅻ쾭?쇱씠?쒕뒗 runtime.json 寃곌낵蹂대떎 ?곗꽑?쒕떎.
             let userDataFolder =
                 userDataFolderOverride
                 .flatMap { KSWebView2Runtime.expand($0, base: exeDir) }
                 ?? resolved.userDataFolder
+
+            // Phase B: mediaAutoplay ??--autoplay-policy=???⑹꽦.
+            // ?ъ슜???몄옄 ?ㅼ뿉 遺숈뿬 ?ъ슜??紐낆떆媛믪씠 ?덉쑝硫??곗꽑?섏? ?딅룄濡?            // ?쒕떎(Chromium ? 留덉?留?媛믪씠 ?닿릿?????ъ슜?먭? 吏곸젒 吏?뺥븳
+            // ?몄옄瑜?蹂댁〈?섍린 ?꾪빐 ?⑹꽦??癒쇱?, ?ъ슜???몄옄瑜??섏쨷???붾떎).
+            let mergedArgs = composeArgs(
+                userArgs: envOptions?.additionalBrowserArguments,
+                mediaAutoplay: mediaAutoplay)
 
             log.info(
                 "WebView2 environment: userDataFolder=\(userDataFolder ?? "<nil>"), browserExecutableFolder=\(resolved.browserExecutableFolder ?? "<default>")"
@@ -137,9 +173,12 @@
             let selfPtr = Unmanaged.passUnretained(self).toOpaque()
             let hr: Int32 = withOptionalUTF16(resolved.browserExecutableFolder) { browserPtr in
                 withOptionalUTF16(userDataFolder) { userPtr in
-                    KSWV2_CreateEnvironment(browserPtr, userPtr, selfPtr) { user, hr, env in
-                        WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
-                    }
+                    self.invokeCreateEnvironment(
+                        browserPtr: browserPtr,
+                        userPtr: userPtr,
+                        mergedArgs: mergedArgs,
+                        envOptions: envOptions,
+                        selfPtr: selfPtr)
                 }
             }
             try KSHRESULT(hr).throwIfFailed(
@@ -154,6 +193,89 @@
                     message: "CreateCoreWebView2Environment: no env returned")
             }
             return env
+        }
+
+        /// `additionalBrowserArguments` ? `--autoplay-policy=?? 瑜??⑹꽦?쒕떎.
+        /// ?ъ슜???몄옄 ?ㅼ뿉 ?⑹꽦 ?몄옄瑜??먮㈃ Chromium ??last-wins 洹쒖튃 ??        /// ?ъ슜??紐낆떆媛믪씠 ?④낵媛 ?щ씪吏誘濡? ?⑹꽦 ?몄옄瑜?癒쇱? ?먭퀬 ?ъ슜??        /// ?몄옄瑜??ㅼ뿉 ?붾떎.
+        private func composeArgs(
+            userArgs: String?, mediaAutoplay: KSWebViewMediaAutoplay?
+        ) -> String? {
+            let synthesized: String?
+            switch mediaAutoplay {
+            case .never:
+                synthesized = "--autoplay-policy=document-user-activation-required"
+            case .userGesture:
+                synthesized = "--autoplay-policy=user-gesture-required"
+            case .always:
+                synthesized = "--autoplay-policy=no-user-gesture-required"
+            case .none:
+                synthesized = nil
+            }
+            switch (synthesized, userArgs) {
+            case (nil, nil): return nil
+            case (let s?, nil): return s
+            case (nil, let u?): return u
+            case (let s?, let u?): return s + " " + u
+            }
+        }
+
+        /// `KSWV2_CreateEnvironment` / `KSWV2_CreateEnvironmentEx` 遺꾧린.
+        private func invokeCreateEnvironment(
+            browserPtr: UnsafePointer<UInt16>?,
+            userPtr: UnsafePointer<UInt16>?,
+            mergedArgs: String?,
+            envOptions: KSWebViewWindowsOptions?,
+            selfPtr: UnsafeMutableRawPointer
+        ) -> Int32 {
+            let needsEx =
+                mergedArgs != nil
+                || envOptions?.language != nil
+                || envOptions?.targetCompatibleBrowserVersion != nil
+                || envOptions?.allowSingleSignOn != nil
+                || envOptions?.exclusiveUserDataFolderAccess != nil
+                || envOptions?.trackingPrevention != nil
+
+            if !needsEx {
+                return KSWV2_CreateEnvironment(browserPtr, userPtr, selfPtr) {
+                    user, hr, env in
+                    WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
+                }
+            }
+
+            // tri-state helper
+            func tri(_ b: Bool?) -> Int32 {
+                guard let b else { return -1 }
+                return b ? 1 : 0
+            }
+
+            // trackingPrevention enum -> tri-state (off->0, basic/balanced/strict->1).
+            let trackingTri: Int32
+            switch envOptions?.trackingPrevention {
+            case .off: trackingTri = 0
+            case .basic, .balanced, .strict: trackingTri = 1
+            case .none: trackingTri = -1
+            }
+
+            return withOptionalUTF16(mergedArgs) { argsPtr in
+                withOptionalUTF16(envOptions?.language) { langPtr in
+                    withOptionalUTF16(envOptions?.targetCompatibleBrowserVersion) { tcbvPtr in
+                        var opts = KSWV2EnvOptions(
+                            additional_browser_arguments: argsPtr,
+                            language: langPtr,
+                            target_compatible_browser_version: tcbvPtr,
+                            allow_single_sign_on: tri(envOptions?.allowSingleSignOn),
+                            exclusive_user_data_folder_access:
+                                tri(envOptions?.exclusiveUserDataFolderAccess),
+                            custom_crash_reporting_enabled: -1,
+                            enable_tracking_prevention: trackingTri)
+                        return KSWV2_CreateEnvironmentEx(
+                            browserPtr, userPtr, &opts, selfPtr
+                        ) { user, hr, env in
+                            WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
+                        }
+                    }
+                }
+            }
         }
 
         private func createControllerSync(
@@ -191,13 +313,13 @@
                     TranslateMessage(&msg)
                     DispatchMessageW(&msg)
                 } else {
-                    // WM_QUIT 수신
+                    // WM_QUIT ?섏떊
                     break
                 }
             }
         }
 
-        // C 콜백 thunk에서 호출하는 채움 헬퍼.
+        // C 肄쒕갚 thunk?먯꽌 ?몄텧?섎뒗 梨꾩? ?ы띁.
         internal func fulfillEnv(hr: Int32, env: KSWV2Env?) {
             if hr >= 0, let env {
                 self.pendingEnv = env
@@ -220,7 +342,7 @@
             self.pendingCtrlDone = true
         }
 
-        // MARK: - Public operations — see `WebView2Host+Operations.swift`.
+        // MARK: - Public operations ??see `WebView2Host+Operations.swift`.
 
         // MARK: - Teardown
 

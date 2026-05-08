@@ -61,6 +61,33 @@ int32_t KSWV2_CreateEnvironment(
     void *user,
     KSWV2EnvCompletedCB completed);
 
+/// 확장 환경 옵션 묶음. 사용하지 않는 필드는 모두 NULL 또는 -1(트라이스테이트)로
+/// 두면 SDK 기본값이 적용된다.
+///
+/// 트라이스테이트 의미:
+///   -1 = 미설정 (SDK 기본값)
+///    0 = OFF (FALSE)
+///    1 = ON  (TRUE)
+typedef struct {
+    const wchar_t *additional_browser_arguments;     // NULL 가능
+    const wchar_t *language;                          // NULL 가능, BCP-47
+    const wchar_t *target_compatible_browser_version; // NULL 가능
+    int32_t allow_single_sign_on;                     // 트라이스테이트
+    int32_t exclusive_user_data_folder_access;        // 트라이스테이트 (Options2)
+    int32_t custom_crash_reporting_enabled;           // 트라이스테이트 (Options3)
+    int32_t enable_tracking_prevention;               // 트라이스테이트 (Options5)
+} KSWV2EnvOptions;
+
+/// `KSWV2_CreateEnvironment` 의 확장판. `opts == NULL` 이면 기본 함수와
+/// 동등하게 동작한다. ABI 보호를 위해 기존 `KSWV2_CreateEnvironment` 는
+/// 그대로 유지된다.
+int32_t KSWV2_CreateEnvironmentEx(
+    const wchar_t *browser_executable_folder,   // NULL 가능
+    const wchar_t *user_data_folder,            // NULL 가능
+    const KSWV2EnvOptions *opts,                // NULL 가능
+    void *user,
+    KSWV2EnvCompletedCB completed);
+
 void KSWV2_Env_Release(KSWV2Env env);
 
 /// `GetAvailableCoreWebView2BrowserVersionString`를 래핑한다.
@@ -147,6 +174,35 @@ int32_t KSWV2_Controller_GetZoomFactor(
 /// WebView2 설정에서 `IsPinchZoomEnabled`를 토글한다.
 /// `ICoreWebView2Settings5`가 필요하다. 성공 시 0, 이전 런타임에서는 `E_NOINTERFACE`.
 int32_t KSWV2_SetPinchZoomEnabled(KSWV2WebView webview, int32_t enabled);
+
+// MARK: - WebView2 Settings 토글 (Phase A4)
+//
+// 모든 함수는 트라이스테이트 정수를 받는다 (-1 = 미설정/no-op, 0 = OFF, 1 = ON).
+// 호출자는 한꺼번에 적용하기 위해 묶음 호출 후 결과 HRESULT 를 모은다.
+// 인터페이스가 미지원이면 `E_NOINTERFACE` 를 그대로 반환하므로 호출자는
+// 무시할 수 있다.
+
+/// `IsScriptEnabled` (Settings).
+int32_t KSWV2_SetScriptEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsStatusBarEnabled` (Settings).
+int32_t KSWV2_SetStatusBarEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsZoomControlEnabled` (Settings).
+int32_t KSWV2_SetZoomControlEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsBuiltInErrorPageEnabled` (Settings).
+int32_t KSWV2_SetBuiltInErrorPageEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsGeneralAutofillEnabled` + `IsPasswordAutosaveEnabled` (Settings4).
+/// 두 값을 일괄 토글한다. Settings4 가 없으면 `E_NOINTERFACE`.
+int32_t KSWV2_SetAutofillEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsSwipeNavigationEnabled` (Settings6).
+int32_t KSWV2_SetSwipeNavigationEnabled(KSWV2WebView webview, int32_t enabled);
+
+/// `IsReputationCheckingRequired` (Settings9).
+int32_t KSWV2_SetReputationCheckingRequired(KSWV2WebView webview, int32_t enabled);
 
 // MARK: - 인쇄 (Phase D1)
 //

@@ -320,7 +320,7 @@
 
             self.registry = registry
             self.window = try KSMacWindow(config: windowConfig)
-            self.webview = WKWebViewHost(label: windowConfig.label)
+            self.webview = WKWebViewHost(label: windowConfig.label, options: windowConfig.webview)
             self.window.webviewHost = self.webview
             self.bridge = WKBridge(host: webview, registry: registry, windowLabel: windowConfig.label)
             self.installPowerObservers()

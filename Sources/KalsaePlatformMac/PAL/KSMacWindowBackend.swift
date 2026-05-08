@@ -53,7 +53,7 @@
             let result: Result<KSWindowHandle, KSError> = await MainActor.run {
                 do {
                     let w = try KSMacWindow(config: config)
-                    let host = WKWebViewHost(label: config.label)
+                    let host = WKWebViewHost(label: config.label, options: config.webview)
                     w.webviewHost = host
                     w.setContentView(host.webView)
 

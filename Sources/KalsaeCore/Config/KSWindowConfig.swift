@@ -38,6 +38,194 @@ public enum KSWindowBackdrop: String, Codable, Sendable, CaseIterable {
     case acrylic  // DWMSBT_TRANSIENTWINDOW (3)
     case tabbed  // DWMSBT_TABBEDWINDOW    (4)
 }
+/// GPU 하드웨어 가속 정책. WebKitGTK 의 `WebKitHardwareAccelerationPolicy`,
+/// Windows의 `--disable-gpu` 인자, macOS WebKit의 무관(no-op) 매핑에 사용된다.
+public enum KSWebViewHardwareAcceleration: String, Codable, Sendable, CaseIterable {
+    case auto
+    case always
+    case never
+}
+
+/// 미디어 자동재생 정책. 모든 플랫폼에 의미적으로 동등하게 매핑된다.
+/// - `never`: 사용자 활성화가 있어도 자동재생 차단
+/// - `userGesture`: 사용자 제스처 후 허용 (대부분의 플랫폼 기본값)
+/// - `always`: 자동재생 항상 허용
+public enum KSWebViewMediaAutoplay: String, Codable, Sendable, CaseIterable {
+    case never
+    case userGesture
+    case always
+}
+
+/// 콘텐츠 모드 힌트. macOS 14+ `WKWebpagePreferences.preferredContentMode`에 매핑.
+public enum KSWebViewContentMode: String, Codable, Sendable, CaseIterable {
+    case recommended
+    case mobile
+    case desktop
+}
+
+/// 추적 방지 강도. WebView2 `EnableTrackingPrevention` + 프로파일 레벨에 매핑.
+public enum KSWebViewTrackingPrevention: String, Codable, Sendable, CaseIterable {
+    case off
+    case basic
+    case balanced
+    case strict
+}
+
+/// 크로스플랫폼 WebView preferences.
+///
+/// 모든 필드는 옵셔널이며 기본값은 호스트 엔진의 기본값을 따른다.
+/// 일부 필드는 특정 플랫폼에서 무시될 수 있으며, 그 경우 부팅 로그에
+/// `unsupported` 로 기록된다 (`__ks.webview.capabilities()` 로 조회 가능).
+public struct KSWebViewPreferences: Codable, Sendable, Equatable {
+    /// JavaScript 실행 활성화. `false`이면 IPC도 동작하지 않는다.
+    public var javaScriptEnabled: Bool?
+    /// DevTools / Web Inspector 활성화.
+    /// `nil`인 경우 디버그 빌드에서는 자동 활성화, 릴리스 빌드에서는 비활성화.
+    public var developerExtrasEnabled: Bool?
+    /// GPU 가속 정책 힌트.
+    public var hardwareAcceleration: KSWebViewHardwareAcceleration?
+    /// 부드러운 스크롤 활성화 (Linux WebKitGTK `enable-smooth-scrolling`).
+    public var smoothScrolling: Bool?
+    /// 트랙패드 좌우 스와이프로 뒤로/앞으로 이동.
+    public var swipeNavigation: Bool?
+    /// 자동완성(주소/비밀번호/카드) 활성화.
+    public var autofill: Bool?
+    /// SmartScreen / Fraudulent Website Warning 활성화.
+    public var fraudulentWebsiteWarning: Bool?
+    /// BCP-47 언어 코드 (e.g. `en-US`, `ko-KR`).
+    public var language: String?
+    /// 미디어 자동재생 정책.
+    public var mediaAutoplay: KSWebViewMediaAutoplay?
+    /// 인라인 미디어 재생 허용 (전체화면으로 전환되지 않음).
+    public var allowsInlineMediaPlayback: Bool?
+
+    public init(
+        javaScriptEnabled: Bool? = nil,
+        developerExtrasEnabled: Bool? = nil,
+        hardwareAcceleration: KSWebViewHardwareAcceleration? = nil,
+        smoothScrolling: Bool? = nil,
+        swipeNavigation: Bool? = nil,
+        autofill: Bool? = nil,
+        fraudulentWebsiteWarning: Bool? = nil,
+        language: String? = nil,
+        mediaAutoplay: KSWebViewMediaAutoplay? = nil,
+        allowsInlineMediaPlayback: Bool? = nil
+    ) {
+        self.javaScriptEnabled = javaScriptEnabled
+        self.developerExtrasEnabled = developerExtrasEnabled
+        self.hardwareAcceleration = hardwareAcceleration
+        self.smoothScrolling = smoothScrolling
+        self.swipeNavigation = swipeNavigation
+        self.autofill = autofill
+        self.fraudulentWebsiteWarning = fraudulentWebsiteWarning
+        self.language = language
+        self.mediaAutoplay = mediaAutoplay
+        self.allowsInlineMediaPlayback = allowsInlineMediaPlayback
+    }
+}
+
+/// Windows / WebView2 전용 escape hatch. 다른 플랫폼에서는 무시된다.
+public struct KSWebViewWindowsOptions: Codable, Sendable, Equatable {
+    /// WebView2 환경에 전달할 추가 Chromium 명령줄 인자.
+    /// 부팅 시 `KSWebViewArgsValidator` 의 블랙리스트로 검증된다 —
+    /// `--remote-debugging-*`, `--disable-web-security`, `--no-sandbox`
+    /// 등 안전을 무력화하는 인자는 거절된다.
+    public var additionalBrowserArguments: String?
+    /// 환경 언어 (`ICoreWebView2EnvironmentOptions.Language`).
+    public var language: String?
+    /// 브라우저 호환성 버전 (`TargetCompatibleBrowserVersion`).
+    public var targetCompatibleBrowserVersion: String?
+    /// OS 기본 계정 SSO 허용 (`AllowSingleSignOnUsingOSPrimaryAccount`).
+    public var allowSingleSignOn: Bool?
+    /// 사용자 데이터 폴더 단독 점유 (`ExclusiveUserDataFolderAccess`, Options2).
+    public var exclusiveUserDataFolderAccess: Bool?
+    /// 추적 방지 강도 (`EnableTrackingPrevention` + Profile3 레벨).
+    public var trackingPrevention: KSWebViewTrackingPrevention?
+
+    public init(
+        additionalBrowserArguments: String? = nil,
+        language: String? = nil,
+        targetCompatibleBrowserVersion: String? = nil,
+        allowSingleSignOn: Bool? = nil,
+        exclusiveUserDataFolderAccess: Bool? = nil,
+        trackingPrevention: KSWebViewTrackingPrevention? = nil
+    ) {
+        self.additionalBrowserArguments = additionalBrowserArguments
+        self.language = language
+        self.targetCompatibleBrowserVersion = targetCompatibleBrowserVersion
+        self.allowSingleSignOn = allowSingleSignOn
+        self.exclusiveUserDataFolderAccess = exclusiveUserDataFolderAccess
+        self.trackingPrevention = trackingPrevention
+    }
+}
+
+/// macOS / WKWebView 전용 escape hatch. 다른 플랫폼에서는 무시된다.
+public struct KSWebViewMacOptions: Codable, Sendable, Equatable {
+    /// `WKWebViewConfiguration.limitsNavigationsToAppBoundDomains`.
+    public var limitNavigationsToAppBoundDomains: Bool?
+    /// `WKWebViewConfiguration.suppressesIncrementalRendering`.
+    public var suppressIncrementalRendering: Bool?
+    /// `WKWebpagePreferences.preferredContentMode`.
+    public var preferredContentMode: KSWebViewContentMode?
+    /// 다중 창 간 `WKProcessPool` 공유로 메모리 절감.
+    /// `true`이면 동일 식별자의 다른 창과 동일한 풀을 사용한다.
+    public var shareProcessPool: Bool?
+
+    public init(
+        limitNavigationsToAppBoundDomains: Bool? = nil,
+        suppressIncrementalRendering: Bool? = nil,
+        preferredContentMode: KSWebViewContentMode? = nil,
+        shareProcessPool: Bool? = nil
+    ) {
+        self.limitNavigationsToAppBoundDomains = limitNavigationsToAppBoundDomains
+        self.suppressIncrementalRendering = suppressIncrementalRendering
+        self.preferredContentMode = preferredContentMode
+        self.shareProcessPool = shareProcessPool
+    }
+}
+
+/// Linux / WebKitGTK 전용 escape hatch. 다른 플랫폼에서는 무시된다.
+public struct KSWebViewLinuxOptions: Codable, Sendable, Equatable {
+    /// `WebKitSettings.enable-webgl`.
+    public var enableWebgl: Bool?
+    /// `WebKitSettings.enable-webaudio`.
+    public var enableWebaudio: Bool?
+    /// `WebKitSettings.default-font-family`.
+    public var defaultFontFamily: String?
+    /// `WebKitSettings.default-font-size`.
+    public var defaultFontSize: Int?
+
+    public init(
+        enableWebgl: Bool? = nil,
+        enableWebaudio: Bool? = nil,
+        defaultFontFamily: String? = nil,
+        defaultFontSize: Int? = nil
+    ) {
+        self.enableWebgl = enableWebgl
+        self.enableWebaudio = enableWebaudio
+        self.defaultFontFamily = defaultFontFamily
+        self.defaultFontSize = defaultFontSize
+    }
+}
+
+/// 플랫폼별 escape hatch 옵션 모음. 특정 플랫폼의 고유 기능을 노출한다.
+/// 다른 플랫폼에서 설정값은 조용히 무시되고 `capabilities()` 에 unsupported 로 보고된다.
+public struct KSWebViewPlatformOptions: Codable, Sendable, Equatable {
+    public var windows: KSWebViewWindowsOptions?
+    public var mac: KSWebViewMacOptions?
+    public var linux: KSWebViewLinuxOptions?
+
+    public init(
+        windows: KSWebViewWindowsOptions? = nil,
+        mac: KSWebViewMacOptions? = nil,
+        linux: KSWebViewLinuxOptions? = nil
+    ) {
+        self.windows = windows
+        self.mac = mac
+        self.linux = linux
+    }
+}
+
 public struct KSWebViewOptions: Codable, Sendable, Equatable {
     /// `true`이면 WebView2 컨트롤러가 투명한 기본 배경
     /// (`ICoreWebView2Controller2.DefaultBackgroundColor`)으로 렌더링된다.
@@ -57,24 +245,40 @@ public struct KSWebViewOptions: Codable, Sendable, Equatable {
     /// 설정되면 `kalsae.runtime.json`보다 우선하며, 여러 창/앱 변형이
     /// 브라우저 프로필(쿠키, IndexedDB 등)을 분리해 유지하는 데 사용된다.
     /// 경로에는 부팅 시 확장되는 Windows `%VAR%` 환경 변수 토큰을 포함할 수 있다.
+    /// macOS / Linux에서도 사용된다 (각각 `WKWebsiteDataStore` /
+    /// `WebKitWebsiteDataManager` 분리). 모든 OS에서 `KSUserDataPathValidator`
+    /// 의 정책을 통과해야 한다.
     public var userDataPath: String?
+
+    /// 크로스플랫폼 preferences.
+    /// 미지정 시 호스트 엔진의 기본값을 사용한다.
+    public var preferences: KSWebViewPreferences?
+
+    /// 플랫폼별 escape hatch 옵션.
+    /// 해당 플랫폼이 아닌 OS에서는 조용히 무시된다.
+    public var platform: KSWebViewPlatformOptions?
 
     public init(
         transparent: Bool = false,
         backdropType: KSWindowBackdrop? = nil,
         disablePinchZoom: Bool = false,
         zoomFactor: Double? = nil,
-        userDataPath: String? = nil
+        userDataPath: String? = nil,
+        preferences: KSWebViewPreferences? = nil,
+        platform: KSWebViewPlatformOptions? = nil
     ) {
         self.transparent = transparent
         self.backdropType = backdropType
         self.disablePinchZoom = disablePinchZoom
         self.zoomFactor = zoomFactor
         self.userDataPath = userDataPath
+        self.preferences = preferences
+        self.platform = platform
     }
 
     private enum CodingKeys: String, CodingKey {
         case transparent, backdropType, disablePinchZoom, zoomFactor, userDataPath
+        case preferences, platform
     }
 
     public init(from decoder: any Decoder) throws {
@@ -84,6 +288,8 @@ public struct KSWebViewOptions: Codable, Sendable, Equatable {
         self.disablePinchZoom = try c.decodeIfPresent(Bool.self, forKey: .disablePinchZoom) ?? false
         self.zoomFactor = try c.decodeIfPresent(Double.self, forKey: .zoomFactor)
         self.userDataPath = try c.decodeIfPresent(String.self, forKey: .userDataPath)
+        self.preferences = try c.decodeIfPresent(KSWebViewPreferences.self, forKey: .preferences)
+        self.platform = try c.decodeIfPresent(KSWebViewPlatformOptions.self, forKey: .platform)
     }
 }
 public struct KSWindowConfig: Codable, Sendable, Equatable, Identifiable {

@@ -403,11 +403,19 @@ RFC 승인 후 별도 사이클에서 구현한다.
 
 RFC 진행 전에 다음 세 가지를 결정하면 구현이 단순해진다.
 
-1. **차분 패치 지원**: v1에서 전체 재다운로드만 지원하고 v2로 연기?  
+1. **차분 패치 지원**: v1에서 전체 재다운로드만 지원하고 v2로 연기?
    _현재 권장: 연기_
 
-2. **롤백 지원**: v1에서 단순 `.bak` 보관만? 또는 명시적 롤백 API 포함?  
+2. **롤백 지원**: v1에서 단순 `.bak` 보관만? 또는 명시적 롤백 API 포함?
    _현재 권장: `.bak` 보관, `rollback` API는 v2_
 
-3. **macOS Sparkle**: 자체 구현 vs Sparkle 의존?  
+3. **macOS Sparkle**: 자체 구현 vs Sparkle 의존?
    _현재 권장: 자체 구현(외부 의존 최소화)_
+
+
+미해결 (계획상 deferred로 기록)
+Linux PAL preferences/ userDataPath 적용 (CKalsaeGtk 확장 필요, Linux 환경 필요)
+WebView2 Profile3 PreferredTrackingPreventionLevel 세부 단계 매핑 (현재는 bool tri-state)
+IPC __ks.webview.capabilities() 명령
+mac/Linux PAL 라운드트립 단위 테스트
+iOS/Android에서 새 KSWebViewOptions 필드 미적용 (스키마는 디코드됨)

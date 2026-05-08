@@ -18,7 +18,11 @@
         private var zoomFactor: Double = 1.0
         nonisolated(unsafe) private static let _sharedEncoder = JSONEncoder()
 
-        public init(label: String) {
+        public convenience init(label: String) {
+            self.init(label: label, options: nil)
+        }
+
+        public init(label: String, options: KSWebViewOptions?) {
             let ucc = WKUserContentController()
             self.userContentController = ucc
             self.messageHandler = KSScriptMessageHandler()
@@ -30,6 +34,32 @@
             if #available(macOS 13.3, *) {
                 config.preferences.isElementFullscreenEnabled = true
             }
+
+            // Phase A2/D2: cross-platform preferences + macOS escape hatches.
+            // 모든 매핑 결과는 capability 레지스트리에 기록되어 `__ks.webview.capabilities()` 로
+            // 조회 가능하다.
+            let log = KSLog.logger("platform.mac.webview")
+            let caps = WKWebViewHost.applyConfiguration(config, options: options, log: log)
+
+            // userDataPath: 검증 통과 시 macOS 14+ `WKWebsiteDataStore(forIdentifier:)` 분리.
+            if let raw = options?.userDataPath {
+                do {
+                    let resolved = try KSUserDataPathValidator.validate(raw)
+                    if #available(macOS 14, *) {
+                        // 안정 식별자 도출 — 같은 경로 = 같은 데이터 스토어.
+                        let uuid = WKWebViewHost.uuidForPath(resolved)
+                        config.websiteDataStore = WKWebsiteDataStore(forIdentifier: uuid)
+                        caps.record("userDataPath", .applied)
+                    } else {
+                        log.warning("userDataPath requires macOS 14+; ignored")
+                        caps.record("userDataPath", .unsupported)
+                    }
+                } catch {
+                    log.warning("userDataPath rejected: \(error.message); falling back to default store")
+                    caps.record("userDataPath", .error(error.message))
+                }
+            }
+
             let userScript = WKUserScript(
                 source: KSRuntimeJS.source,
                 injectionTime: .atDocumentStart,
@@ -39,12 +69,178 @@
             self.webView = WKWebView(frame: .zero, configuration: config)
             self.webView.autoresizingMask = [.width, .height]
 
+            // post-creation 토글 (`isInspectable` 등).
+            WKWebViewHost.applyPostCreate(webView: self.webView, options: options, log: log, caps: caps)
+
+            self.capabilities = caps
+
             messageHandler.onMessage = { [weak self] text in
                 self?.inbound?(text)
             }
             ucc.add(messageHandler, name: "ks")
 
             log.info("WKWebView created (label=\(label))")
+        }
+
+        /// 적용된 preference / 플랫폼 옵션의 capability 보고.
+        /// `__ks.webview.capabilities()` 명령에서 노출된다.
+        public let capabilities: KSWebViewCapabilityReport
+
+        // MARK: - Configuration mapping (Phase A2 / D2)
+
+        nonisolated private static func applyConfiguration(
+            _ config: WKWebViewConfiguration,
+            options: KSWebViewOptions?,
+            log: Logger
+        ) -> KSWebViewCapabilityReport {
+            let caps = KSWebViewCapabilityReport()
+
+            // preferences (cross-platform)
+            if let p = options?.preferences {
+                if let js = p.javaScriptEnabled {
+                    config.defaultWebpagePreferences.allowsContentJavaScript = js
+                    if !js {
+                        log.warning("javaScriptEnabled=false: IPC will not function")
+                    }
+                    caps.record("javaScriptEnabled", .applied)
+                }
+                if let warn = p.fraudulentWebsiteWarning {
+                    config.preferences.isFraudulentWebsiteWarningEnabled = warn
+                    caps.record("fraudulentWebsiteWarning", .applied)
+                }
+                if let inline = p.allowsInlineMediaPlayback {
+                    // `WKWebViewConfiguration.allowsInlineMediaPlayback` 은
+                    // iOS / iPadOS / Mac Catalyst 전용이다. macOS 네이티브
+                    // WebKit은 비디오를 항상 인라인 재생하므로 토글 자체가
+                    // 존재하지 않는다.
+                    #if targetEnvironment(macCatalyst)
+                        config.allowsInlineMediaPlayback = inline
+                        caps.record("allowsInlineMediaPlayback", .applied)
+                    #else
+                        _ = inline
+                        caps.record("allowsInlineMediaPlayback", .unsupported)
+                    #endif
+                }
+                if let autoplay = p.mediaAutoplay {
+                    let types: WKAudiovisualMediaTypes = {
+                        switch autoplay {
+                        case .never: return .all
+                        case .userGesture: return [.video, .audio]
+                        case .always: return []
+                        }
+                    }()
+                    config.mediaTypesRequiringUserActionForPlayback = types
+                    caps.record("mediaAutoplay", .applied)
+                }
+                // 명시적으로 macOS에서 의미 없는 토글들.
+                if p.hardwareAcceleration != nil {
+                    caps.record("hardwareAcceleration", .unsupported)
+                }
+                if p.smoothScrolling != nil {
+                    caps.record("smoothScrolling", .unsupported)
+                }
+                if p.autofill != nil {
+                    caps.record("autofill", .unsupported)
+                }
+                if let lang = p.language, !lang.isEmpty {
+                    // WKWebView 자체는 언어 직접 지정 API가 없지만 Accept-Language는
+                    // CFNetwork 기본 동작에 위임된다. 향후 customUserAgent에 합성할 수 있어
+                    // 여기서는 unsupported로 보고만 한다.
+                    caps.record("language", .unsupported)
+                }
+            }
+
+            // platform.mac escape hatch
+            if let m = options?.platform?.mac {
+                if let limit = m.limitNavigationsToAppBoundDomains {
+                    config.limitsNavigationsToAppBoundDomains = limit
+                    caps.record("platform.mac.limitNavigationsToAppBoundDomains", .applied)
+                }
+                if let suppress = m.suppressIncrementalRendering {
+                    config.suppressesIncrementalRendering = suppress
+                    caps.record("platform.mac.suppressIncrementalRendering", .applied)
+                }
+                if let mode = m.preferredContentMode {
+                    let wk: WKWebpagePreferences.ContentMode = {
+                        switch mode {
+                        case .recommended: return .recommended
+                        case .mobile: return .mobile
+                        case .desktop: return .desktop
+                        }
+                    }()
+                    config.defaultWebpagePreferences.preferredContentMode = wk
+                    caps.record("platform.mac.preferredContentMode", .applied)
+                }
+                if m.shareProcessPool == true {
+                    config.processPool = SharedProcessPool.shared
+                    caps.record("platform.mac.shareProcessPool", .applied)
+                }
+            }
+
+            // 잘못된 플랫폼에 지정된 옵션들은 unsupported로 일괄 기록.
+            if options?.platform?.windows != nil {
+                caps.record("platform.windows", .unsupported)
+            }
+            if options?.platform?.linux != nil {
+                caps.record("platform.linux", .unsupported)
+            }
+
+            return caps
+        }
+
+        nonisolated private static func applyPostCreate(
+            webView: WKWebView,
+            options: KSWebViewOptions?,
+            log: Logger,
+            caps: KSWebViewCapabilityReport
+        ) {
+            let prefs = options?.preferences
+
+            // developerExtrasEnabled 자동 기본값: 디버그=true / 릴리스=false.
+            let inspectable: Bool = prefs?.developerExtrasEnabled ?? KSBuildMode.isDebug
+            if #available(macOS 13.3, *) {
+                webView.isInspectable = inspectable
+                caps.record("developerExtrasEnabled", .applied)
+            } else if inspectable {
+                log.warning("developerExtrasEnabled requires macOS 13.3+; ignored")
+                caps.record("developerExtrasEnabled", .unsupported)
+            }
+
+            if let swipe = prefs?.swipeNavigation {
+                webView.allowsBackForwardNavigationGestures = swipe
+                caps.record("swipeNavigation", .applied)
+            }
+        }
+
+        /// 사용자 데이터 경로 → 결정적 UUID. macOS 14+ `WKWebsiteDataStore(forIdentifier:)` 용.
+        nonisolated private static func uuidForPath(_ path: String) -> UUID {
+            // SHA를 못 쓰는 환경이라도 결정성만 보장되면 충분하다.
+            // FNV-1a 64bit 해시를 두 번 굴려 128비트 UUID 비트를 채운다.
+            func fnv1a(_ s: String, salt: UInt64) -> UInt64 {
+                var hash: UInt64 = 0xcbf29ce484222325 ^ salt
+                for byte in s.utf8 {
+                    hash ^= UInt64(byte)
+                    hash = hash &* 0x100000001b3
+                }
+                return hash
+            }
+            let h1 = fnv1a(path, salt: 0)
+            let h2 = fnv1a(path, salt: 0xdeadbeefcafebabe)
+            var bytes = [UInt8](repeating: 0, count: 16)
+            for i in 0..<8 {
+                bytes[i] = UInt8(truncatingIfNeeded: h1 >> (i * 8))
+                bytes[i + 8] = UInt8(truncatingIfNeeded: h2 >> (i * 8))
+            }
+            return UUID(uuid: (
+                bytes[0], bytes[1], bytes[2], bytes[3],
+                bytes[4], bytes[5], bytes[6], bytes[7],
+                bytes[8], bytes[9], bytes[10], bytes[11],
+                bytes[12], bytes[13], bytes[14], bytes[15]))
+        }
+
+        /// macOS 다중 창 간 공유 process pool. `platform.mac.shareProcessPool=true` 로 활성화.
+        private enum SharedProcessPool {
+            nonisolated(unsafe) static let shared = WKProcessPool()
         }
 
         // MARK: - KSWebViewBackend

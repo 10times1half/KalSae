@@ -30,7 +30,38 @@
       "visible": true,
       "center": true,
       "alwaysOnTop": false,
-      "persistState": false
+      "persistState": false,
+      "webview": {
+        "preferences": {
+          "developerExtrasEnabled": null,
+          "javaScriptEnabled": true,
+          "swipeNavigation": true,
+          "fraudulentWebsiteWarning": true,
+          "mediaAutoplay": "userGesture",
+          "allowsInlineMediaPlayback": true,
+          "hardwareAcceleration": "auto",
+          "smoothScrolling": true
+        },
+        "platform": {
+          "windows": {
+            "additionalBrowserArguments": "--js-flags=--max-old-space-size=512",
+            "language": "ko-KR",
+            "allowSingleSignOn": false,
+            "exclusiveUserDataFolderAccess": true,
+            "trackingPrevention": "balanced"
+          },
+          "mac": {
+            "limitNavigationsToAppBoundDomains": false,
+            "suppressIncrementalRendering": false,
+            "preferredContentMode": "recommended",
+            "shareProcessPool": false
+          },
+          "linux": {
+            "enableWebgl": true,
+            "enableWebaudio": true
+          }
+        }
+      }
     },
     {
       "label": "overlay",

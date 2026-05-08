@@ -69,6 +69,31 @@ public enum KSConfigLoader {
                 throw KSError.configInvalid(
                     "window '\(w.label)' has non-positive dimensions")
             }
+            // `webview.platform.windows.additionalBrowserArguments` 의
+            // 위험 토큰 차단. 토크나이저는 결정적이므로 config-load 시점에
+            // 즉시 거절해 부팅 실패를 조기에 노출한다.
+            if let raw = w.webview?.platform?.windows?.additionalBrowserArguments,
+               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                do {
+                    _ = try KSWebViewArgsValidator.validate(raw)
+                } catch {
+                    throw KSError.configInvalid(
+                        "window '\(w.label)' webview.platform.windows.additionalBrowserArguments: \(error.message)")
+                }
+            }
+            // `webview.userDataPath` 의 안전 검증. 모든 OS에서 동일 정책을
+            // 적용해 `..` 트래버설 / 시스템 경로 침투를 차단한다.
+            if let raw = w.webview?.userDataPath,
+               !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+                do {
+                    _ = try KSUserDataPathValidator.validate(raw)
+                } catch {
+                    throw KSError.configInvalid(
+                        "window '\(w.label)' webview.userDataPath: \(error.message)")
+                }
+            }
         }
     }
 }

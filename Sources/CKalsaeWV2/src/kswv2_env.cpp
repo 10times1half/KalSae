@@ -10,6 +10,7 @@
 #include <wrl.h>
 #include <objbase.h>           // CoTaskMemFree
 #include "kswv2_internal.h"
+#include "../Vendor/WebView2/build/native/include/WebView2EnvironmentOptions.h"
 
 using namespace Microsoft::WRL;
 
@@ -25,6 +26,18 @@ extern "C" int32_t KSWV2_CreateEnvironment(
     void *user,
     KSWV2EnvCompletedCB completed)
 {
+    return KSWV2_CreateEnvironmentEx(
+        browser_executable_folder, user_data_folder,
+        nullptr, user, completed);
+}
+
+extern "C" int32_t KSWV2_CreateEnvironmentEx(
+    const wchar_t *browser_executable_folder,
+    const wchar_t *user_data_folder,
+    const KSWV2EnvOptions *opts,
+    void *user,
+    KSWV2EnvCompletedCB completed)
+{
     if (!completed) return E_POINTER;
 
     auto handler = Callback<
@@ -36,11 +49,56 @@ extern "C" int32_t KSWV2_CreateEnvironment(
             return S_OK;
         });
 
+    ComPtr<ICoreWebView2EnvironmentOptions> options;
+    if (opts) {
+        auto base = Make<CoreWebView2EnvironmentOptions>();
+        if (!base) return E_OUTOFMEMORY;
+
+        if (opts->additional_browser_arguments)
+            base->put_AdditionalBrowserArguments(
+                opts->additional_browser_arguments);
+        if (opts->language)
+            base->put_Language(opts->language);
+        if (opts->target_compatible_browser_version)
+            base->put_TargetCompatibleBrowserVersion(
+                opts->target_compatible_browser_version);
+        if (opts->allow_single_sign_on >= 0)
+            base->put_AllowSingleSignOnUsingOSPrimaryAccount(
+                opts->allow_single_sign_on ? TRUE : FALSE);
+
+        // Options2: ExclusiveUserDataFolderAccess.
+        ComPtr<ICoreWebView2EnvironmentOptions2> opts2;
+        if (opts->exclusive_user_data_folder_access >= 0
+            && SUCCEEDED(base.As(&opts2)) && opts2)
+        {
+            opts2->put_ExclusiveUserDataFolderAccess(
+                opts->exclusive_user_data_folder_access ? TRUE : FALSE);
+        }
+        // Options3: IsCustomCrashReportingEnabled.
+        ComPtr<ICoreWebView2EnvironmentOptions3> opts3;
+        if (opts->custom_crash_reporting_enabled >= 0
+            && SUCCEEDED(base.As(&opts3)) && opts3)
+        {
+            opts3->put_IsCustomCrashReportingEnabled(
+                opts->custom_crash_reporting_enabled ? TRUE : FALSE);
+        }
+        // Options5: EnableTrackingPrevention.
+        ComPtr<ICoreWebView2EnvironmentOptions5> opts5;
+        if (opts->enable_tracking_prevention >= 0
+            && SUCCEEDED(base.As(&opts5)) && opts5)
+        {
+            opts5->put_EnableTrackingPrevention(
+                opts->enable_tracking_prevention ? TRUE : FALSE);
+        }
+
+        options = base;
+    }
+
     return static_cast<int32_t>(
         KSWV2_Loader_CreateEnvironmentWithOptions(
             browser_executable_folder,
             user_data_folder,
-            nullptr,
+            options.Get(),
             handler.Get()));
 }
 

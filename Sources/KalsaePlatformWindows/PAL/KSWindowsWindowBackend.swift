@@ -69,7 +69,9 @@
                         try webview.initialize(
                             hwnd: hwnd,
                             devtools: false,
-                            userDataFolderOverride: config.webview?.userDataPath)
+                            userDataFolderOverride: config.webview?.userDataPath,
+                            envOptions: config.webview?.platform?.windows,
+                            preferences: config.webview?.preferences)
                         window.attach(host: webview)
                         try bridge.install()
                         // 명시 retain — eventSink 클로저 캡처에만 의존하면

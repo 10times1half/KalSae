@@ -179,6 +179,72 @@
             }
         }
 
+        // MARK: - Settings bundle (Phase A4)
+        //
+        // 단일 메서드로 `KSWebViewPreferences` + `KSWebViewWindowsOptions` 를
+        // 한 번에 적용한다. 각 토글은 기능 보고서(`KSWebViewCapabilityReport`)
+        // 에 (key, applied|unsupported|error) 형태로 기록된다.
+        // `E_NOINTERFACE` 는 `unsupported`, 그 외 실패는 `error`.
+
+        /// `KSWebViewPreferences` 와 `KSWebViewWindowsOptions` 의 모든 토글을
+        /// 일괄 적용하고 보고서를 반환한다.
+        func applySettingsBundle(
+            preferences: KSWebViewPreferences?,
+            windows: KSWebViewWindowsOptions?
+        ) -> KSWebViewCapabilityReport {
+            let report = KSWebViewCapabilityReport()
+            guard let webview = webviewPtr else { return report }
+
+            // tri-state: nil → -1 (no-op), Bool → 0/1
+            func tri(_ b: Bool?) -> Int32 {
+                guard let b else { return -1 }
+                return b ? 1 : 0
+            }
+
+            // ─ developerExtrasEnabled (debug 자동 기본값) ─
+            let devtools = preferences?.developerExtrasEnabled ?? KSBuildMode.isDebug
+            let devToolsHR = KSWV2_SetDevToolsEnabled(webview, devtools ? 1 : 0)
+            record(report, key: "developerExtrasEnabled", hr: devToolsHR)
+
+            record(report, key: "javaScriptEnabled",
+                hr: KSWV2_SetScriptEnabled(webview, tri(preferences?.javaScriptEnabled)))
+            record(report, key: "swipeNavigation",
+                hr: KSWV2_SetSwipeNavigationEnabled(webview, tri(preferences?.swipeNavigation)))
+            record(report, key: "autofill",
+                hr: KSWV2_SetAutofillEnabled(webview, tri(preferences?.autofill)))
+            record(report, key: "fraudulentWebsiteWarning",
+                hr: KSWV2_SetReputationCheckingRequired(
+                    webview, tri(preferences?.fraudulentWebsiteWarning)))
+
+            // hardwareAcceleration / smoothScrolling / mediaAutoplay /
+            // allowsInlineMediaPlayback / language 등은 Windows 에서는
+            // additionalBrowserArguments 로 합성되거나 직접 토글이 없다.
+            // 보고서에 unsupported 로 기록만 한다.
+            if preferences?.hardwareAcceleration != nil {
+                report.record("hardwareAcceleration", .unsupported)
+            }
+            if preferences?.smoothScrolling != nil {
+                report.record("smoothScrolling", .unsupported)
+            }
+            if preferences?.allowsInlineMediaPlayback != nil {
+                report.record("allowsInlineMediaPlayback", .unsupported)
+            }
+            return report
+        }
+
+        private func record(
+            _ report: KSWebViewCapabilityReport, key: String, hr: Int32
+        ) {
+            if hr == 0 {
+                report.record(key, .applied)
+            } else if hr == Int32(bitPattern: 0x8000_4002) /* E_NOINTERFACE */ {
+                report.record(key, .unsupported)
+            } else {
+                let hex = String(UInt32(bitPattern: hr), radix: 16)
+                report.record(key, .error("HRESULT=0x\(hex)"))
+            }
+        }
+
         // MARK: - Print (D1)
 
         /// Opens the WebView2 print UI. `systemDialog == true` selects the OS
