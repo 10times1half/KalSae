@@ -130,6 +130,10 @@
                 .flatMap { KSWebView2Runtime.expand($0, base: exeDir) }
                 ?? resolved.userDataFolder
 
+            log.info(
+                "WebView2 environment: userDataFolder=\(userDataFolder ?? "<nil>"), browserExecutableFolder=\(resolved.browserExecutableFolder ?? "<default>")"
+            )
+
             let selfPtr = Unmanaged.passUnretained(self).toOpaque()
             let hr: Int32 = withOptionalUTF16(resolved.browserExecutableFolder) { browserPtr in
                 withOptionalUTF16(userDataFolder) { userPtr in

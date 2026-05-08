@@ -1,12 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 
-declare global {
-  interface Window {
-    __KS_: { invoke<T = unknown>(name: string, args?: unknown): Promise<T> }
-  }
-}
-
 const msg = ref('')
 
 async function greet() {

@@ -142,4 +142,61 @@ struct DoctorTests {
         // skipExternalChecks=true 인 경우 swift --version 호출은 건너뛴다.
         #expect(report.swiftVersion == nil)
     }
+
+    // MARK: - 패키지 manifest 검증
+
+    @Test("Warns on packaged manifest with invalid processorArchitecture (legacy x64)")
+    func packagedManifestInvalidArch() throws {
+        let root = try makeTempProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pkg =
+            root
+            .appendingPathComponent("dist")
+            .appendingPathComponent("Demo-1.0.0-x64")
+        try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
+        // 과거 빌드가 만든 잘못된 manifest 시뮬레이션.
+        try write(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n"
+                + "<assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\n"
+                + "<assemblyIdentity type=\"win32\" name=\"dev.kalsae.demo\""
+                + " version=\"1.0.0.0\" processorArchitecture=\"x64\"/>\n"
+                + "</assembly>\n",
+            to: pkg.appendingPathComponent("Demo.exe.manifest"))
+
+        let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))
+        #expect(
+            report.warnings.contains { $0.contains("processorArchitecture=\"x64\"") },
+            "Doctor should flag invalid SxS processorArchitecture, got warnings: \(report.warnings)")
+    }
+
+    @Test("Accepts packaged manifest with valid amd64 processorArchitecture")
+    func packagedManifestValidArch() throws {
+        let root = try makeTempProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pkg =
+            root
+            .appendingPathComponent("dist")
+            .appendingPathComponent("Demo-1.0.0-x64")
+        try FileManager.default.createDirectory(at: pkg, withIntermediateDirectories: true)
+        try write(
+            "<assembly><assemblyIdentity processorArchitecture=\"amd64\"/></assembly>",
+            to: pkg.appendingPathComponent("Demo.exe.manifest"))
+
+        let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))
+        #expect(
+            !report.warnings.contains { $0.contains("processorArchitecture") },
+            "Doctor must not warn on a valid amd64 manifest, got: \(report.warnings)")
+    }
+
+    @Test("Silent when no dist directory exists")
+    func packagedManifestNoDist() throws {
+        let root = try makeTempProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))
+        #expect(!report.warnings.contains { $0.contains("processorArchitecture") })
+        #expect(!report.infos.contains { $0.contains("processorArchitecture") })
+    }
 }

@@ -1,11 +1,5 @@
 import { useState } from 'react'
 
-declare global {
-  interface Window {
-    __KS_: { invoke<T = unknown>(name: string, args?: unknown): Promise<T> }
-  }
-}
-
 export default function App() {
   const [msg, setMsg] = useState('')
   return (

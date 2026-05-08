@@ -159,6 +159,49 @@ struct ProjectTemplateTests {
         )
     }
 
+    @Test("Generated Package.swift sets Windows GUI subsystem to hide console")
+    func packageSwiftHasWindowsSubsystemFlag() throws {
+        let root = try scaffold()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let package = try String(
+            contentsOf: root.appendingPathComponent("Package.swift"),
+            encoding: .utf8)
+
+        // 콘솔 창 방지: PE 서브시스템을 GUI 로 변경.
+        #expect(
+            package.contains("/SUBSYSTEM:WINDOWS"),
+            "Package.swift must set /SUBSYSTEM:WINDOWS so packaged EXE doesn't open a console, got: \(package)")
+        // wWinMain 부재로 LNK2019 가 나지 않게 CRT 진입점 명시.
+        #expect(
+            package.contains("/ENTRY:mainCRTStartup"),
+            "Package.swift must set /ENTRY:mainCRTStartup for Swift @main, got: \(package)")
+        #expect(
+            package.contains(".when(platforms: [.windows])"),
+            "Linker subsystem flags must be Windows-gated, got: \(package)")
+    }
+
+    @Test("Generated App.swift never feeds the buggy `configURL.deletingLastPathComponent()` as resourceRoot")
+    func appSwiftHasNoResourceRoot() throws {
+        let root = try scaffold()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let app = try String(
+            contentsOf: root.appendingPathComponent("Sources/MyApp/App.swift"),
+            encoding: .utf8)
+
+        // resourceRoot 를 무조건 `configURL.deletingLastPathComponent()` 로 넘기면
+        // 패키지 모드(EXE 옆 Kalsae.json + assets in `<exeDir>/<frontendDist>/`)에서
+        // 흰화면이 된다. 새 템플릿은 패키지 모드에서 `nil` 을 넘겨 KSApp.boot 가
+        // `<configDir>/<frontendDist>` 로 자동 해석하도록 위임한다.
+        #expect(
+            !app.contains("configURL.deletingLastPathComponent()"),
+            "App.swift must not pass `configURL.deletingLastPathComponent()` as resourceRoot — that breaks packaged builds, got: \(app)")
+        #expect(
+            app.contains("KSApp.boot("),
+            "App.swift should still call KSApp.boot, got: \(app)")
+    }
+
     // MARK: - 프론트엔드 프리셋
 
     @Test("React preset writes dist/dev/build fields with specified package manager")
@@ -219,6 +262,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.tsx").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.tsx").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/index.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }
@@ -261,6 +305,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.vue").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/style.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }
@@ -303,6 +348,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.svelte").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }

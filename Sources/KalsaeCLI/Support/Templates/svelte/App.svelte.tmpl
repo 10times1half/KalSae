@@ -1,10 +1,4 @@
 <script lang="ts">
-  declare global {
-    interface Window {
-      __KS_: { invoke<T = unknown>(name: string, args?: unknown): Promise<T> }
-    }
-  }
-
   let msg = $state('')
 
   async function greet() {

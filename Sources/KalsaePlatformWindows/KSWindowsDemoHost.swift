@@ -28,6 +28,10 @@
             // STA완다는 조건을 요구한다. 이후 모든 Win32 / WebView2 호출이
             // 안전하도록 가능한 한 이른 시점에 초기화한다.
             try Win32App.shared.ensureCOMInitialized()
+            // WebView2 가 spawn 하는 `msedgewebview2.exe` 브라우저/헬퍼
+            // 프로세스가 부모 종료 시 함께 정리되도록 Job Object 를 설정한다.
+            // 반드시 WebView2 환경 생성 전에 호출되어야 자식이 잡에 상속된다.
+            Win32App.shared.ensureProcessJobObject()
 
             self.registry = registry
             // Mica / Acrylic / Tabbed 백드롭은 윈도우가 투명하지 않으면 보이지

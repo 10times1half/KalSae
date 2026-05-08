@@ -25,6 +25,17 @@ let package = Package(
                 .swiftLanguageMode(.v6),
                 .enableUpcomingFeature("ExistentialAny"),
                 .enableUpcomingFeature("InternalImportsByDefault"),
+            ],
+            linkerSettings: [
+                // Windows: PE 서브시스템을 GUI 로 설정해 실행 시 콘솔 창이
+                // 같이 뜨지 않게 한다. `wWinMain` 이 없는 Swift `@main` 이므로
+                // CRT 시작 루틴을 일반 `mainCRTStartup` 으로 명시적으로 지정한다
+                // (제거 시 LNK2019 unresolved external `wWinMain`).
+                .unsafeFlags(
+                    ["-Xlinker", "/SUBSYSTEM:WINDOWS",
+                     "-Xlinker", "/ENTRY:mainCRTStartup"],
+                    .when(platforms: [.windows])
+                ),
             ]
         ),
     ]

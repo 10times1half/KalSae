@@ -110,6 +110,14 @@ extension KSPackager {
         let dstConfig = resources.appendingPathComponent("Kalsae.json")
         try fm.copyItem(at: opts.configPath, to: dstConfig)
 
+        // 3.1 macOS 는 dist 내용을 Contents/Resources/ 에 인라인 복사한다.
+        // 따라서 런타임 frontendDist 는 configDir 자체(".")가 옳다.
+        // release 빌드에서는 `security.devtools` 도 안전하게 끈다.
+        try KSPackager.rewritePackagedConfig(
+            at: dstConfig,
+            frontendDist: ".",
+            disableDevtools: true)
+
         // 4) Frontend dist
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             // dist 내용을 Resources/ 직접 복사 (Resources/dist/ 이 아니라 Resources/index.html 식).

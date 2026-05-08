@@ -15,6 +15,7 @@
         private(set) var instanceHandle: HINSTANCE
         private(set) var classAtom: ATOM = 0
         private var comInitialized: Bool = false
+        private var jobObject: HANDLE?
 
         /// Maps HWND (as UInt bit pattern) to the Swift `Win32Window` that owns
         /// it so that the shared `WNDPROC` can route messages. We key on UInt
@@ -75,6 +76,59 @@
             }
             comInitialized = true
             log.info("COM initialized (STA, hr=0x\(String(UInt32(bitPattern: hr), radix: 16)))")
+        }
+
+        /// 현재 프로세스를 Job Object 에 attach 하여, 호스트 프로세스가
+        /// 종료될 때 자식 프로세스(특히 WebView2 의 `msedgewebview2.exe`
+        /// 브라우저/렌더러/GPU 헬퍼) 가 함께 종료되도록 한다.
+        ///
+        /// `ExitProcess` 또는 비정상 종료 시 dispose 경로가 제대로 실행
+        /// 되지 못하면 헬퍼 프로세스가 고아(orphan)가 되어 사용자 데이터
+        /// 폴더(`*\WebView2`)를 락으로 잡고 있을 수 있다. Job Object 의
+        /// `KILL_ON_JOB_CLOSE` 가 OS 레벨 안전망 역할을 한다.
+        ///
+        /// Idempotent. 실패는 치명적이지 않으므로 경고만 남긴다.
+        func ensureProcessJobObject() {
+            guard jobObject == nil else { return }
+
+            guard let job = CreateJobObjectW(nil, nil) else {
+                log.warning(
+                    "CreateJobObjectW failed (GetLastError=\(GetLastError())); WebView2 helpers may not be cleaned up on abrupt exit"
+                )
+                return
+            }
+
+            var info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
+            info.BasicLimitInformation.LimitFlags =
+                DWORD(JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
+            let infoSize = DWORD(MemoryLayout<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>.size)
+            let setOK = withUnsafeMutablePointer(to: &info) { ptr -> Bool in
+                SetInformationJobObject(
+                    job,
+                    JobObjectExtendedLimitInformation,
+                    ptr,
+                    infoSize)
+            }
+            if !setOK {
+                log.warning(
+                    "SetInformationJobObject failed (GetLastError=\(GetLastError())); closing job handle"
+                )
+                _ = CloseHandle(job)
+                return
+            }
+
+            if !AssignProcessToJobObject(job, GetCurrentProcess()) {
+                // ERROR_ACCESS_DENIED (5): 이미 다른 잡(예: 디버거/컨테이너)에
+                // 속한 경우. Win8+ 는 nested job 을 허용하지만 거부될 수 있다.
+                log.warning(
+                    "AssignProcessToJobObject failed (GetLastError=\(GetLastError())); WebView2 helpers may survive abrupt exit"
+                )
+                _ = CloseHandle(job)
+                return
+            }
+
+            jobObject = job
+            log.info("Process attached to JobObject (KILL_ON_JOB_CLOSE)")
         }
 
         /// Registers the shared window class. Idempotent.

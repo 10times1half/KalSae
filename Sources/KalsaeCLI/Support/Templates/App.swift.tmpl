@@ -24,18 +24,58 @@ struct App {
 
     @MainActor
     static func run() async throws {
-        guard let configURL = Bundle.module.url(
-            forResource: "kalsae", withExtension: "json"
-        ) else {
-            throw KSError.configNotFound("kalsae.json not found in bundle")
-        }
-        let resourceRoot = configURL.deletingLastPathComponent()
+        let resolved = try resolveConfigURL()
+        // resourceRoot 는 패키지 산출물에서는 nil 이며, KSApp.boot 가
+        // `<configDir>/<config.build.frontendDist>` 로 자동 해석한다.
+        // 개발 모드(SwiftPM 리소스 번들 / .app 번들)에서는 kalsae.json 옆에
+        // 자산이 함께 놓여 있어 `<configDir>` 자체가 resourceRoot 가 된다.
         let app = try await KSApp.boot(
-            configURL: configURL,
-            resourceRoot: resourceRoot
+            configURL: resolved.url,
+            resourceRoot: resolved.resourceRoot
         ) { registry in
             await _ksRegister_hello(into: registry)
         }
         _ = app.run()
+    }
+
+    /// `Kalsae.json` 위치 + 권장 `resourceRoot` 를 함께 해석.
+    ///
+    /// 우선순위:
+    ///   1) 패키지 산출물 — EXE 옆 `Kalsae.json`. 자산은 `<exeDir>/<frontendDist>/`
+    ///      에 분리되어 있으므로 `resourceRoot=nil` 로 자동 해석에 맡긴다.
+    ///   2) macOS `.app` 번들 — `Contents/Resources/Kalsae.json` 옆에 자산이
+    ///      함께 있으므로 `resourceRoot=Contents/Resources/`.
+    ///   3) 개발 모드 — SwiftPM 리소스 번들. kalsae.json 옆에 자산이 함께 있다.
+    ///
+    /// 어느 위치에서도 찾지 못하면 `KSError.configNotFound` 를 던진다.
+    @MainActor
+    static func resolveConfigURL() throws -> (url: URL, resourceRoot: URL?) {
+        let fm = FileManager.default
+        let candidates = ["Kalsae.json", "kalsae.json"]
+
+        let exeDir = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+            .deletingLastPathComponent()
+        for name in candidates {
+            let url = exeDir.appendingPathComponent(name)
+            if fm.fileExists(atPath: url.path) { return (url, nil) }
+        }
+
+        if let resourceURL = Bundle.main.resourceURL {
+            for name in candidates {
+                let url = resourceURL.appendingPathComponent(name)
+                if fm.fileExists(atPath: url.path) {
+                    return (url, resourceURL)
+                }
+            }
+        }
+
+        if let bundled = Bundle.module.url(
+            forResource: "kalsae", withExtension: "json")
+        {
+            return (bundled, bundled.deletingLastPathComponent())
+        }
+
+        throw KSError.configNotFound(
+            "Kalsae.json (looked next to executable, in app bundle, and in SwiftPM resource bundle)")
     }
 }

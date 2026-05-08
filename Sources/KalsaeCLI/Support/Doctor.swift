@@ -79,6 +79,10 @@ public enum KSDoctor {
             projectRoot: options.projectRoot,
             report: &report,
             fm: fm)
+        checkPackagedManifests(
+            projectRoot: options.projectRoot,
+            report: &report,
+            fm: fm)
         checkSwiftSyntaxCache(
             projectRoot: options.projectRoot,
             report: &report,
@@ -301,6 +305,81 @@ public enum KSDoctor {
         #else
             report.infos.append("WebView2 check skipped on non-Windows platform.")
         #endif
+    }
+
+    /// `<projectRoot>/dist/*/` 아래의 패키지 EXE manifest 를 스캔해
+    /// `processorArchitecture` 값이 Win32 SxS 스펙이 허용하는 집합 안에 있는지
+    /// 확인한다. 허용되지 않는 값(예: 과거 빌드의 `x64`) 이 있으면 OS 가
+    /// "side-by-side 구성이 잘못되어..." 로 EXE 시작 자체를 거부하므로,
+    /// 사용자가 `kalsae build` 를 다시 돌려야 한다는 신호를 명확히 준다.
+    ///
+    /// `dist/` 가 없으면 silent — `kalsae build` 한 적 없는 프로젝트에서는 노이즈를
+    /// 만들지 않는다.
+    private static func checkPackagedManifests(
+        projectRoot: URL,
+        report: inout KSDoctorReport,
+        fm: FileManager
+    ) {
+        let distRoot = projectRoot.appendingPathComponent("dist")
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: distRoot.path, isDirectory: &isDir), isDir.boolValue else {
+            return
+        }
+
+        let pkgDirs =
+            ((try? fm.contentsOfDirectory(
+                at: distRoot,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles])) ?? [])
+            .filter { url in
+                var d: ObjCBool = false
+                return fm.fileExists(atPath: url.path, isDirectory: &d) && d.boolValue
+            }
+
+        // SxS manifest 의 `processorArchitecture` 가 받는 합법 값 집합.
+        // 출처: MSDN "Application Manifests — assemblyIdentity".
+        let allowed: Set<String> = ["x86", "amd64", "arm64", "ia64", "msil", "*"]
+
+        for pkg in pkgDirs {
+            let manifests =
+                ((try? fm.contentsOfDirectory(
+                    at: pkg,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles])) ?? [])
+                .filter { $0.lastPathComponent.hasSuffix(".exe.manifest") }
+
+            for manifest in manifests {
+                guard let text = try? String(contentsOf: manifest, encoding: .utf8) else {
+                    report.warnings.append(
+                        "Could not read packaged manifest: \(manifest.path)")
+                    continue
+                }
+                guard let value = extractProcessorArchitecture(from: text) else {
+                    continue
+                }
+                if !allowed.contains(value) {
+                    report.warnings.append(
+                        "Packaged manifest at \(manifest.path) has invalid"
+                            + " processorArchitecture=\"\(value)\"."
+                            + " Re-run `kalsae build` with the latest CLI; the OS will refuse"
+                            + " to start the EXE with this value (\"side-by-side configuration is incorrect\").")
+                }
+            }
+        }
+    }
+
+    /// manifest 텍스트에서 첫 번째 `processorArchitecture="..."` 값을 추출한다.
+    /// 정규식 의존을 피하려고 단순한 토큰 스캐너로 구현했다 — manifest 가
+    /// `processorArchitecture="*"` 처럼 와일드카드를 쓰는 두 번째 entry 를
+    /// 가질 수 있으나 우리가 검사하려는 건 `assemblyIdentity` 의 첫 번째 값이다.
+    private static func extractProcessorArchitecture(from text: String) -> String? {
+        let key = "processorArchitecture=\""
+        guard let start = text.range(of: key) else { return nil }
+        let after = start.upperBound
+        guard let end = text.range(of: "\"", range: after..<text.endIndex) else {
+            return nil
+        }
+        return String(text[after..<end.lowerBound])
     }
 
     private static func checkSwiftSyntaxCache(

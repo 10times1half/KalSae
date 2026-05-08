@@ -118,7 +118,19 @@ struct DevCommand: ParsableCommand {
             if let devProcess,
                 devProcess.isRunning
             {
-                devProcess.terminate()
+                #if os(Windows)
+                    // `Process.terminate()` 는 Win32 `TerminateProcess` 를
+                    // 자식(예: `pwsh`/`cmd.exe`) 에게만 보내므로 손자
+                    // `node.exe` 가 살아남아 PowerShell 콘솔 핸들을 계속
+                    // 점유한다. `taskkill /F /T` 로 프로세스 트리 전체를
+                    // 종료해 PowerShell 이 즉시 프롬프트로 복귀하도록 한다.
+                    let pid = devProcess.processIdentifier
+                    _ = try? shell(
+                        command: "taskkill",
+                        arguments: ["/F", "/T", "/PID", String(pid)])
+                #else
+                    devProcess.terminate()
+                #endif
             }
         }
 
