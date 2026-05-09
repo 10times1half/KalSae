@@ -253,9 +253,9 @@
                 false,
                 DWORD(pid))
             guard handle != nil else { return false }
-            
+
             defer { _ = CloseHandle(handle) }
-            
+
             var creationTime = FILETIME()
             var exitTime = FILETIME()
             var kernelTime = FILETIME()
@@ -267,7 +267,7 @@
                 &exitTime,
                 &kernelTime,
                 &userTime)
-            
+
             return result
         }
 
