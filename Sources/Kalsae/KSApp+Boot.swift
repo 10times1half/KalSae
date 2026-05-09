@@ -79,6 +79,11 @@ extension KSApp {
         if let resourceRoot, isDirectory(resourceRoot) {
             return .virtualHost(resourceRoot)
         }
+        #if os(Windows)
+            if KSEmbeddedAssetResolverFactory.shouldPreferEmbeddedAssets() {
+                return .virtualHost(resourceRoot ?? URL(fileURLWithPath: "."))
+            }
+        #endif
         return .fallback
     }
 

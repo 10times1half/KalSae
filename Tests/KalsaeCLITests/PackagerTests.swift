@@ -284,6 +284,91 @@ struct PackagerWindowsTests {
         let report = try KSPackager.run(opts)
         #expect(report.warnings.contains { $0.contains("WebView2Loader.dll") })
     }
+
+    @Test("explicit install mode overrides legacy policy in runtime metadata")
+    func explicitInstallModeOverridesPolicy() throws {
+        let fm = FileManager.default
+        let work = uniqueDir(suffix: "install-mode")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let exe = work.appendingPathComponent("App.exe")
+        try writeText("MZ", to: exe)
+        let config = work.appendingPathComponent("Kalsae.json")
+        try writeText("{}", to: config)
+        let output = work.appendingPathComponent("out")
+
+        // legacy policy는 fixed지만, explicit install mode를 skip으로 주면
+        // runtime 메타데이터는 skip을 우선 반영해야 한다.
+        let opts = KSPackager.Options(
+            projectRoot: work,
+            executablePath: exe,
+            configPath: config,
+            frontendDist: nil,
+            output: output,
+            appName: "App",
+            version: "0.1.0",
+            identifier: "dev.kalsae.app",
+            architecture: .x64,
+            policy: .fixed,
+            standalone: true,
+            webView2InstallMode: .skip)
+
+        _ = try KSPackager.run(opts)
+
+        let runtimeURL = output.appendingPathComponent("kalsae.runtime.json")
+        let data = try Data(contentsOf: runtimeURL)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        #expect((json?["installMode"] as? String) == "skip")
+        #expect((json?["installBehavior"] as? String) == "skip-runtime-install-check")
+        #expect(!fm.fileExists(atPath: output.appendingPathComponent("webview2-runtime").path))
+    }
+
+    @Test("standalone packaging records embedded asset metadata when dist exists")
+    func standaloneRecordsEmbeddedAssetMetadata() throws {
+        let fm = FileManager.default
+        let work = uniqueDir(suffix: "embedded-assets-meta")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let exe = work.appendingPathComponent("App.exe")
+        try writeText("MZ", to: exe)
+        let config = work.appendingPathComponent("Kalsae.json")
+        try writeText("{}", to: config)
+
+        let dist = work.appendingPathComponent("dist")
+        try fm.createDirectory(at: dist, withIntermediateDirectories: true)
+        try writeText("<html>ok</html>", to: dist.appendingPathComponent("index.html"))
+        let assets = dist.appendingPathComponent("assets")
+        try fm.createDirectory(at: assets, withIntermediateDirectories: true)
+        try writeText("console.log('ok')", to: assets.appendingPathComponent("app.js"))
+
+        let output = work.appendingPathComponent("out")
+
+        let opts = KSPackager.Options(
+            projectRoot: work,
+            executablePath: exe,
+            configPath: config,
+            frontendDist: dist,
+            output: output,
+            appName: "App",
+            version: "0.1.0",
+            identifier: "dev.kalsae.app",
+            architecture: .x64,
+            policy: .evergreen,
+            standalone: true,
+            webView2InstallMode: .download)
+
+        _ = try KSPackager.run(opts)
+
+        let runtimeURL = output.appendingPathComponent("kalsae.runtime.json")
+        let data = try Data(contentsOf: runtimeURL)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        #expect((json?["embeddedAssetsResourceName"] as? String) == "KSAS_ASSETS_ZIP")
+        #expect((json?["embeddedAssetsFileCount"] as? Int) == 2)
+    }
 }
 
 // MARK: - 패키지된 Kalsae.json 재작성

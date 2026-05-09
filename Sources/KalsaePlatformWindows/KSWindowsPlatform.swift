@@ -105,7 +105,9 @@
 
             if case .virtualHost(let servedRoot) = servingMode {
                 try host.prepare(devtools: effectiveDevtools)
-                let resolver = KSAssetResolver(root: servedRoot, cache: KSAssetCache())
+                let resolver = KSEmbeddedAssetResolverFactory.makeResolver(
+                    defaultRoot: servedRoot,
+                    cache: KSAssetCache())
                 try host.setResourceHandler(
                     resolver: resolver,
                     csp: config.security.csp,
@@ -247,6 +249,9 @@
                 return .devServer
             }
             if isDirectory(resourceRoot) {
+                return .virtualHost(resourceRoot)
+            }
+            if KSEmbeddedAssetResolverFactory.shouldPreferEmbeddedAssets() {
                 return .virtualHost(resourceRoot)
             }
             return .fallback

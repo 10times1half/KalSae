@@ -106,6 +106,37 @@ struct KSAssetResolverTests {
         #expect(KSContentType.forExtension("HTML").hasPrefix("text/html"))
     }
 
+    @Test("Custom embedded asset source serves bytes through resolver")
+    func embeddedSourceRoundTrip() throws {
+        let source = KSEmbeddedAssetSource(
+            assets: [
+                "index.html": Data("<h1>embedded</h1>".utf8),
+                "assets/app.js": Data("console.log('ok')".utf8),
+            ])
+        let r = KSAssetResolver(
+            root: URL(fileURLWithPath: "/__embedded__"),
+            source: source)
+
+        let index = try r.resolve(path: "/")
+        #expect(String(data: index.data, encoding: .utf8) == "<h1>embedded</h1>")
+        #expect(index.mimeType.hasPrefix("text/html"))
+
+        let js = try r.resolve(path: "assets/app.js")
+        #expect(js.mimeType.hasPrefix("application/javascript"))
+    }
+
+    @Test("Custom embedded asset source still rejects traversal before source lookup")
+    func embeddedSourceTraversalRejected() throws {
+        let source = KSEmbeddedAssetSource(assets: ["index.html": Data()])
+        let r = KSAssetResolver(
+            root: URL(fileURLWithPath: "/__embedded__"),
+            source: source)
+
+        #expect(throws: KSError.self) {
+            _ = try r.resolve(path: "../../secret.txt")
+        }
+    }
+
     // MARK: - 심링크 이스케이프 가드 (macOS / Linux 전용)
 
     #if !os(Windows)

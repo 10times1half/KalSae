@@ -128,11 +128,12 @@ public final class KSApp {
         resourceRoot: URL? = nil,
         configure: (KSCommandRegistry) async throws(KSError) -> Void
     ) async throws(KSError) -> KSApp {
-        let config = try KSConfigLoader.load(from: configURL)
+        let resolvedConfigURL = resolveExternalConfigOverride(configURL)
+        let config = try KSConfigLoader.load(from: resolvedConfigURL)
         let root =
             resourceRoot
             ?? {
-                let dir = configURL.deletingLastPathComponent()
+                let dir = resolvedConfigURL.deletingLastPathComponent()
                 return dir.appendingPathComponent(config.build.frontendDist)
             }()
         return try await boot(
@@ -141,6 +142,30 @@ public final class KSApp {
             urlOverride: urlOverride,
             resourceRoot: root,
             configure: configure)
+    }
+
+    /// 외부 설정 오버라이드 허용 정책(E4):
+    /// - 부팅 인자로 전달된 `configURL`과 같은 디렉터리에
+    ///   `Kalsae.json` 또는 `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
+    /// - 패키징 모드에서 임베디드/생성된 설정보다 사용자가 배치한 외부 설정이
+    ///   우선되도록 하여 운영 환경 조정 가능성을 보장한다.
+    private static func resolveExternalConfigOverride(_ configURL: URL) -> URL {
+        let fm = FileManager.default
+        let dir = configURL.deletingLastPathComponent()
+        let candidates = [
+            dir.appendingPathComponent("Kalsae.json"),
+            dir.appendingPathComponent("kalsae.json"),
+        ]
+
+        for candidate in candidates {
+            if candidate.standardizedFileURL == configURL.standardizedFileURL {
+                return configURL
+            }
+            if fm.fileExists(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        return configURL
     }
 
     /// 메모리 내 `KSConfig`에서 애플리케이션을 부팅한다. 테스트와
@@ -248,8 +273,9 @@ public final class KSApp {
                 //
                 // Phase 9: 동일 자산이 webview lifecycle 동안 여러 번 요청되는
                 // 정상 패턴 — 디스크 재읽기를 피하기 위해 작은 LRU 캐시를 단다.
-                let resolver = KSAssetResolver(
-                    root: servedRoot, cache: KSAssetCache())
+                let resolver = KSEmbeddedAssetResolverFactory.makeResolver(
+                    defaultRoot: servedRoot,
+                    cache: KSAssetCache())
                 try concrete.setResourceHandler(
                     resolver: resolver,
                     csp: config.security.csp,
@@ -333,7 +359,9 @@ public final class KSApp {
                     devServerURL: config.build.devServerURL, resourceRoot: resourceRoot)
                 if case .virtualHost(let secRoot) = secMode {
                     try sec.prepare(devtools: config.security.devtools)
-                    let secAssetResolver = KSAssetResolver(root: secRoot, cache: KSAssetCache())
+                    let secAssetResolver = KSEmbeddedAssetResolverFactory.makeResolver(
+                        defaultRoot: secRoot,
+                        cache: KSAssetCache())
                     try sec.setResourceHandler(
                         resolver: secAssetResolver,
                         csp: config.security.csp,

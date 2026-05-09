@@ -11,6 +11,14 @@ public enum KSPackager {
         case auto
     }
 
+    public enum WebView2InstallMode: String, Sendable, CaseIterable {
+        case download
+        case embedBootstrapper
+        case offlineInstaller
+        case fixedVersion
+        case skip
+    }
+
     public enum Architecture: String, Sendable, CaseIterable {
         case x64 = "x64"
         case arm64 = "arm64"
@@ -52,6 +60,8 @@ public enum KSPackager {
         public var identifier: String
         public var architecture: Architecture
         public var policy: WebView2Policy
+        public var standalone: Bool
+        public var webView2InstallMode: WebView2InstallMode?
         public var iconPath: URL?  // .ico copied as-is when present
         public var vendorRuntimeRoot: URL?  // Vendor/WebView2/runtimes/<arch>/
         public var bootstrapperPath: URL?  // MicrosoftEdgeWebview2Setup.exe (optional)
@@ -72,6 +82,8 @@ public enum KSPackager {
             identifier: String,
             architecture: Architecture,
             policy: WebView2Policy,
+            standalone: Bool = false,
+            webView2InstallMode: WebView2InstallMode? = nil,
             iconPath: URL? = nil,
             vendorRuntimeRoot: URL? = nil,
             bootstrapperPath: URL? = nil,
@@ -89,6 +101,8 @@ public enum KSPackager {
             self.identifier = identifier
             self.architecture = architecture
             self.policy = policy
+            self.standalone = standalone
+            self.webView2InstallMode = webView2InstallMode
             self.iconPath = iconPath
             self.vendorRuntimeRoot = vendorRuntimeRoot
             self.bootstrapperPath = bootstrapperPath
@@ -117,6 +131,12 @@ public enum KSPackager {
     public static func run(_ opts: Options) throws -> Report {
         let fm = FileManager.default
         var warnings: [String] = []
+
+        if opts.standalone {
+            warnings.append(
+                "Standalone mode is enabled (phase 1 in progress): packaging keeps compatibility layout while new standalone pipeline is being integrated."
+            )
+        }
 
         // Output 디렉터리 청소 정책 (RFC-002 §3.1(a)):
         // 직전 빌드의 fingerprint 와 이번 빌드의 fingerprint 를 비교해, 정책/아키텍처/
@@ -215,29 +235,117 @@ public enum KSPackager {
             "userDataFolder": "%LOCALAPPDATA%\\\(opts.identifier)\\WebView2",
         ]
 
-        switch opts.policy {
-        case .evergreen:
+        let installMode = effectiveInstallMode(opts)
+        runtime["installMode"] = installMode.rawValue
+
+        switch installMode {
+        case .download:
+            runtime["installBehavior"] = "download-bootstrapper-at-runtime"
+        case .skip:
+            runtime["installBehavior"] = "skip-runtime-install-check"
+            warnings.append(
+                "WebView2 install mode is 'skip': app startup may fail on machines without a system WebView2 runtime."
+            )
+        case .embedBootstrapper, .offlineInstaller:
+            runtime["installBehavior"] =
+                installMode == .offlineInstaller
+                ? "embedded-offline-installer"
+                : "embedded-bootstrapper"
             try copyBootstrapper(
                 opts: opts,
                 warnings: &warnings)
-        case .fixed:
-            try copyFixedRuntime(
-                opts: opts, runtime: &runtime,
-                warnings: &warnings)
-        case .auto:
-            try copyBootstrapper(opts: opts, warnings: &warnings)
+        case .fixedVersion:
+            runtime["installBehavior"] = "fixed-runtime-folder"
             try copyFixedRuntime(
                 opts: opts, runtime: &runtime,
                 warnings: &warnings)
         }
 
         let runtimeURL = opts.output.appendingPathComponent("kalsae.runtime.json")
+
+        // 7) Standalone 후처리 파이프라인 (Phase 0/1/2 entry point)
+        if opts.standalone {
+            var embeddedAssetsZipURL: URL?
+            if let frontendDist = opts.frontendDist, fm.fileExists(atPath: frontendDist.path) {
+                do {
+                    let report = try KSAssetZipBuilder.build(from: frontendDist)
+                    let tempZip = fm.temporaryDirectory
+                        .appendingPathComponent("kalsae-standalone-assets-\(UUID().uuidString)")
+                        .appendingPathExtension("zip")
+                    try report.zipData.write(to: tempZip, options: [.atomic])
+                    embeddedAssetsZipURL = tempZip
+                    runtime["embeddedAssetsResourceName"] = "KSAS_ASSETS_ZIP"
+                    runtime["embeddedAssetsFileCount"] = report.fileCount
+                } catch {
+                    warnings.append("Standalone asset zip build failed: \(error)")
+                }
+            }
+
+            defer {
+                if let embeddedAssetsZipURL {
+                    try? fm.removeItem(at: embeddedAssetsZipURL)
+                }
+            }
+
+            let standaloneReport = KSStandalonePostProcessor.run(
+                .init(
+                    executable: dstExe,
+                    appName: opts.appName,
+                    version: opts.version,
+                    identifier: opts.identifier,
+                    loaderDLL: opts.output.appendingPathComponent("WebView2Loader.dll"),
+                    manifestPath: manifestURL,
+                    iconPath: opts.iconPath,
+                    assetsZipPath: embeddedAssetsZipURL))
+            warnings.append(contentsOf: standaloneReport.warnings)
+
+            if standaloneReport.assetsEmbedded {
+                runtime["embeddedAssetsEnabled"] = true
+
+                let resourcesPath = opts.output.appendingPathComponent("Resources")
+                if fm.fileExists(atPath: resourcesPath.path) {
+                    do {
+                        try fm.removeItem(at: resourcesPath)
+                    } catch {
+                        warnings.append(
+                            "Standalone post-process: embedded assets succeeded but failed to remove external Resources/: \(error)"
+                        )
+                    }
+                }
+            }
+
+            if standaloneReport.loaderEmbedded {
+                let loaderPath = opts.output.appendingPathComponent("WebView2Loader.dll")
+                if fm.fileExists(atPath: loaderPath.path) {
+                    do {
+                        try fm.removeItem(at: loaderPath)
+                    } catch {
+                        warnings.append(
+                            "Standalone post-process: embedded loader succeeded but failed to remove external WebView2Loader.dll: \(error)"
+                        )
+                    }
+                }
+            }
+
+            if standaloneReport.manifestEmbedded,
+                fm.fileExists(atPath: manifestURL.path)
+            {
+                do {
+                    try fm.removeItem(at: manifestURL)
+                } catch {
+                    warnings.append(
+                        "Standalone post-process: embedded manifest succeeded but failed to remove external .manifest: \(error)"
+                    )
+                }
+            }
+        }
+
         let runtimeData = try JSONSerialization.data(
             withJSONObject: runtime,
             options: [.prettyPrinted, .sortedKeys])
         try runtimeData.write(to: runtimeURL)
 
-        // 7) Optional zip archive
+        // 8) Optional zip archive
         // Fingerprint 는 zip 생성 이후에 기록한다 (RFC-002 §3.1(d)). 이렇게
         // 하면 zip 호출 시점에 파일이 디스크에 존재하지 않아
         // KSZipArchiver 의 exclude API 로직 없이도 구조적으로 산출물에
@@ -257,7 +365,7 @@ public enum KSPackager {
             }
         }
 
-        // 8) Fingerprint 기록 — 다음 빌드의 incremental 여부 판단에만 사용.
+        // 9) Fingerprint 기록 — 다음 빌드의 incremental 여부 판단에만 사용.
         // zip 생성 이후에 하는 이유는 위 (7) 의 설명 참조. 기록 실패가
         // 치명적이지는 않으므로 warning 으로만 남긴다 (다음 빌드에서
             // fingerprint 부재로 취급 → 자동 전체 재생성).
@@ -388,6 +496,17 @@ public enum KSPackager {
     }
 
     // MARK: - WebView2 Runtime Helpers
+
+    private static func effectiveInstallMode(_ opts: Options) -> WebView2InstallMode {
+        if let mode = opts.webView2InstallMode {
+            return mode
+        }
+        switch opts.policy {
+        case .evergreen: return .download
+        case .fixed: return .fixedVersion
+        case .auto: return .embedBootstrapper
+        }
+    }
 
     /// `WebView2Loader.dll` 을 패키지 출력 루트에 복사한다.
     ///
@@ -609,6 +728,8 @@ public enum KSPackager {
         let iconName: String
         let version: String
         let identifier: String
+        var standalone: Bool = false
+        var installMode: String = ""
         // RFC-002 follow-up: strip 옵션 토글 시에도 fingerprint mismatch 로 자동
         // 전체 재생성. 미지정 시 false/[] 로 폴백되어 이전 빌드 schema 와도 호환.
         var stripSourceMaps: Bool = false
@@ -622,6 +743,8 @@ public enum KSPackager {
                 iconName: opts.iconPath?.lastPathComponent ?? "",
                 version: opts.version,
                 identifier: opts.identifier,
+                standalone: opts.standalone,
+                installMode: (opts.webView2InstallMode?.rawValue ?? effectiveInstallMode(opts).rawValue),
                 stripSourceMaps: opts.stripSourceMaps,
                 stripExtensions: opts.stripExtensions.sorted())
         }

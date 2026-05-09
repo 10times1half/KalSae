@@ -14,6 +14,15 @@
     @Suite("KSWebView2Runtime — userDataFolder safety net")
     struct KSWebView2RuntimeTests {
 
+        private func makeTempRoot() throws -> URL {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("KSWebView2RuntimeTests-\(UUID().uuidString)")
+            try FileManager.default.createDirectory(
+                at: root,
+                withIntermediateDirectories: true)
+            return root
+        }
+
         @Test("`.build/` 내부 EXE 디렉터리에서도 user-data 가 .build 밖으로 떨어진다")
         func userDataIsRedirectedAwayFromBuildTree() {
             let exeDir = URL(fileURLWithPath: "C:\\Projects\\Demo\\.build\\x86_64-unknown-windows-msvc\\debug")
@@ -73,6 +82,71 @@
             #expect(!path.isEmpty)
             #expect(path.contains("Kalsae"))
             #expect(path.hasSuffix("WebView2"))
+        }
+
+        @Test("embeddedAssetsResourceName 는 runtime metadata opt-in 일 때만 값을 반환한다")
+        func embeddedAssetsResourceNameRequiresOptIn() throws {
+            let root = try makeTempRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let disabledJSON = """
+                {
+                  "embeddedAssetsEnabled": false,
+                  "embeddedAssetsResourceName": "KSAS_ASSETS_ZIP"
+                }
+                """
+            try disabledJSON.write(
+                to: root.appendingPathComponent("kalsae.runtime.json"),
+                atomically: false,
+                encoding: .utf8)
+
+            #expect(KSWebView2Runtime.embeddedAssetsResourceName(executableDir: root) == nil)
+
+            let enabledJSON = """
+                {
+                  "embeddedAssetsEnabled": true,
+                  "embeddedAssetsResourceName": "KSAS_ASSETS_ZIP"
+                }
+                """
+            try enabledJSON.write(
+                to: root.appendingPathComponent("kalsae.runtime.json"),
+                atomically: false,
+                encoding: .utf8)
+
+            #expect(
+                KSWebView2Runtime.embeddedAssetsResourceName(executableDir: root)
+                    == "KSAS_ASSETS_ZIP")
+        }
+
+        @Test("embeddedAssetsExtractionDirectory 는 temp 아래에 app/resource/process namespace 를 만든다")
+        func embeddedAssetsExtractionDirectoryUsesStableNamespace() {
+            let dir = KSWebView2Runtime.embeddedAssetsExtractionDirectory(
+                identifier: "demo.app",
+                resourceName: "KSAS_ASSETS_ZIP",
+                processID: 4242,
+                env: ["TEMP": "C:\\Temp"])
+
+            let normalized = dir.path.replacingOccurrences(of: "/", with: "\\")
+            #expect(normalized.contains("Kalsae\\demo.app\\EmbeddedAssets\\KSAS_ASSETS_ZIP\\4242"))
+        }
+
+        @Test("embeddedAssets metadata only is not enough without actual PE resource")
+        func embeddedAssetsRequiresActualPEResource() throws {
+            let root = try makeTempRoot()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let enabledJSON = """
+                {
+                  "embeddedAssetsEnabled": true,
+                  "embeddedAssetsResourceName": "KSAS_ASSETS_ZIP"
+                }
+                """
+            try enabledJSON.write(
+                to: root.appendingPathComponent("kalsae.runtime.json"),
+                atomically: false,
+                encoding: .utf8)
+
+            #expect(!KSWebView2Runtime.hasEmbeddedAssetsResource(executableDir: root))
         }
     }
 #endif

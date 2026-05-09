@@ -17,6 +17,9 @@ public struct KSAssetResolver: Sendable {
     /// 요청 경로가 `""` 또는 `"/"`일 때 제공되는 파일.
     public let indexFileName: String
 
+    /// 실제 자산 바이트를 가져오는 백엔드.
+    public let source: any KSAssetSource
+
     /// 자산 바이트를 위한 선택적 인프로세스 LRU 캐시. `nil`이면
     /// 모든 요청이 디스크에서 다시 읽는다 (원래 동작).
     public let cache: KSAssetCache?
@@ -26,8 +29,23 @@ public struct KSAssetResolver: Sendable {
         indexFileName: String = "index.html",
         cache: KSAssetCache? = nil
     ) {
+        let normalizedRoot = root.standardizedFileURL
+        self.root = normalizedRoot
+        self.indexFileName = indexFileName
+        self.source = KSDiskAssetSource(root: normalizedRoot)
+        self.cache = cache
+    }
+
+    /// 고급/임베드 사용 사례용 생성자. `root`는 캐시 키와 진단 표면용 기준 URL이다.
+    public init(
+        root: URL,
+        source: any KSAssetSource,
+        indexFileName: String = "index.html",
+        cache: KSAssetCache? = nil
+    ) {
         self.root = root.standardizedFileURL
         self.indexFileName = indexFileName
+        self.source = source
         self.cache = cache
     }
 
@@ -63,50 +81,20 @@ public struct KSAssetResolver: Sendable {
                 message: "asset path escapes resolver root: \(path)")
         }
 
-        let candidate =
-            root
-            .appendingPathComponent(rel)
-            .standardizedFileURL
-
-        // 정규화된 URL이 여전히 `root` 내부에 있는지 확인한다.
-        let rootPath = root.path
-        let candidatePath = candidate.path
-        if !candidatePath.hasPrefix(rootPath) {
-            throw KSError(
-                code: .fsScopeDenied,
-                message: "asset path escapes resolver root: \(path)")
-        }
-
-        // 심링크 해석: 루트 내부의 심링크가 외부를 가리킬 수 있다.
-        // 두 번째 방어선으로 실제 경로(모든 심링크가 해석된)를 비교한다.
-        let realCandidate = candidate.resolvingSymlinksInPath().path
-        let realRoot = root.resolvingSymlinksInPath().path
-        if !realCandidate.hasPrefix(realRoot) {
-            throw KSError(
-                code: .fsScopeDenied,
-                message: "asset path resolves via symlink outside resolver root: \(path)")
-        }
-
         // 캐시 조회는 정규화된 절대 경로로. 동일 파일에 대한 여러
         // 표기(예: `/x` vs `x`)가 동일 슬롯을 공유하도록 보장.
-        if let cache, let cached = cache.lookup(candidatePath) {
+        let cacheKey = root.appendingPathComponent(rel).standardizedFileURL.path
+        if let cache, let cached = cache.lookup(cacheKey) {
             return cached
         }
 
-        let data: Data
-        do {
-            data = try Data(contentsOf: candidate)
-        } catch {
-            throw KSError(
-                code: .ioFailed,
-                message: "asset not found: \(rel) (\(String(describing: error)))")
-        }
+        let data = try source.load(relativePath: rel, indexFileName: indexFileName)
 
         let asset = Asset(
             data: data,
-            mimeType: KSContentType.forExtension(candidate.pathExtension),
+            mimeType: KSContentType.forExtension(URL(fileURLWithPath: rel).pathExtension),
             path: rel)
-        cache?.store(candidatePath, asset)
+        cache?.store(cacheKey, asset)
         return asset
     }
 }

@@ -35,6 +35,20 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
+        help:
+            "Standalone runtime install mode: download | embedBootstrapper | offlineInstaller | fixedVersion | skip."
+    )
+    var webview2InstallMode: String? = nil
+
+    @Flag(
+        name: .long,
+        help:
+            "Build a standalone-style bundle (single executable target layout). Phase 0/1 compatibility mode currently keeps existing files and options while enabling standalone pipeline flags."
+    )
+    var standalone: Bool = false
+
+    @Option(
+        name: .long,
         help: "Target architecture for the package: x64 | arm64 | x86.")
     var arch: String = "x64"
 
@@ -134,6 +148,13 @@ struct BuildCommand: ParsableCommand {
     func validate() throws {
         if let jobs, jobs < 1 {
             throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
+        }
+        if let mode = webview2InstallMode,
+            parseInstallMode(mode) == nil
+        {
+            throw ValidationError(
+                "--webview2-install-mode must be one of: download | embedBootstrapper | offlineInstaller | fixedVersion | skip"
+            )
         }
     }
 
@@ -378,6 +399,7 @@ struct BuildCommand: ParsableCommand {
             guard let policy = KSPackager.WebView2Policy(rawValue: webview2.lowercased()) else {
                 throw ValidationError("--webview2 must be one of: evergreen | fixed | auto")
             }
+            let installMode = webview2InstallMode.flatMap(parseInstallMode)
             guard let archEnum = KSPackager.Architecture(rawValue: arch.lowercased()) else {
                 throw ValidationError("--arch must be one of: x64 | arm64 | x86")
             }
@@ -421,6 +443,8 @@ struct BuildCommand: ParsableCommand {
                 identifier: info.identifier,
                 architecture: archEnum,
                 policy: policy,
+                standalone: standalone,
+                webView2InstallMode: installMode,
                 iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
                 vendorRuntimeRoot: vendorRoot,
                 bootstrapperPath: bootstrapper.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
@@ -428,7 +452,10 @@ struct BuildCommand: ParsableCommand {
                 stripSourceMaps: config.build.stripSourceMaps,
                 stripExtensions: config.build.stripExtensions)
 
-            print("📦  Packaging \(info.appName) v\(info.version) (\(archEnum.rawValue), \(policy.rawValue))")
+            let modeLabel = installMode?.rawValue ?? "(legacy policy: \(policy.rawValue))"
+            print(
+                "📦  Packaging \(info.appName) v\(info.version) (\(archEnum.rawValue), mode: \(modeLabel), standalone: \(standalone))"
+            )
             let report = try KSPackager.run(opts)
             print(report.description)
 
@@ -481,6 +508,26 @@ struct BuildCommand: ParsableCommand {
             }
         }
     #endif
+
+    private func parseInstallMode(_ raw: String) -> KSPackager.WebView2InstallMode? {
+        let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+        switch normalized {
+        case "download":
+            return .download
+        case "embedbootstrapper":
+            return .embedBootstrapper
+        case "offlineinstaller":
+            return .offlineInstaller
+        case "fixedversion":
+            return .fixedVersion
+        case "skip":
+            return .skip
+        default:
+            return nil
+        }
+    }
 
     #if os(macOS)
         private func runPackageMacOS(
