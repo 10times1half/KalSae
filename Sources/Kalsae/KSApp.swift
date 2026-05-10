@@ -106,7 +106,22 @@ public final class KSApp {
         configure: (KSCommandRegistry) async throws(KSError) -> Void
     ) async throws(KSError) -> KSApp {
         let resolvedConfigURL = resolveExternalConfigOverride(configURL)
-        let config = try KSConfigLoader.load(from: resolvedConfigURL)
+        let config: KSConfig
+        do {
+            config = try KSConfigLoader.load(from: resolvedConfigURL)
+        } catch {
+            // standalone --embed-config 산출물에서는 외부 Kalsae.json 이 제거된다.
+            // PE RCDATA `KSAS_CONFIG_JSON` 에 임베드된 데이터가 있으면 그걸로 폴백한다.
+            #if os(Windows)
+                if let embedded = KSEmbeddedConfigLoader.loadEmbeddedConfigData() {
+                    config = try KSConfigLoader.decode(embedded)
+                } else {
+                    throw error
+                }
+            #else
+                throw error
+            #endif
+        }
         let root =
             resourceRoot
             ?? {

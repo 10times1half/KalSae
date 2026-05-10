@@ -137,6 +137,7 @@ public enum KSPackager {
             public let loaderEmbedded: Bool
             public let manifestEmbedded: Bool
             public let assetsEmbedded: Bool
+            public let configEmbedded: Bool
             public let iconEmbedded: Bool
             public let versionEmbedded: Bool
         }
@@ -150,6 +151,7 @@ public enum KSPackager {
                 s += "\n  \(mark(st.loaderEmbedded)) WebView2Loader.dll (RCDATA)"
                 s += "\n  \(mark(st.manifestEmbedded)) RT_MANIFEST"
                 s += "\n  \(mark(st.assetsEmbedded)) frontend assets (RCDATA)"
+                s += "\n  \(mark(st.configEmbedded)) Kalsae.json (RCDATA)"
                 s += "\n  \(mark(st.iconEmbedded)) icon"
                 s += "\n  \(mark(st.versionEmbedded)) version metadata"
             }
@@ -342,26 +344,28 @@ public enum KSPackager {
                     manifestPath: manifestURL,
                     iconPath: opts.iconPath,
                     assetsZipPath: embeddedAssetsZipURL,
+                    configPath: dstConfig,
                     resourceHackerOverride: opts.resourceHackerPath))
             warnings.append(contentsOf: standaloneReport.warnings)
 
-            // PE 편집기가 아예 없고 fallback 도 허용되지 않으면 즉시 실패.
-            // `standalone` 이 일반 빌드와 구별없는 상태로 배포되는 사일랰트 실패를 차단.
+            // 임베드 메커니즘이 아예 동작하지 않고 fallback 도 허용되지 않으면 즉시 실패.
+            // (in-process Win32 패치가 기본 경로이므로 보통 도달하지 않는다 —
+            //  PE 가 손상됐거나 권한이 없을 때만 발생.)
             if standaloneReport.toolsMissing, !opts.standaloneAllowFallback {
                 throw StandaloneToolsMissingError(
                     message:
-                        "--standalone build requires a PE editor (ResourceHacker or rcedit) on PATH; "
-                        + "none was found, so the package would be byte-identical to a non-standalone "
-                        + "build. Install ResourceHacker (`winget install Resource-Hacker` or "
-                        + "`choco install resource-hacker`) and rcedit (`winget install electron.rcedit`) "
-                        + "and rebuild, or pass --standalone-allow-fallback to keep the compatibility "
-                        + "layout intentionally.")
+                        "--standalone build could not embed any PE resource. The in-process Win32 "
+                        + "patcher failed and no fallback PE editor (ResourceHacker / rcedit) is on PATH, "
+                        + "so the package would be byte-identical to a non-standalone build. "
+                        + "Re-run with `--standalone-allow-fallback` to ship the compatibility layout, "
+                        + "or check the warnings above for the underlying GetLastError code.")
             }
 
             standaloneEmbed = Report.StandaloneEmbedReport(
                 loaderEmbedded: standaloneReport.loaderEmbedded,
                 manifestEmbedded: standaloneReport.manifestEmbedded,
                 assetsEmbedded: standaloneReport.assetsEmbedded,
+                configEmbedded: standaloneReport.configEmbedded,
                 iconEmbedded: standaloneReport.iconEmbedded,
                 versionEmbedded: standaloneReport.versionEmbedded)
 
@@ -401,6 +405,18 @@ public enum KSPackager {
                 } catch {
                     warnings.append(
                         "Standalone post-process: embedded manifest succeeded but failed to remove external .manifest: \(error)"
+                    )
+                }
+            }
+
+            if standaloneReport.configEmbedded,
+                fm.fileExists(atPath: dstConfig.path)
+            {
+                do {
+                    try fm.removeItem(at: dstConfig)
+                } catch {
+                    warnings.append(
+                        "Standalone post-process: embedded config succeeded but failed to remove external Kalsae.json: \(error)"
                     )
                 }
             }
