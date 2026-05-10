@@ -28,7 +28,8 @@ struct WebView2ProvisionerStageTests {
             defer { try? fm.removeItem(at: cwd) }
 
             // 가짜 Kalsae 체크아웃 + WebView2Loader.dll 소스
-            let loaderSrc = cwd
+            let loaderSrc =
+                cwd
                 .appendingPathComponent("Sources")
                 .appendingPathComponent("CKalsaeWV2")
                 .appendingPathComponent("Vendor")
@@ -44,7 +45,8 @@ struct WebView2ProvisionerStageTests {
                 to: loaderSrc, atomically: false, encoding: .utf8)
             // 마커 디렉터리 (`Sources/CKalsaeWV2/include`) — discoverKalsaeRoots 가 인식.
             try fm.createDirectory(
-                at: cwd
+                at:
+                    cwd
                     .appendingPathComponent("Sources")
                     .appendingPathComponent("CKalsaeWV2")
                     .appendingPathComponent("include"),
@@ -53,10 +55,12 @@ struct WebView2ProvisionerStageTests {
             // .build/ 안에 known triple 한 개 + bogus 디렉터리 한 개.
             let configuration = "release"
             let buildDir = cwd.appendingPathComponent(".build")
-            let knownTriple = buildDir
+            let knownTriple =
+                buildDir
                 .appendingPathComponent("x86_64-unknown-windows-msvc")
                 .appendingPathComponent(configuration)
-            let bogus = buildDir
+            let bogus =
+                buildDir
                 .appendingPathComponent("junk-vendor-tooling")
                 .appendingPathComponent(configuration)
             try fm.createDirectory(at: knownTriple, withIntermediateDirectories: true)

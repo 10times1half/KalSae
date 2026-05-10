@@ -59,7 +59,8 @@
             if !ok {
                 throw KSError(
                     code: .ioFailed,
-                    message: "KSLinuxNotificationBackend: native + notify-send both failed for \"\(notification.title)\"")
+                    message:
+                        "KSLinuxNotificationBackend: native + notify-send both failed for \"\(notification.title)\"")
             }
         }
 

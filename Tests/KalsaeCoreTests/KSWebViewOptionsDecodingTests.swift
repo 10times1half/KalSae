@@ -12,7 +12,8 @@ struct KSWebViewOptionsDecodingTests {
 
     @Test("legacy flat fields still decode (backward compat)")
     func legacyFlat() throws {
-        let opts = try decode(#"""
+        let opts = try decode(
+            #"""
             {
               "transparent": true,
               "backdropType": "mica",
@@ -42,7 +43,8 @@ struct KSWebViewOptionsDecodingTests {
 
     @Test("preferences block decodes")
     func preferences() throws {
-        let opts = try decode(#"""
+        let opts = try decode(
+            #"""
             {
               "preferences": {
                 "javaScriptEnabled": true,
@@ -73,7 +75,8 @@ struct KSWebViewOptionsDecodingTests {
 
     @Test("platform.windows decodes")
     func platformWindows() throws {
-        let opts = try decode(#"""
+        let opts = try decode(
+            #"""
             {
               "platform": {
                 "windows": {
@@ -98,7 +101,8 @@ struct KSWebViewOptionsDecodingTests {
 
     @Test("platform.mac decodes")
     func platformMac() throws {
-        let opts = try decode(#"""
+        let opts = try decode(
+            #"""
             {
               "platform": {
                 "mac": {
@@ -119,7 +123,8 @@ struct KSWebViewOptionsDecodingTests {
 
     @Test("platform.linux decodes")
     func platformLinux() throws {
-        let opts = try decode(#"""
+        let opts = try decode(
+            #"""
             {
               "platform": {
                 "linux": {

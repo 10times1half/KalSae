@@ -1,5 +1,3 @@
-public import Foundation
-
 extension Result where Failure == KSError {
     /// Typed-throws unwrap. `Result.get()` rethrows untyped, which loses the
     /// `throws(KSError)` contract used throughout the PAL surface; this helper

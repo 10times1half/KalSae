@@ -18,7 +18,8 @@ struct KSUserDataPathValidatorTests {
     @Test("empty string rejected")
     func emptyRejected() {
         do {
-            _ = try KSUserDataPathValidator.validate("", environment: env, homeDirectory: "/Users/me", temporaryDirectory: "/tmp")
+            _ = try KSUserDataPathValidator.validate(
+                "", environment: env, homeDirectory: "/Users/me", temporaryDirectory: "/tmp")
             Issue.record("expected failure")
         } catch {
             #expect(error.reason == .empty)
@@ -28,7 +29,8 @@ struct KSUserDataPathValidatorTests {
     @Test("relative path rejected")
     func relativeRejected() {
         do {
-            _ = try KSUserDataPathValidator.validate("./foo", environment: env, homeDirectory: "/Users/me", temporaryDirectory: "/tmp")
+            _ = try KSUserDataPathValidator.validate(
+                "./foo", environment: env, homeDirectory: "/Users/me", temporaryDirectory: "/tmp")
             Issue.record("expected failure")
         } catch {
             #expect(error.reason == .relative)

@@ -219,7 +219,8 @@ struct PackagerWindowsTests {
         defer { try? fm.removeItem(at: work) }
 
         // Fixture: 가짜 Vendor/WebView2/runtimes/win-x64/native/WebView2Loader.dll
-        let loaderSrc = work
+        let loaderSrc =
+            work
             .appendingPathComponent("Vendor")
             .appendingPathComponent("WebView2")
             .appendingPathComponent("runtimes")
@@ -627,7 +628,8 @@ struct PackagerIncrementalTests {
 
         _ = try KSPackager.run(opts)
         let firstStyle = output.appendingPathComponent("Resources/style.css")
-        let firstMtime = try fm.attributesOfItem(atPath: firstStyle.path)[.modificationDate]
+        let firstMtime =
+            try fm.attributesOfItem(atPath: firstStyle.path)[.modificationDate]
             as? Date
         #expect(firstMtime != nil)
 
@@ -635,7 +637,8 @@ struct PackagerIncrementalTests {
         Thread.sleep(forTimeInterval: 1.2)
 
         _ = try KSPackager.run(opts)
-        let secondMtime = try fm.attributesOfItem(atPath: firstStyle.path)[.modificationDate]
+        let secondMtime =
+            try fm.attributesOfItem(atPath: firstStyle.path)[.modificationDate]
             as? Date
         #expect(secondMtime != nil)
         if let a = firstMtime, let b = secondMtime {
@@ -698,12 +701,14 @@ struct PackagerIncrementalTests {
         let (opts, _, output) = try makeBaseOptions(in: work)
         _ = try KSPackager.run(opts)
         let stagedExe = output.appendingPathComponent("App.exe")
-        let firstMtime = try fm.attributesOfItem(atPath: stagedExe.path)[.modificationDate]
+        let firstMtime =
+            try fm.attributesOfItem(atPath: stagedExe.path)[.modificationDate]
             as? Date
 
         Thread.sleep(forTimeInterval: 1.2)
         _ = try KSPackager.run(opts)
-        let secondMtime = try fm.attributesOfItem(atPath: stagedExe.path)[.modificationDate]
+        let secondMtime =
+            try fm.attributesOfItem(atPath: stagedExe.path)[.modificationDate]
             as? Date
 
         // safeCopy 는 매번 dst 를 새로 쓰므로 exe mtime 은 갱신될 수 있다.

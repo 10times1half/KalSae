@@ -206,13 +206,17 @@
             let devToolsHR = KSWV2_SetDevToolsEnabled(webview, devtools ? 1 : 0)
             record(report, key: "developerExtrasEnabled", hr: devToolsHR)
 
-            record(report, key: "javaScriptEnabled",
+            record(
+                report, key: "javaScriptEnabled",
                 hr: KSWV2_SetScriptEnabled(webview, tri(preferences?.javaScriptEnabled)))
-            record(report, key: "swipeNavigation",
+            record(
+                report, key: "swipeNavigation",
                 hr: KSWV2_SetSwipeNavigationEnabled(webview, tri(preferences?.swipeNavigation)))
-            record(report, key: "autofill",
+            record(
+                report, key: "autofill",
                 hr: KSWV2_SetAutofillEnabled(webview, tri(preferences?.autofill)))
-            record(report, key: "fraudulentWebsiteWarning",
+            record(
+                report, key: "fraudulentWebsiteWarning",
                 hr: KSWV2_SetReputationCheckingRequired(
                     webview, tri(preferences?.fraudulentWebsiteWarning)))
 

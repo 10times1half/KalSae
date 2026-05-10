@@ -368,7 +368,7 @@ public enum KSPackager {
         // 9) Fingerprint 기록 — 다음 빌드의 incremental 여부 판단에만 사용.
         // zip 생성 이후에 하는 이유는 위 (7) 의 설명 참조. 기록 실패가
         // 치명적이지는 않으므로 warning 으로만 남긴다 (다음 빌드에서
-            // fingerprint 부재로 취급 → 자동 전체 재생성).
+        // fingerprint 부재로 취급 → 자동 전체 재생성).
         do {
             try currentFP.write(to: fingerprintURL)
         } catch {
@@ -408,7 +408,8 @@ public enum KSPackager {
         clearDevServerURL: Bool = true
     ) throws {
         let data = try Data(contentsOf: url)
-        guard var root = try JSONSerialization.jsonObject(with: data, options: [])
+        guard
+            var root = try JSONSerialization.jsonObject(with: data, options: [])
                 as? [String: Any]
         else { return }
 

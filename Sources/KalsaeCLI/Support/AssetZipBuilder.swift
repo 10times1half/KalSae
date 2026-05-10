@@ -59,11 +59,13 @@ public enum KSAssetZipBuilder {
     }
 
     private static func enumerateFiles(in root: URL, fm: FileManager) throws -> [URL] {
-        guard let e = fm.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
-            options: [.skipsHiddenFiles]
-        ) else {
+        guard
+            let e = fm.enumerator(
+                at: root,
+                includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+                options: [.skipsHiddenFiles]
+            )
+        else {
             return []
         }
 

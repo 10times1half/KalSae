@@ -341,7 +341,8 @@
 
         public func postJSON(_ json: String) throws(KSError) {
             // RFC-005 §4.8: U+2028/U+2029 이스케이프
-            let safe = json
+            let safe =
+                json
                 .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
                 .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
             let script = "window.__KS_receive(\(safe));"

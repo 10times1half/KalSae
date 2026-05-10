@@ -182,7 +182,7 @@
         }
     }
 
-    // MARK: - Private helpers
+// MARK: - Private helpers
 
-    // 부팅 헬퍼는 `KSBootOrchestrator` (KalsaeCore)로 통합됨.
+// 부팅 헬퍼는 `KSBootOrchestrator` (KalsaeCore)로 통합됨.
 #endif

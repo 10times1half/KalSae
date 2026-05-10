@@ -35,7 +35,8 @@ public enum KSUserDataPathValidator {
             case .parentTraversal:
                 return "userDataPath must not contain '..' segments (got: \(resolvedPath ?? "<nil>"))"
             case .outsideAllowedRoots:
-                return "userDataPath is outside the allowed roots ($HOME / temp / %LOCALAPPDATA%): \(resolvedPath ?? "<nil>")"
+                return
+                    "userDataPath is outside the allowed roots ($HOME / temp / %LOCALAPPDATA%): \(resolvedPath ?? "<nil>")"
             }
         }
     }
@@ -56,7 +57,8 @@ public enum KSUserDataPathValidator {
 
         // 정규화 전에 `..` 세그먼트를 직접 확인 (정규화가 흡수해버리면
         // 의도치 않은 escape가 가능해진다).
-        let segments = expanded
+        let segments =
+            expanded
             .replacingOccurrences(of: "\\", with: "/")
             .split(separator: "/", omittingEmptySubsequences: true)
         if segments.contains(where: { $0 == ".." }) {
@@ -149,9 +151,9 @@ public enum KSUserDataPathValidator {
         // 드라이브 문자 + 콜론 + 구분자: `C:\` 또는 `C:/`
         let chars = Array(path)
         if chars.count >= 3,
-           chars[0].isLetter,
-           chars[1] == ":",
-           chars[2] == "\\" || chars[2] == "/"
+            chars[0].isLetter,
+            chars[1] == ":",
+            chars[2] == "\\" || chars[2] == "/"
         {
             return true
         }

@@ -217,25 +217,27 @@
             // SHA를 못 쓰는 환경이라도 결정성만 보장되면 충분하다.
             // FNV-1a 64bit 해시를 두 번 굴려 128비트 UUID 비트를 채운다.
             func fnv1a(_ s: String, salt: UInt64) -> UInt64 {
-                var hash: UInt64 = 0xcbf29ce484222325 ^ salt
+                var hash: UInt64 = 0xcbf2_9ce4_8422_2325 ^ salt
                 for byte in s.utf8 {
                     hash ^= UInt64(byte)
-                    hash = hash &* 0x100000001b3
+                    hash = hash &* 0x100_0000_01b3
                 }
                 return hash
             }
             let h1 = fnv1a(path, salt: 0)
-            let h2 = fnv1a(path, salt: 0xdeadbeefcafebabe)
+            let h2 = fnv1a(path, salt: 0xdead_beef_cafe_babe)
             var bytes = [UInt8](repeating: 0, count: 16)
             for i in 0..<8 {
                 bytes[i] = UInt8(truncatingIfNeeded: h1 >> (i * 8))
                 bytes[i + 8] = UInt8(truncatingIfNeeded: h2 >> (i * 8))
             }
-            return UUID(uuid: (
-                bytes[0], bytes[1], bytes[2], bytes[3],
-                bytes[4], bytes[5], bytes[6], bytes[7],
-                bytes[8], bytes[9], bytes[10], bytes[11],
-                bytes[12], bytes[13], bytes[14], bytes[15]))
+            return UUID(
+                uuid: (
+                    bytes[0], bytes[1], bytes[2], bytes[3],
+                    bytes[4], bytes[5], bytes[6], bytes[7],
+                    bytes[8], bytes[9], bytes[10], bytes[11],
+                    bytes[12], bytes[13], bytes[14], bytes[15]
+                ))
         }
 
         /// macOS 다중 창 간 공유 process pool. `platform.mac.shareProcessPool=true` 로 활성화.
@@ -333,7 +335,8 @@
             // U+2028(Line Separator)/U+2029(Paragraph Separator)는 ECMAScript에서
             // 라인 터미네이터이므로 문자열 리터럴 내부에서 구문 오류를
             // 일으키어. JSONEncoder가 이스케이프하지 않으므로 수동 치환 (RFC-005 §4.8).
-            let safe = json
+            let safe =
+                json
                 .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
                 .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
             let script = "window.__KS_receive(\(safe));"

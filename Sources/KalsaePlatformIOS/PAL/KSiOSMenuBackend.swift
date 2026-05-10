@@ -12,7 +12,7 @@
             _ = items
             throw KSError.unsupportedPlatform(
                 "iOS does not support a persistent application menu bar; "
-                + "use UIMenuBuilder integration in a future Kalsae phase.")
+                    + "use UIMenuBuilder integration in a future Kalsae phase.")
         }
 
         public func installWindowMenu(
@@ -32,7 +32,7 @@
             _ = (items, point, handle)
             throw KSError.unsupportedPlatform(
                 "iOS context menus require UIContextMenuInteraction integration "
-                + "(deferred to a future Kalsae phase).")
+                    + "(deferred to a future Kalsae phase).")
         }
     }
 #endif

@@ -196,7 +196,8 @@ struct ProjectTemplateTests {
         // `<configDir>/<frontendDist>` 로 자동 해석하도록 위임한다.
         #expect(
             !app.contains("configURL.deletingLastPathComponent()"),
-            "App.swift must not pass `configURL.deletingLastPathComponent()` as resourceRoot — that breaks packaged builds, got: \(app)")
+            "App.swift must not pass `configURL.deletingLastPathComponent()` as resourceRoot — that breaks packaged builds, got: \(app)"
+        )
         #expect(
             app.contains("KSApp.boot("),
             "App.swift should still call KSApp.boot, got: \(app)")

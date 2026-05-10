@@ -1,4 +1,5 @@
 internal import Foundation
+
 #if canImport(FoundationNetworking)
     internal import FoundationNetworking
 #endif

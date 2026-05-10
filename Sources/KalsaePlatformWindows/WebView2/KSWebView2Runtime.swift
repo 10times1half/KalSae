@@ -228,7 +228,8 @@
                     let resourcePath = (basePath as NSString).appendingPathComponent(resourceName)
                     var isDir: ObjCBool = false
                     guard fm.fileExists(atPath: resourcePath, isDirectory: &isDir),
-                        isDir.boolValue else { continue }
+                        isDir.boolValue
+                    else { continue }
 
                     let pidFolders = try fm.contentsOfDirectory(atPath: resourcePath)
                     for pidFolder in pidFolders {
@@ -333,7 +334,8 @@
                 let message = String(data: data, encoding: .utf8) ?? "unknown error"
                 throw KSError(
                     code: .ioFailed,
-                    message: "Embedded asset extraction failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))")
+                    message:
+                        "Embedded asset extraction failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))")
             }
         }
 

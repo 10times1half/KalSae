@@ -355,7 +355,9 @@ struct KSWindowHandlerValidationTests {
         let (registry, _) = await makeRegistry(navigationScope: nav)
         let err = await dispatchExpectError(
             registry, "__ks.window.create",
-            args: #"{"label":"phish","title":"x","url":"https://evil.com/login","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#)
+            args:
+                #"{"label":"phish","title":"x","url":"https://evil.com/login","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#
+        )
         // 검증이 backend.create() 이전에 일어나므로 commandNotAllowed가 반환되어야 한다.
         // (StubWindowBackend.create()는 unsupportedPlatform을 던지므로, 검증을 통과하면
         // 다른 에러 코드가 나온다 — 이 차이로 검증 시점을 구분한다.)
@@ -369,7 +371,9 @@ struct KSWindowHandlerValidationTests {
         // StubWindowBackend.create() throws unsupportedPlatform — URL 검증은 통과해야 함.
         let err = await dispatchExpectError(
             registry, "__ks.window.create",
-            args: #"{"label":"ok","title":"x","url":"https://app.example.com/index","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#)
+            args:
+                #"{"label":"ok","title":"x","url":"https://app.example.com/index","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#
+        )
         // 검증 자체는 통과 → backend.create()가 unsupportedPlatform을 던진다 (commandNotAllowed가 아니면 OK).
         #expect(err?.code != .commandNotAllowed)
     }
@@ -380,7 +384,9 @@ struct KSWindowHandlerValidationTests {
         // 빈 allow 목록은 "제한 없음"을 뜻한다 — 검증은 통과한다.
         let err = await dispatchExpectError(
             registry, "__ks.window.create",
-            args: #"{"label":"any","title":"x","url":"file:///etc/passwd","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#)
+            args:
+                #"{"label":"any","title":"x","url":"file:///etc/passwd","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#
+        )
         // 빈 navigation scope에서는 검증 통과 → backend.create()가 unsupportedPlatform.
         #expect(err?.code != .commandNotAllowed)
     }

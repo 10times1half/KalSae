@@ -248,7 +248,8 @@ public enum KSWebView2Provisioner {
                 "aarch64-unknown-windows-msvc",
             ]
             for triple in knownTriples {
-                let triplePath = buildDir
+                let triplePath =
+                    buildDir
                     .appendingPathComponent(triple)
                     .appendingPathComponent(configuration)
                 var isDir: ObjCBool = false
