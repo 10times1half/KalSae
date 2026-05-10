@@ -218,8 +218,16 @@ import Kalsae
                 return (bundled, bundled.deletingLastPathComponent())
             }
 
-            throw KSError.configNotFound(
-                "kalsae.json (looked next to executable, in app bundle, and in SwiftPM resource bundle)")
+            // 4) Windows standalone — 외부 Kalsae.json 이 RCDATA 임베드 후
+            //    제거되었을 수 있다. EXE 옆 가상 경로를 반환하면 KSApp.boot 가
+            //    `KSConfigLoader.load` 실패를 잡아 PE RCDATA(`KSAS_CONFIG_JSON`)
+            //    폴백으로 임베디드 설정을 디코딩한다.
+            #if os(Windows)
+                return (exeDir.appendingPathComponent("Kalsae.json"), nil)
+            #else
+                throw KSError.configNotFound(
+                    "kalsae.json (looked next to executable, in app bundle, and in SwiftPM resource bundle)")
+            #endif
         }
     }
 

@@ -1,4 +1,5 @@
 public import Foundation
+internal import KalsaeCore
 
 /// Standalone 임베드용 프론트엔드 번들 zip 생성기.
 ///
@@ -32,30 +33,33 @@ public enum KSAssetZipBuilder {
         }
 
         let contents = try enumerateFiles(in: distURL, fm: fm)
-        let totalBytes = try contents.reduce(into: 0) { partial, file in
-            let values = try file.resourceValues(forKeys: [.fileSizeKey])
-            partial += values.fileSize ?? 0
+        var totalBytes = 0
+        var entries: [KSStoreZip.Entry] = []
+        entries.reserveCapacity(contents.count)
+        let prefixWin = distURL.path + "\\"
+        let prefixUnix = distURL.path + "/"
+
+        for fileURL in contents {
+            var rel = fileURL.path
+            if rel.hasPrefix(prefixWin) {
+                rel = String(rel.dropFirst(prefixWin.count))
+            } else if rel.hasPrefix(prefixUnix) {
+                rel = String(rel.dropFirst(prefixUnix.count))
+            }
+            rel = rel.replacingOccurrences(of: "\\", with: "/")
+
+            let bytes = try Data(contentsOf: fileURL)
+            totalBytes += bytes.count
+            entries.append(KSStoreZip.Entry(name: rel, data: bytes))
         }
 
-        let tempArchive = fm.temporaryDirectory
-            .appendingPathComponent("kalsae-embedded-assets-\(UUID().uuidString)")
-            .appendingPathExtension("zip")
-
-        defer { try? fm.removeItem(at: tempArchive) }
-
-        try KSZipArchiver.zip(directory: distURL, to: tempArchive)
-        let zipData = try Data(contentsOf: tempArchive)
-        let relPaths = contents.map {
-            $0.path.replacingOccurrences(of: distURL.path + "\\", with: "")
-                .replacingOccurrences(of: distURL.path + "/", with: "")
-                .replacingOccurrences(of: "\\", with: "/")
-        }.sorted()
+        let zipData = KSStoreZip.write(entries: entries)
 
         return Report(
             zipData: zipData,
-            fileCount: relPaths.count,
+            fileCount: entries.count,
             totalUncompressedBytes: totalBytes,
-            relativePaths: relPaths)
+            relativePaths: entries.map(\.name).sorted())
     }
 
     private static func enumerateFiles(in root: URL, fm: FileManager) throws -> [URL] {

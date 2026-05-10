@@ -62,14 +62,6 @@
             self.window.eventSink = { name, payload in
                 try? bridgeRef.emit(event: name, payload: payload)
             }
-
-            // RFC-010 Phase 2: Clean up stale embedded asset temp folders
-            // from previous app executions. Non-blocking, best-effort.
-            // Delayed to background to avoid blocking app startup.
-            Task.detached {
-                KSWebView2Runtime.cleanupStaleTempFolders(
-                    identifier: windowConfig.label)
-            }
         }
 
         public func start(url: String, devtools: Bool) throws(KSError) {

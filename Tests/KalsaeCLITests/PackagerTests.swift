@@ -757,3 +757,140 @@ struct PackagerIncrementalTests {
             "strip 옵션 활성화 시 fingerprint 가 달라져 전체 재생성 + strip 이 적용되어야 한다")
     }
 }
+
+
+// MARK: - Self-copy guard 정규화 회귀 (testks2)
+
+/// `kalsae build --standalone` 출력 디렉터리가 `frontendDist` 안에 위치할 때
+/// `Packager.run` 이 자기-복사 무한 재귀를 회피해야 한다. Windows 의
+/// `URL.standardizedFileURL.path` 는 cwd 케이스 / 분리자 / trailing slash 변동에
+/// 따라 raw 비교가 빗나가 (testks2 소문자 cwd 회귀) MAX_PATH 오버플로 (Win32
+/// 206 / NSCocoaError 514) 를 발생시켰다.
+@Suite("KSPackager — self-copy guard 정규화")
+struct PackagerSelfCopyGuardTests {
+
+    private func uniqueDir(_ suffix: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("kalsae-pkg-selfcopy-\(UUID().uuidString)-\(suffix)")
+    }
+
+    private func writeText(_ s: String, to url: URL) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try s.write(to: url, atomically: false, encoding: .utf8)
+    }
+
+    /// 동등 경로는 정규형이 일치해야 한다.
+    @Test("canonicalPathForContainsCheck normalizes separators and trailing slash")
+    func canonicalNormalizesEquivalentForms() {
+        let a = URL(fileURLWithPath: "/tmp/foo/bar")
+        let b = URL(fileURLWithPath: "/tmp/foo/bar/")
+        let c = URL(fileURLWithPath: "/tmp/foo/bar", isDirectory: true)
+        let pa = KSPackager.canonicalPathForContainsCheck(a)
+        let pb = KSPackager.canonicalPathForContainsCheck(b)
+        let pc = KSPackager.canonicalPathForContainsCheck(c)
+        #expect(pa == pb)
+        #expect(pa == pc)
+        #expect(!pa.hasSuffix("/"))
+        #expect(!pa.contains("\\"))
+    }
+
+    /// Windows 케이스 차이(`testks2` vs `testKS2`)는 동일 정규형이어야 한다.
+    /// 다른 OS 는 case-sensitive 이므로 차이가 유지된다.
+    @Test("canonicalPathForContainsCheck is case-insensitive on Windows only")
+    func canonicalCaseFolding() {
+        let lower = URL(fileURLWithPath: "/tmp/Projects/testks2/dist")
+        let mixed = URL(fileURLWithPath: "/tmp/Projects/testKS2/dist")
+        let pl = KSPackager.canonicalPathForContainsCheck(lower)
+        let pm = KSPackager.canonicalPathForContainsCheck(mixed)
+        #if os(Windows)
+            #expect(pl == pm)
+        #else
+            #expect(pl != pm)
+        #endif
+    }
+
+    /// `output` 이 `dist/` 의 진부분트리이면 self-copy 우회가 작동해 출력이
+    /// 자기 자신을 중첩 복사하지 않는다.
+    @Test("packaging output inside dist/ does not recursively self-copy")
+    func outputInsideDistDoesNotSelfCopy() throws {
+        let fm = FileManager.default
+        let work = uniqueDir("inside-dist")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let exe = work.appendingPathComponent("App.exe")
+        try writeText("MZ", to: exe)
+        let config = work.appendingPathComponent("Kalsae.json")
+        try writeText("{}", to: config)
+
+        // dist/ 안에 두 개의 파일 + 출력 디렉터리가 위치하는 구조.
+        let dist = work.appendingPathComponent("dist")
+        try fm.createDirectory(at: dist, withIntermediateDirectories: true)
+        try writeText("<html>ok</html>", to: dist.appendingPathComponent("index.html"))
+        try writeText("body{}", to: dist.appendingPathComponent("style.css"))
+
+        // 출력 디렉터리가 dist/ 의 직속 자식.
+        let output = dist.appendingPathComponent("App-0.1.0-x64-standalone")
+
+        let opts = KSPackager.Options(
+            projectRoot: work,
+            executablePath: exe,
+            configPath: config,
+            frontendDist: dist,
+            output: output,
+            appName: "App",
+            version: "0.1.0",
+            identifier: "dev.kalsae.app",
+            architecture: .x64,
+            policy: .evergreen)
+
+        _ = try KSPackager.run(opts)
+
+        let resources = output.appendingPathComponent("Resources")
+        #expect(fm.fileExists(atPath: resources.appendingPathComponent("index.html").path))
+        #expect(fm.fileExists(atPath: resources.appendingPathComponent("style.css").path))
+        // 자기-복사가 발생했다면 Resources/ 안에 출력 패키지가 다시 들어 있다.
+        let nested = resources.appendingPathComponent(output.lastPathComponent)
+        #expect(
+            !fm.fileExists(atPath: nested.path),
+            "output directory must not be recursively copied into its own Resources/")
+    }
+
+    /// `output` 이 `dist/` 밖에 있으면 통상 sync 경로를 타고, 결과물은 동일.
+    @Test("packaging output outside dist/ uses regular copy path")
+    func outputOutsideDistUsesRegularCopy() throws {
+        let fm = FileManager.default
+        let work = uniqueDir("outside-dist")
+        try fm.createDirectory(at: work, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: work) }
+
+        let exe = work.appendingPathComponent("App.exe")
+        try writeText("MZ", to: exe)
+        let config = work.appendingPathComponent("Kalsae.json")
+        try writeText("{}", to: config)
+
+        let dist = work.appendingPathComponent("dist")
+        try fm.createDirectory(at: dist, withIntermediateDirectories: true)
+        try writeText("<html>ok</html>", to: dist.appendingPathComponent("index.html"))
+
+        let output = work.appendingPathComponent("out")  // dist 밖
+
+        let opts = KSPackager.Options(
+            projectRoot: work,
+            executablePath: exe,
+            configPath: config,
+            frontendDist: dist,
+            output: output,
+            appName: "App",
+            version: "0.1.0",
+            identifier: "dev.kalsae.app",
+            architecture: .x64,
+            policy: .evergreen)
+
+        _ = try KSPackager.run(opts)
+
+        let resources = output.appendingPathComponent("Resources")
+        #expect(fm.fileExists(atPath: resources.appendingPathComponent("index.html").path))
+    }
+}

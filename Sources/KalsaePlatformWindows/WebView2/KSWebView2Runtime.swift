@@ -99,49 +99,26 @@
             return resourceName
         }
 
-        internal static func embeddedAssetsExtractionDirectory(
-            identifier: String,
-            resourceName: String,
-            processID: Int32 = Int32(ProcessInfo.processInfo.processIdentifier),
-            env: [String: String] = ProcessInfo.processInfo.environment
-        ) -> URL {
-            let base: String
-            if let temp = env["TEMP"], !temp.isEmpty {
-                base = temp
-            } else if let local = env["LOCALAPPDATA"], !local.isEmpty {
-                base = local
-            } else {
-                base = NSTemporaryDirectory()
-            }
-
-            return URL(fileURLWithPath: base)
-                .appendingPathComponent("Kalsae")
-                .appendingPathComponent(identifier)
-                .appendingPathComponent("EmbeddedAssets")
-                .appendingPathComponent(resourceName)
-                .appendingPathComponent(String(processID))
-        }
-
-        internal static func resolveEmbeddedAssetsDirectory(
-            executableDir: URL,
-            identifier: String
-        ) -> URL? {
+        /// 임베디드 RCDATA 자산 zip 을 메모리에서 디코드한 결과를 반환한다.
+        /// 디스크 추출 없이 `KSEmbeddedAssetSource` 로 바로 서빙되도록
+        /// `[name: bytes]` 맵을 만들어 돌려준다. 자산이 없거나 디코드 실패
+        /// 시 nil.
+        internal static func loadEmbeddedAssetsMap(executableDir: URL)
+            -> [String: Data]?
+        {
             guard
-                let resourceName = embeddedAssetsResourceName(executableDir: executableDir),
-                let zipData = loadEmbeddedResource(named: resourceName)
+                let resourceName = embeddedAssetsResourceName(
+                    executableDir: executableDir),
+                let zipData = KSEmbeddedResourceLoader.loadEmbeddedResource(
+                    named: resourceName)
             else {
                 return nil
             }
-
             do {
-                return try materializeEmbeddedAssets(
-                    zipData: zipData,
-                    identifier: identifier,
-                    resourceName: resourceName)
+                return try KSStoreZip.readAllEntries(from: zipData)
             } catch {
-                // RFC-010 Phase 3: Log extraction error for diagnostics
                 KSLog.logger("kalsae.asset-extract").error(
-                    "Failed to extract embedded assets: \(error)")
+                    "Failed to decode embedded assets zip: \(error)")
                 return nil
             }
         }
@@ -150,7 +127,7 @@
             guard let resourceName = embeddedAssetsResourceName(executableDir: executableDir) else {
                 return false
             }
-            return loadEmbeddedResource(named: resourceName) != nil
+            return KSEmbeddedResourceLoader.loadEmbeddedResource(named: resourceName) != nil
         }
 
         // MARK: - Internals
@@ -196,167 +173,20 @@
             let url =
                 executableDir
                 .appendingPathComponent("kalsae.runtime.json")
-            guard let data = try? Data(contentsOf: url) else { return nil }
-            return try? JSONDecoder().decode(Policy.self, from: data)
-        }
-
-        /// Removes stale temp folders from previous app executions.
-        /// Scans `%TEMP%/Kalsae/<identifier>/EmbeddedAssets/` for PID-named
-        /// subfolders and deletes those that don't correspond to any running process.
-        internal static func cleanupStaleTempFolders(identifier: String) {
-            let env = ProcessInfo.processInfo.environment
-            let base: String
-            if let temp = env["TEMP"], !temp.isEmpty {
-                base = temp
-            } else if let local = env["LOCALAPPDATA"], !local.isEmpty {
-                base = local
-            } else {
-                base = NSTemporaryDirectory()
+            if let data = try? Data(contentsOf: url),
+                let policy = try? JSONDecoder().decode(Policy.self, from: data)
+            {
+                return policy
             }
-
-            let basePath = (base as NSString)
-                .appendingPathComponent("Kalsae")
-                .appendingPathComponent(identifier)
-                .appendingPathComponent("EmbeddedAssets")
-
-            let fm = FileManager.default
-            guard fm.fileExists(atPath: basePath) else { return }
-
-            do {
-                let resourceFolders = try fm.contentsOfDirectory(atPath: basePath)
-                for resourceName in resourceFolders {
-                    let resourcePath = (basePath as NSString).appendingPathComponent(resourceName)
-                    var isDir: ObjCBool = false
-                    guard fm.fileExists(atPath: resourcePath, isDirectory: &isDir),
-                        isDir.boolValue
-                    else { continue }
-
-                    let pidFolders = try fm.contentsOfDirectory(atPath: resourcePath)
-                    for pidFolder in pidFolders {
-                        guard let pid = Int(pidFolder) else { continue }
-                        let pidPath = (resourcePath as NSString).appendingPathComponent(pidFolder)
-
-                        // Only delete if this PID is not currently running
-                        if !isProcessRunning(Int32(pid)) {
-                            try? fm.removeItem(atPath: pidPath)
-                        }
-                    }
-                }
-            } catch {
-                // Best-effort cleanup; silently continue on error
+            // standalone --embed-config: 외부 `kalsae.runtime.json` 이 제거되었을
+            // 때 PE RCDATA `KSAS_RUNTIME_JSON` 으로 폴백한다.
+            if let embedded = KSEmbeddedResourceLoader.loadEmbeddedResource(
+                named: "KSAS_RUNTIME_JSON"),
+                let policy = try? JSONDecoder().decode(Policy.self, from: embedded)
+            {
+                return policy
             }
-        }
-
-        /// Checks if a process with the given PID is currently running.
-        private static func isProcessRunning(_ pid: Int32) -> Bool {
-            let handle = OpenProcess(
-                DWORD(PROCESS_QUERY_LIMITED_INFORMATION),
-                false,
-                DWORD(pid))
-            guard handle != nil else { return false }
-
-            defer { _ = CloseHandle(handle) }
-
-            var creationTime = FILETIME()
-            var exitTime = FILETIME()
-            var kernelTime = FILETIME()
-            var userTime = FILETIME()
-
-            let result = GetProcessTimes(
-                handle,
-                &creationTime,
-                &exitTime,
-                &kernelTime,
-                &userTime)
-
-            return result
-        }
-
-        private static func materializeEmbeddedAssets(
-            zipData: Data,
-            identifier: String,
-            resourceName: String
-        ) throws(KSError) -> URL {
-            let fm = FileManager.default
-            let workDir = embeddedAssetsExtractionDirectory(
-                identifier: identifier,
-                resourceName: resourceName)
-            let outputDir = workDir.appendingPathComponent("root")
-            let zipURL = workDir.appendingPathComponent("assets.zip")
-
-            if fm.fileExists(atPath: workDir.path) {
-                try? fm.removeItem(at: workDir)
-            }
-
-            do {
-                try fm.createDirectory(at: outputDir, withIntermediateDirectories: true)
-                try zipData.write(to: zipURL, options: [.atomic])
-                defer { try? fm.removeItem(at: zipURL) }
-                try extractEmbeddedAssets(zipURL: zipURL, outputDir: outputDir)
-                return outputDir
-            } catch let error as KSError {
-                throw error
-            } catch {
-                throw KSError(
-                    code: .ioFailed,
-                    message: "Failed to materialize embedded frontend assets: \(error)")
-            }
-        }
-
-        private static func extractEmbeddedAssets(
-            zipURL: URL,
-            outputDir: URL
-        ) throws(KSError) {
-            let toolPath = "C:\\Windows\\System32\\tar.exe"
-            guard FileManager.default.fileExists(atPath: toolPath) else {
-                throw KSError(
-                    code: .ioFailed,
-                    message: "Embedded asset extraction requires tar.exe at \(toolPath)")
-            }
-
-            let stderr = Pipe()
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: toolPath)
-            process.arguments = ["-x", "-f", zipURL.path, "-C", outputDir.path]
-            process.standardError = stderr
-
-            do {
-                try process.run()
-                process.waitUntilExit()
-            } catch {
-                throw KSError(
-                    code: .ioFailed,
-                    message: "Failed to launch tar.exe for embedded asset extraction: \(error)")
-            }
-
-            guard process.terminationStatus == 0 else {
-                let data = stderr.fileHandleForReading.readDataToEndOfFile()
-                let message = String(data: data, encoding: .utf8) ?? "unknown error"
-                throw KSError(
-                    code: .ioFailed,
-                    message:
-                        "Embedded asset extraction failed: \(message.trimmingCharacters(in: .whitespacesAndNewlines))")
-            }
-        }
-
-        private static func loadEmbeddedResource(named resourceName: String) -> Data? {
-            let resourceType = UnsafePointer<WCHAR>(bitPattern: 10)
-            guard let resourceType else { return nil }
-
-            return resourceName.withCString(encodedAs: UTF16.self) { resourceNamePtr in
-                guard let resource = FindResourceW(nil, resourceNamePtr, resourceType) else {
-                    return nil
-                }
-                let size = SizeofResource(nil, resource)
-                guard size > 0,
-                    let handle = LoadResource(nil, resource),
-                    let bytes = LockResource(handle)
-                else {
-                    return nil
-                }
-
-                return Data(bytes: bytes, count: Int(size))
-            }
+            return nil
         }
 
         /// Expands `%VAR%` Windows-style env tokens and resolves relative paths

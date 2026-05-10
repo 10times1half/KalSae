@@ -138,6 +138,7 @@ public enum KSPackager {
             public let manifestEmbedded: Bool
             public let assetsEmbedded: Bool
             public let configEmbedded: Bool
+            public let runtimeEmbedded: Bool
             public let iconEmbedded: Bool
             public let versionEmbedded: Bool
         }
@@ -152,6 +153,7 @@ public enum KSPackager {
                 s += "\n  \(mark(st.manifestEmbedded)) RT_MANIFEST"
                 s += "\n  \(mark(st.assetsEmbedded)) frontend assets (RCDATA)"
                 s += "\n  \(mark(st.configEmbedded)) Kalsae.json (RCDATA)"
+                s += "\n  \(mark(st.runtimeEmbedded)) kalsae.runtime.json (RCDATA)"
                 s += "\n  \(mark(st.iconEmbedded)) icon"
                 s += "\n  \(mark(st.versionEmbedded)) version metadata"
             }
@@ -230,13 +232,36 @@ public enum KSPackager {
         // 4) Frontend assets
         if let dist = opts.frontendDist, fm.fileExists(atPath: dist.path) {
             let dstResources = opts.output.appendingPathComponent("Resources")
+
+            // 자기-복사 방지: 출력 디렉터리(`opts.output`)가 `dist/` 안에 위치하면
+            // (예: 새 템플릿의 `frontendDist: "../../../dist"` + 출력 기본 위치
+            // `<root>/dist/<APP>-<VER>-<ARCH>-standalone/`) 단순 `copyItem(dist→…)`
+            // 은 출력 패키지를 자기 자신 안으로 무한 재귀 복사한다. 이 경우
+            // ResourceSyncManager 도 같은 입력을 처리하므로 우회로 진입을 막는다.
+            //
+            // Windows 의 `URL.standardizedFileURL.path` 는 cwd 입력 케이스 / 구분자
+            // / trailing slash 유무에 따라 raw 형태가 흔들려 prefix 비교가 빗나간다
+            // (testks2 소문자 cwd 회귀). `KSResourceSyncManager.overlaps()` 와 동일한
+            // 정규화로 결정적 비교.
+            let distStd = canonicalPathForContainsCheck(dist)
+            let outStd = canonicalPathForContainsCheck(opts.output)
+            let outputInsideDist =
+                outStd == distStd || outStd.hasPrefix(distStd + "/")
             // 증분 sync (RFC-002 §3.1(c)):
             // dst 가 이미 있으면 KSResourceSyncManager.sync 로 size+mtime 비교 증분
             // 복사. 최소 빌드(dst 미존재)는 기존 전체 복사로 폴백.
             // `preserved: []` — 패키저 output 의 `Resources/` 에는 dist 의 frontend
             // 자산만 들어가고 (`Kalsae.json` 은 step 3 에서 output 루트에 별도 배치),
             // sentinel 보존 대상이 없다.
-            if fm.fileExists(atPath: dstResources.path) {
+            if outputInsideDist {
+                // dist 안에 output 이 있을 때는 entry-by-entry 복사로 output
+                // 서브트리만 건너뛴다.
+                try copyDistExcludingOutput(
+                    dist: dist,
+                    dstResources: dstResources,
+                    output: opts.output,
+                    fm: fm)
+            } else if fm.fileExists(atPath: dstResources.path) {
                 _ = try KSResourceSyncManager.sync(
                     distURL: dist,
                     resourcesURL: dstResources,
@@ -323,6 +348,11 @@ public enum KSPackager {
                     embeddedAssetsZipURL = tempZip
                     runtime["embeddedAssetsResourceName"] = "KSAS_ASSETS_ZIP"
                     runtime["embeddedAssetsFileCount"] = report.fileCount
+                    // standalone 모드는 RCDATA asset zip 사용을 의도한다. 후처리가
+                    // 실패하면 이후 분기에서 toolsMissing hard-error 로 빠지므로
+                    // 여기서 미리 기록해도 안전하다 (runtime.json 도 같은 후처리
+                    // 단계에서 임베드되므로 두 값이 함께 산출물에 들어간다).
+                    runtime["embeddedAssetsEnabled"] = true
                 } catch {
                     warnings.append("Standalone asset zip build failed: \(error)")
                 }
@@ -331,6 +361,32 @@ public enum KSPackager {
             defer {
                 if let embeddedAssetsZipURL {
                     try? fm.removeItem(at: embeddedAssetsZipURL)
+                }
+            }
+
+            // kalsae.runtime.json 도 RCDATA 로 임베드한다 (fixed runtime 정책 제외).
+            // fixed 는 외부 webview2-runtime/ 폴더 절대/상대 경로를 참조하므로
+            // 외부 파일을 유지하는 편이 안전하다.
+            let shouldEmbedRuntime = installMode != .fixedVersion
+            var embeddedRuntimeJSONURL: URL?
+            if shouldEmbedRuntime {
+                do {
+                    let runtimeJSONData = try JSONSerialization.data(
+                        withJSONObject: runtime,
+                        options: [.prettyPrinted, .sortedKeys])
+                    let tempRuntime = fm.temporaryDirectory
+                        .appendingPathComponent("kalsae-standalone-runtime-\(UUID().uuidString)")
+                        .appendingPathExtension("json")
+                    try runtimeJSONData.write(to: tempRuntime, options: [.atomic])
+                    embeddedRuntimeJSONURL = tempRuntime
+                } catch {
+                    warnings.append("Standalone runtime.json embed prep failed: \(error)")
+                }
+            }
+
+            defer {
+                if let embeddedRuntimeJSONURL {
+                    try? fm.removeItem(at: embeddedRuntimeJSONURL)
                 }
             }
 
@@ -345,6 +401,7 @@ public enum KSPackager {
                     iconPath: opts.iconPath,
                     assetsZipPath: embeddedAssetsZipURL,
                     configPath: dstConfig,
+                    runtimePath: embeddedRuntimeJSONURL,
                     resourceHackerOverride: opts.resourceHackerPath))
             warnings.append(contentsOf: standaloneReport.warnings)
 
@@ -366,12 +423,11 @@ public enum KSPackager {
                 manifestEmbedded: standaloneReport.manifestEmbedded,
                 assetsEmbedded: standaloneReport.assetsEmbedded,
                 configEmbedded: standaloneReport.configEmbedded,
+                runtimeEmbedded: standaloneReport.runtimeEmbedded,
                 iconEmbedded: standaloneReport.iconEmbedded,
                 versionEmbedded: standaloneReport.versionEmbedded)
 
             if standaloneReport.assetsEmbedded {
-                runtime["embeddedAssetsEnabled"] = true
-
                 let resourcesPath = opts.output.appendingPathComponent("Resources")
                 if fm.fileExists(atPath: resourcesPath.path) {
                     do {
@@ -382,6 +438,9 @@ public enum KSPackager {
                         )
                     }
                 }
+            } else {
+                // asset zip 임베드가 실패했다면 `embeddedAssetsEnabled` 플래그도 거짓.
+                runtime["embeddedAssetsEnabled"] = false
             }
 
             if standaloneReport.loaderEmbedded {
@@ -409,6 +468,12 @@ public enum KSPackager {
                 }
             }
 
+            // 외부 `Kalsae.json` 제거 — RCDATA 임베드가 성공했고 현재 저장소
+            // 런타임은 `KSEmbeddedConfigLoader` (RCDATA 폴백) 를 가지고 있으므로
+            // 디스크 사이드카 없이도 부팅이 가능하다. 사이드카가 남아 있으면
+            // SwiftPM `<exe>_*.resources/` 의 잔존 `kalsae.json` 과 함께
+            // `Bundle.module` 경로가 잘못된 `resourceRoot` 를 반환해 흰 화면이
+            // 재발할 수 있다.
             if standaloneReport.configEmbedded,
                 fm.fileExists(atPath: dstConfig.path)
             {
@@ -420,12 +485,37 @@ public enum KSPackager {
                     )
                 }
             }
+
+            // SwiftPM `<Package>_<Target>.resources/` 잔존 디렉터리 제거.
+            // `swift build` 산출물 디렉터리에서 그대로 복사된 EXE 옆에 이 폴더가
+            // 함께 남아 있으면, 런타임의 `Bundle.module.url(forResource:)` 가
+            // 거기서 `kalsae.json` 을 발견해 잘못된 resourceRoot 를 만든다.
+            // standalone 모드는 RCDATA 임베드를 신뢰하므로 무조건 정리한다.
+            if let entries = try? fm.contentsOfDirectory(atPath: opts.output.path) {
+                for entry in entries where entry.hasSuffix(".resources") {
+                    let path = opts.output.appendingPathComponent(entry)
+                    var isDir: ObjCBool = false
+                    if fm.fileExists(atPath: path.path, isDirectory: &isDir),
+                        isDir.boolValue
+                    {
+                        try? fm.removeItem(at: path)
+                    }
+                }
+            }
         }
 
         let runtimeData = try JSONSerialization.data(
             withJSONObject: runtime,
             options: [.prettyPrinted, .sortedKeys])
-        try runtimeData.write(to: runtimeURL)
+        // standalone 모드에서 runtime.json 임베드가 성공했으면 외부 디스크 사본을
+        // 만들지 않는다 (KSWebView2Runtime.loadPolicy 가 RCDATA 폴백을 갖고 있다).
+        // fixed runtime 정책 또는 임베드 실패 시에는 기존처럼 디스크에 쓴다.
+        if standaloneEmbed?.runtimeEmbedded != true {
+            try runtimeData.write(to: runtimeURL)
+        } else if fm.fileExists(atPath: runtimeURL.path) {
+            // 이전 빌드 산출물이 남아 있을 수 있다.
+            try? fm.removeItem(at: runtimeURL)
+        }
 
         // 8) Optional zip archive
         // Fingerprint 는 zip 생성 이후에 기록한다 (RFC-002 §3.1(d)). 이렇게
@@ -726,6 +816,55 @@ public enum KSPackager {
                 try fm.removeItem(at: dst)
             }
             try fm.copyItem(at: src, to: dst)
+        }
+    }
+
+    /// 두 파일 URL 의 "포함 관계 (B ⊂ A)" 검사용 정규화된 경로 문자열.
+    ///
+    /// `URL.standardizedFileURL.path` 는 Windows 에서 cwd 입력 케이스 / 분리자
+    /// (`\\` vs `/`) / trailing slash 유무에 따라 raw 형태가 흔들려 단순
+    /// `hasPrefix` 비교가 결정적이지 않다. `KSResourceSyncManager.overlaps()` 가
+    /// 이미 사용 중인 패턴과 동일하게 (a) 분리자 통일, (b) trailing slash 제거,
+    /// (c) Windows 에서만 case-insensitive 비교를 위해 lowercased 처리한다.
+    internal static func canonicalPathForContainsCheck(_ url: URL) -> String {
+        var p = url.standardizedFileURL.path
+            .replacingOccurrences(of: "\\", with: "/")
+        while p.count > 1, p.hasSuffix("/") { p.removeLast() }
+        #if os(Windows)
+            return p.lowercased()
+        #else
+            return p
+        #endif
+    }
+
+    /// `dist/` 안에 패키저 출력(`output/`)이 위치할 때 dist 트리를 entry-by-entry
+    /// 로 `dstResources/` 에 복사하면서 `output/` 서브트리 자체는 제외한다.
+    /// 단순 `copyItem(dist→dstResources)` 가 출력 패키지를 자기 안으로 무한 재귀
+    /// 복사하는 문제를 방지한다.
+    private static func copyDistExcludingOutput(
+        dist: URL,
+        dstResources: URL,
+        output: URL,
+        fm: FileManager
+    ) throws {
+        if !fm.fileExists(atPath: dstResources.path) {
+            try fm.createDirectory(at: dstResources, withIntermediateDirectories: true)
+        }
+        let outputStd = canonicalPathForContainsCheck(output)
+        let entries = try fm.contentsOfDirectory(
+            at: dist,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles])
+        for entry in entries {
+            let entryStd = canonicalPathForContainsCheck(entry)
+            if entryStd == outputStd || entryStd.hasPrefix(outputStd + "/") {
+                continue  // skip the package output itself
+            }
+            let dst = dstResources.appendingPathComponent(entry.lastPathComponent)
+            if fm.fileExists(atPath: dst.path) {
+                try fm.removeItem(at: dst)
+            }
+            try fm.copyItem(at: entry, to: dst)
         }
     }
 

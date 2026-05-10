@@ -9,13 +9,12 @@
     public import Foundation
     internal import WinSDK
 
-    public enum KSEmbeddedConfigLoader {
-        /// PE RCDATA `KSAS_CONFIG_JSON` 의 바이트를 반환. 없으면 nil.
-        public static func loadEmbeddedConfigData() -> Data? {
-            return loadEmbeddedResource(named: "KSAS_CONFIG_JSON")
-        }
-
-        private static func loadEmbeddedResource(named resourceName: String) -> Data? {
+    /// 일반화된 PE RCDATA 로더. `KSAS_CONFIG_JSON`, `KSAS_RUNTIME_JSON`,
+    /// `KSAS_ASSETS_ZIP` 같이 standalone 후처리가 EXE 에 임베드한 임의의
+    /// RCDATA 엔트리를 이름으로 조회한다.
+    public enum KSEmbeddedResourceLoader {
+        /// PE RCDATA `<resourceName>` 의 바이트를 반환. 없으면 nil.
+        public static func loadEmbeddedResource(named resourceName: String) -> Data? {
             let resourceType = UnsafePointer<WCHAR>(bitPattern: 10)
             guard let resourceType else { return nil }
 
@@ -32,6 +31,15 @@
                 }
                 return Data(bytes: bytes, count: Int(size))
             }
+        }
+    }
+
+    /// 호환성 래퍼. `KSEmbeddedResourceLoader` 가 도입되기 전 코드 (KSApp.boot)
+    /// 가 사용하는 진입점을 그대로 유지한다.
+    public enum KSEmbeddedConfigLoader {
+        /// PE RCDATA `KSAS_CONFIG_JSON` 의 바이트를 반환. 없으면 nil.
+        public static func loadEmbeddedConfigData() -> Data? {
+            KSEmbeddedResourceLoader.loadEmbeddedResource(named: "KSAS_CONFIG_JSON")
         }
     }
 #endif

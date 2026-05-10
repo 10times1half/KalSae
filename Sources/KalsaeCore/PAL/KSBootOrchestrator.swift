@@ -83,7 +83,11 @@ public enum KSBootOrchestrator {
         preferEmbeddedAssets: Bool = false
     ) -> ServingMode {
         let devIsRemote = isRemoteURL(devServerURL)
-        if urlOverride == nil, windowURL == nil, devIsRemote {
+        // standalone 산출물(`preferEmbeddedAssets == true`)은 PE RCDATA 에 자산이
+        // 임베드된 최종 사용자 빌드다. 이 경로에서 `devServerURL` 로 navigate 하면
+        // dev 서버가 없는 사용자 머신에서 흰 화면이 된다 — embed 가 있으면 dev 서버
+        // 분기를 무조건 건너뛰고 가상 호스트를 사용한다.
+        if urlOverride == nil, windowURL == nil, devIsRemote, !preferEmbeddedAssets {
             if let probe = isDevServerReachable {
                 if probe(devServerURL) {
                     return .devServer

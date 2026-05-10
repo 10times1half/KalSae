@@ -386,6 +386,16 @@
             {
                 return id
             }
+            // standalone --embed-config: 외부 파일이 없으면 PE RCDATA 폴백.
+            if let embedded = KSEmbeddedResourceLoader.loadEmbeddedResource(
+                named: "KSAS_RUNTIME_JSON"),
+                let obj = try? JSONSerialization.jsonObject(with: embedded)
+                    as? [String: Any],
+                let id = obj["identifier"] as? String,
+                !id.isEmpty
+            {
+                return id
+            }
             var buf = [UInt16](repeating: 0, count: 1024)
             let n = buf.withUnsafeMutableBufferPointer { p in
                 GetModuleFileNameW(nil, p.baseAddress, DWORD(p.count))

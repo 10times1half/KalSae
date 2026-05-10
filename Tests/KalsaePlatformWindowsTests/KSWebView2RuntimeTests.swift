@@ -118,18 +118,6 @@
                     == "KSAS_ASSETS_ZIP")
         }
 
-        @Test("embeddedAssetsExtractionDirectory 는 temp 아래에 app/resource/process namespace 를 만든다")
-        func embeddedAssetsExtractionDirectoryUsesStableNamespace() {
-            let dir = KSWebView2Runtime.embeddedAssetsExtractionDirectory(
-                identifier: "demo.app",
-                resourceName: "KSAS_ASSETS_ZIP",
-                processID: 4242,
-                env: ["TEMP": "C:\\Temp"])
-
-            let normalized = dir.path.replacingOccurrences(of: "/", with: "\\")
-            #expect(normalized.contains("Kalsae\\demo.app\\EmbeddedAssets\\KSAS_ASSETS_ZIP\\4242"))
-        }
-
         @Test("embeddedAssets metadata only is not enough without actual PE resource")
         func embeddedAssetsRequiresActualPEResource() throws {
             let root = try makeTempRoot()

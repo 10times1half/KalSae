@@ -12,6 +12,7 @@ internal enum KSStandalonePostProcessor {
         let manifestEmbedded: Bool
         let assetsEmbedded: Bool
         let configEmbedded: Bool
+        let runtimeEmbedded: Bool
         let iconEmbedded: Bool
         let versionEmbedded: Bool
         /// Windows host 이면서 ResourceHacker 와 rcedit 둘 다 PATH 에서
@@ -30,6 +31,10 @@ internal enum KSStandalonePostProcessor {
         let assetsZipPath: URL?
         /// Kalsae.json 경로. embed 을 원하면 주고, 아니면 nil.
         let configPath: URL?
+        /// kalsae.runtime.json 경로. embed 을 원하면 주고, 아니면 nil.
+        /// fixed runtime 정책에서는 외부 폴더 참조가 필요하므로 임베드를
+        /// 스킵하고 nil 을 전달하는 것이 일반적.
+        let runtimePath: URL?
         /// PATH 에 ResourceHacker 가 없더라도 명시적 경로를 주면 그 경로를
         /// 우선 사용한다 (KSResourceHackerProvisioner 결과).
         let resourceHackerOverride: URL?
@@ -51,6 +56,7 @@ internal enum KSStandalonePostProcessor {
         var manifestEmbedded = false
         var assetsEmbedded = false
         var configEmbedded = false
+        var runtimeEmbedded = false
         var iconEmbedded = false
         var versionEmbedded = false
         // toolsMissing 은 PE \ud3b8\uc9d1\uae30 2\uac1c\uac00 \ubaa8\ub450 \uc5c6\ub294 \uc870\uae30 \ub9ac\ud134 \uacbd\ub85c\uc5d0\uc11c\ub9cc true.
@@ -66,6 +72,7 @@ internal enum KSStandalonePostProcessor {
                 manifestEmbedded: false,
                 assetsEmbedded: false,
                 configEmbedded: false,
+                runtimeEmbedded: false,
                 iconEmbedded: false,
                 versionEmbedded: false,
                 toolsMissing: false)
@@ -102,6 +109,12 @@ internal enum KSStandalonePostProcessor {
                 {
                     rcdataEntries.append((name: "KSAS_CONFIG_JSON", data: data))
                 }
+                if let runtimePath = options.runtimePath,
+                    fm.fileExists(atPath: runtimePath.path),
+                    let data = try? Data(contentsOf: runtimePath)
+                {
+                    rcdataEntries.append((name: "KSAS_RUNTIME_JSON", data: data))
+                }
                 var manifestData: Data?
                 if let manifestPath = options.manifestPath,
                     fm.fileExists(atPath: manifestPath.path)
@@ -120,6 +133,7 @@ internal enum KSStandalonePostProcessor {
                             case "KWV2_LOADER_DLL": loaderEmbedded = true
                             case "KSAS_ASSETS_ZIP": assetsEmbedded = true
                             case "KSAS_CONFIG_JSON": configEmbedded = true
+                            case "KSAS_RUNTIME_JSON": runtimeEmbedded = true
                             default: break
                             }
                         }
@@ -135,6 +149,7 @@ internal enum KSStandalonePostProcessor {
             // 2차 폴백: 1차에서 채우지 못한 항목만 ResourceHacker 로 재시도.
             if let resourceHacker,
                 !loaderEmbedded || !manifestEmbedded || !assetsEmbedded || !configEmbedded
+                    || !runtimeEmbedded
             {
                 if !loaderEmbedded,
                     let loaderDLL = options.loaderDLL,
@@ -227,6 +242,29 @@ internal enum KSStandalonePostProcessor {
                         configEmbedded = true
                     }
                 }
+
+                if !runtimeEmbedded,
+                    let runtimePath = options.runtimePath,
+                    fm.fileExists(atPath: runtimePath.path)
+                {
+                    let args = [
+                        "-open", options.executable.path,
+                        "-save", options.executable.path,
+                        "-action", "addoverwrite",
+                        "-res", runtimePath.path,
+                        "-mask", "RCDATA,KSAS_RUNTIME_JSON,",
+                    ]
+                    if let warning = runToolBestEffort(
+                        toolPath: resourceHacker.path,
+                        toolName: "ResourceHacker",
+                        args: args,
+                        label: "embed kalsae.runtime.json as RCDATA")
+                    {
+                        warnings.append(warning)
+                    } else {
+                        runtimeEmbedded = true
+                    }
+                }
             }
 
             // toolsMissing: in-process 패치 + ResourceHacker + rcedit 모두 없거나 실패.
@@ -235,6 +273,7 @@ internal enum KSStandalonePostProcessor {
             // 경우만 hard-error 신호로 남긴다.
             let allEmbedSkipped =
                 !loaderEmbedded && !manifestEmbedded && !assetsEmbedded && !configEmbedded
+                && !runtimeEmbedded
             if resourceHacker == nil, rcedit == nil, allEmbedSkipped {
                 warnings.append(
                     "Standalone post-process: no embed mechanism succeeded "
@@ -245,6 +284,7 @@ internal enum KSStandalonePostProcessor {
                     manifestEmbedded: false,
                     assetsEmbedded: false,
                     configEmbedded: false,
+                    runtimeEmbedded: false,
                     iconEmbedded: false,
                     versionEmbedded: false,
                     toolsMissing: true)
@@ -306,6 +346,7 @@ internal enum KSStandalonePostProcessor {
             manifestEmbedded: manifestEmbedded,
             assetsEmbedded: assetsEmbedded,
             configEmbedded: configEmbedded,
+            runtimeEmbedded: runtimeEmbedded,
             iconEmbedded: iconEmbedded,
             versionEmbedded: versionEmbedded,
             toolsMissing: false)

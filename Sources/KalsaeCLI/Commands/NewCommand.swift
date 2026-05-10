@@ -93,7 +93,7 @@ struct NewCommand: ParsableCommand {
 
         let dest = try resolveDestination(name: resolvedName)
 
-        let resolvedKalsaePath = try kalsaePath.map { raw -> String in
+        let explicitKalsaePath = try kalsaePath.map { raw -> String in
             let expanded = (raw as NSString).expandingTildeInPath
             let url = URL(fileURLWithPath: expanded).standardizedFileURL
             guard FileManager.default.fileExists(atPath: url.path) else {
@@ -107,6 +107,22 @@ struct NewCommand: ParsableCommand {
             }
             return url.path
         }
+
+        // 자동 감지 폴백: `--kalsae-path` 가 없을 때 실행 중인 `kalsae` 가
+        // Kalsae 체크아웃의 `.build/` 안에 있다면 그 워크스페이스 루트를
+        // path 의존성으로 사용한다. 아직 GitHub 에 게시되지 않은 핫픽스가
+        // 새 프로젝트에 즉시 반영되도록 해 `from: "X.Y.Z"` 의존성이 옛 태그를
+        // 끌어와 발생하는 회귀를 막는다. opt-out: `KALSAE_DISABLE_AUTODETECT_PATH=1`.
+        let resolvedKalsaePath: String? = {
+            if let explicitKalsaePath { return explicitKalsaePath }
+            if let detected = KSKalsaeCheckoutDetector.find() {
+                log(
+                    "ℹ  Detected local Kalsae checkout at \(detected.path); using it as a path dependency. "
+                        + "Set KALSAE_DISABLE_AUTODETECT_PATH=1 to opt out and pull from GitHub instead.")
+                return detected.path
+            }
+            return nil
+        }()
 
         let template = ProjectTemplate(
             name: resolvedName,
