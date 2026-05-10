@@ -60,14 +60,25 @@ public enum KSKalsaeCheckoutDetector {
     }
 
     /// `url` 의 모든 ancestor 디렉터리(자기 자신 제외)를 root 까지 리턴.
+    /// Windows 에서 `URL.deletingLastPathComponent()` 가 드라이브 루트
+    /// (`C:/`) 에 도달했을 때 같은 URL 을 반환하지 않고 빈 path 또는 미세
+    /// 차이(`C:` vs `C:/`)를 만들어 무한 루프에 빠질 수 있다 — 컴포넌트
+    /// 길이가 줄지 않으면 즉시 종료한다 (방어적 안전망).
     private static func ancestors(of url: URL) -> [URL] {
         var result: [URL] = []
         var current = url.deletingLastPathComponent().standardizedFileURL
-        while true {
+        var lastPath = ""
+        var safety = 0
+        while current.path != lastPath, safety < 64 {
             result.append(current)
+            lastPath = current.path
             let parent = current.deletingLastPathComponent().standardizedFileURL
-            if parent.path == current.path { break }
+            // path 비교 + path 길이 단조감소 확인. Windows root 미세 차이 차단.
+            if parent.path == current.path || parent.path.count >= current.path.count {
+                break
+            }
             current = parent
+            safety += 1
         }
         return result
     }

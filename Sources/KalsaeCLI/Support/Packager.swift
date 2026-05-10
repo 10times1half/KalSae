@@ -739,6 +739,26 @@ public enum KSPackager {
             }
         }
 
+        // 3) `kalsae` CLI 가 path-dep Kalsae 체크아웃 안에서 실행 중인 경우
+        //    (`kalsae new` 의 auto-detect 경로) — 컨슈머 프로젝트의
+        //    `.build/checkouts/` 에는 Kalsae 가 없지만, 실행 중인 `kalsae.exe`
+        //    의 부모 체크아웃에 Vendor 디렉터리가 있다.
+        if let exeURL = KSKalsaeCheckoutDetector.currentExecutableURL(),
+            let kalsaeRoot = KSKalsaeCheckoutDetector.find(executableURL: exeURL)
+        {
+            let dll =
+                kalsaeRoot
+                .appendingPathComponent("Sources")
+                .appendingPathComponent("CKalsaeWV2")
+                .appendingPathComponent("Vendor")
+                .appendingPathComponent("WebView2")
+                .appendingPathComponent("runtimes")
+                .appendingPathComponent(arch)
+                .appendingPathComponent("native")
+                .appendingPathComponent("WebView2Loader.dll")
+            candidates.append(dll)
+        }
+
         guard let src = candidates.first(where: { fm.fileExists(atPath: $0.path) }) else {
             warnings.append(
                 "WebView2Loader.dll not found in Vendor/WebView2/runtimes/\(arch)/native — "

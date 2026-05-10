@@ -48,8 +48,11 @@ public struct ProjectTemplate {
                 buildCommand: "\(pm) run build"
             )
         default:
+            // Vanilla 템플릿은 `index.html` 이 kalsae.json 과 같은 디렉터리
+            // (`Sources/<NAME>/Resources/`) 에 있다. frontendDist 는 kalsae.json
+            // 기준 상대 경로이므로 "." 가 동일 디렉터리를 가리킨다.
             return BuildDefaults(
-                frontendDist: "Resources",
+                frontendDist: ".",
                 devServerURL: "about:blank",
                 devCommand: nil,
                 buildCommand: nil
