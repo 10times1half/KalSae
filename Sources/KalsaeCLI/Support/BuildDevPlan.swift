@@ -49,8 +49,16 @@ public enum KSBuildPlan {
     ) -> URL {
         if let distOverride {
             return URL(fileURLWithPath: distOverride, relativeTo: cwd)
+                .standardizedFileURL
         }
-        return configURL.deletingLastPathComponent().appendingPathComponent(config.build.frontendDist)
+        // `frontendDist` 가 `..` 세그먼트를 포함할 수 있으므로 (예: 템플릿 기본값
+        // `"../../../dist"` — kalsae.json 은 `Sources/<NAME>/Resources/` 에 있고
+        // vite outDir 은 프로젝트 루트의 `dist/`) standardize 로 `..` 를 collapse
+        // 해야 한다. Windows 의 `contentsOfDirectory` 는 `..` 가 그대로 남은 URL 에서
+        // 빈 결과를 돌려줘 "dist empty" 오진을 일으킨다.
+        return configURL.deletingLastPathComponent()
+            .appendingPathComponent(config.build.frontendDist)
+            .standardizedFileURL
     }
 
     public static func validateFrontendDist(
