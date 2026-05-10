@@ -43,6 +43,7 @@ public struct KSPersistedWindowState: Codable, Sendable, Equatable {
 public struct KSWindowStateStore: Sendable {
     /// 이 저장소를 뒷받침하는 JSON 파일의 절대 경로.
     public let url: URL
+    private static let log = KSLog.logger("window.state")
 
     public init(url: URL) {
         self.url = url
@@ -95,17 +96,22 @@ public struct KSWindowStateStore: Sendable {
             dict = existing
         }
         dict[label] = state
-        guard let data = try? JSONEncoder().encode(dict) else { return false }
+        guard let data = try? JSONEncoder().encode(dict) else {
+            Self.log.warning("failed to encode window state: \(self.url.path)")
+            return false
+        }
         // Windows의 Defender / Search Indexer 등이 일시적으로 파일을 잠그는
         // 경우가 있어 atomic 쓰기 실패 시 비-atomic으로 폴백한다.
         do {
             try data.write(to: url, options: [.atomic])
             return true
         } catch {
+            Self.log.warning("atomic write failed for window state: \(self.url.path) ; retrying non-atomic")
             do {
                 try data.write(to: url, options: [])
                 return true
             } catch {
+                Self.log.warning("non-atomic write failed for window state: \(self.url.path)")
                 return false
             }
         }

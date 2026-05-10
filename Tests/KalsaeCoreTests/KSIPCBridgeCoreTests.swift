@@ -170,6 +170,53 @@ struct KSIPCBridgeCoreTests {
         #expect(json.contains("\\u2029"))
     }
 
+    @Test("encodeForJS output remains valid JSON for object/array/scalar/null payloads")
+    func encodeOutputIsValidJSONAcrossPayloadShapes() throws {
+        struct Case {
+            let payload: Data?
+            let assertPayload: ([String: Any]) -> Bool
+        }
+
+        let cases: [Case] = [
+            Case(
+                payload: Data(#"{"a":1,"b":[true,false]}"#.utf8),
+                assertPayload: { root in
+                    guard let payload = root["payload"] as? [String: Any],
+                        let a = payload["a"] as? NSNumber,
+                        let b = payload["b"] as? [Bool]
+                    else { return false }
+                    return a.intValue == 1 && b == [true, false]
+                }),
+            Case(
+                payload: Data(#"[1,2,3]"#.utf8),
+                assertPayload: { root in
+                    guard let payload = root["payload"] as? [NSNumber] else { return false }
+                    return payload.map(\.intValue) == [1, 2, 3]
+                }),
+            Case(
+                payload: try JSONEncoder().encode("hello"),
+                assertPayload: { root in
+                    (root["payload"] as? String) == "hello"
+                }),
+            Case(
+                payload: nil,
+                assertPayload: { root in
+                    root["payload"] is NSNull
+                }),
+        ]
+
+        for c in cases {
+            let msg = KSIPCMessage(kind: .event, name: "shape", payload: c.payload)
+            let json = try KSIPCBridgeCore.encodeForJS(msg)
+
+            let data = try #require(json.data(using: .utf8))
+            let obj = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(obj["kind"] as? String == "event")
+            #expect(obj["name"] as? String == "shape")
+            #expect(c.assertPayload(obj), "payload shape should be preserved as valid JSON")
+        }
+    }
+
     // MARK: - helpers
 
     /// Polls `predicate` up to ~1s with 5ms ticks. Used because the

@@ -101,6 +101,7 @@ public final class KSIPCBridgeCore {
             let args = Self.rawJSONBytes(top["payload"])
             let registry = self.registry
             let hop = self.hop
+            let log = self.log
             let wl = self.windowLabel
             // 디스패치는 `Task.detached`로 백그라운드에서 수행한 뒤 hop을
             // 통해 UI 스레드로 복귀해 응답을 송신한다.
@@ -111,7 +112,12 @@ public final class KSIPCBridgeCore {
                     await registry.dispatch(name: name, args: args)
                 }
                 hop {
-                    self?.sendResponse(id: id, result: result)
+                    guard let self else {
+                        log.warning(
+                            "IPC bridge released before response post (id=\(id), name=\(name))")
+                        return
+                    }
+                    self.sendResponse(id: id, result: result)
                 }
             }
         case "event":

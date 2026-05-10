@@ -1,4 +1,4 @@
-/// 단일 윈돈우에 요청된 시각적 테마 변형.
+/// 단일 윈도우에 요청된 시각적 테마 변형.
 public import Foundation
 
 /// 픽셀 단위 2D 크기.
@@ -21,12 +21,12 @@ public import Foundation
 
 /// 시각적/표시 상태: 제목, 최소화/최대화, 테마, 데코레이션.
 
-/// 네이티브 윈돈우를 생성하고 추적하고 조작한다.
+/// 네이티브 윈도우를 생성하고 추적하고 조작한다.
 ///
 /// `KSWindowLifecycle`, `KSWindowGeometry`, `KSWindowState`를
-/// 합성한 refinement이다. 백엔드는 이 단일 프로토콜을 철헌하고;
+/// 합성한 refinement이다. 백엔드는 이 단일 프로토콜을 구현하고;
 /// 일부 슬라이스만 필요한 소비자(예: 테스트)는
-/// 더 좌은 결합을 위해 `any KSWindowGeometry`로 타입 소거할 수 있다.
+/// 더 느슨한 결합을 위해 `any KSWindowGeometry`로 타입 소거할 수 있다.
 ///
 /// 아직 구현되지 않은 메서드는 `KSError(code: .unsupportedPlatform)`를
 /// 던지는 기본 구현을 상속한다.
@@ -50,24 +50,24 @@ public struct KSSize: Codable, Sendable, Equatable {
     }
 }
 public protocol KSWindowLifecycle: Sendable {
-    /// `config`에 따라 새 윈돈우를 생성한다. `config.visible == true`가 아닌
+    /// `config`에 따라 새 윈도우를 생성한다. `config.visible == true`가 아닌
     /// 한 반환시 보이는 상태를 보장하지 않는다.
     func create(_ config: KSWindowConfig) async throws(KSError) -> KSWindowHandle
 
-    /// 주어진 윈돈우를 닫고 파괴한다.
+    /// 주어진 윈도우를 닫고 파괴한다.
     func close(_ handle: KSWindowHandle) async throws(KSError)
 
     func show(_ handle: KSWindowHandle) async throws(KSError)
     func hide(_ handle: KSWindowHandle) async throws(KSError)
     func focus(_ handle: KSWindowHandle) async throws(KSError)
 
-    /// 주어진 윈돈우에 연결된 WebView를 반환한다.
+    /// 주어진 윈도우에 연결된 WebView를 반환한다.
     func webView(for handle: KSWindowHandle) async throws(KSError) -> any KSWebViewBackend
 
-    /// 현재 라이브 상태인 모든 윈돈우를 열거한다.
+    /// 현재 라이브 상태인 모든 윈도우를 열거한다.
     func all() async -> [KSWindowHandle]
 
-    /// 사용자가 선언한 레이블로 윈돈우를 찾는다.
+    /// 사용자가 선언한 레이블로 윈도우를 찾는다.
     func find(label: String) async -> KSWindowHandle?
 
     /// 임베디드 WebView의 현재 문서를 다시 로드한다.
@@ -98,7 +98,7 @@ public protocol KSWindowState: Sendable {
 
     /// OS 닫기 버튼 인터셉터를 활성화/비활성화한다. 활성화 시
     /// 닫기 버튼 클릭은 `__ks.window.beforeClose` JS 이벤트를
-    /// 발생시키고 앱이 명시적으로 닫을 때까지 윈돈우는 열린 상태를
+    /// 발생시키고 앱이 명시적으로 닫을 때까지 윈도우는 열린 상태를
     /// 유지한다.
     func setCloseInterceptor(_ handle: KSWindowHandle, enabled: Bool) async throws(KSError)
 
@@ -109,12 +109,12 @@ public protocol KSWindowState: Sendable {
     /// 현재 WebView 컨트롤러 줄 팩터를 읽는다.
     func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double
 
-    /// 윈돈우의 WebView에 대한 플랫폼 인쇄 UI를 연다. 최선 노력으로.
+    /// 윈도우의 WebView에 대한 플랫폼 인쇄 UI를 연다. 최선 노력으로.
     /// `systemDialog == true`는 OS 시스템 인쇄 다이얼로그를 요청하고;
     /// 그렇지 않으면 엔진의 내장 미리보기 서페이스를 사용한다.
     func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError)
 
-    /// 현재 WebView 콘텐츠를 인코딩된 이미지 바이트로 캡첸한다.
+    /// 현재 WebView 콘텐츠를 인코딩된 이미지 바이트로 캡처한다.
     /// `format == 0`이면 PNG, `format == 1`이면 JPEG를 반환한다. 다른
     /// 값은 PNG로 처리된다.
     func capturePreview(_ handle: KSWindowHandle, format: Int32) async throws(KSError) -> Data

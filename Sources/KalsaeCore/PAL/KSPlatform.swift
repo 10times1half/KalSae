@@ -66,7 +66,7 @@ public protocol KSPlatform: Sendable {
     ) async throws(KSError) -> Never
 }
 extension KSPlatform {
-    /// 기본값: 플랫폼이 솔 백엔드를 아직 노출하지 않는다.
+    /// 기본값: 플랫폼이 셸 백엔드를 아직 노출하지 않는다.
     public var shell: (any KSShellBackend)? { nil }
 
     /// 기본값: 플랫폼이 클립보드 백엔드를 아직 노출하지 않는다.
@@ -75,9 +75,9 @@ extension KSPlatform {
     /// 기본값: 플랫폼이 전역 가속기 백엔드를 아직 노출하지 않는다.
     public var accelerators: (any KSAcceleratorBackend)? { nil }
 
-    /// 기본값: 플랫폼이 자동 시작 백엔드를 노옶하지 않는다.
+    /// 기본값: 플랫폼이 자동 시작 백엔드를 노출하지 않는다.
     public var autostart: (any KSAutostartBackend)? { nil }
 
-    /// 기본값: 플랫폼이 딥 링크 백엔드를 노옶하지 않는다.
+    /// 기본값: 플랫폼이 딥 링크 백엔드를 노출하지 않는다.
     public var deepLink: (any KSDeepLinkBackend)? { nil }
 }
