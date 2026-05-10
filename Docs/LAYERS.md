@@ -54,12 +54,12 @@
 
 | 모듈 | 위치 | 핵심 타입 |
 |---|---|---|
-| `Kalsae` | [Sources/Kalsae/](../Sources/Kalsae/) | `KSApp`, `KSApp+Boot`, `KSApp+UI`, `KSApp+SingleInstance`, `KSApp+Plugins`, `AnyPlatformHost` |
+| `Kalsae` | [Sources/Kalsae/](../Sources/Kalsae/) | `KSApp`, `KSApp+Boot`, `KSApp+UI`, `KSApp+SingleInstance`, `KSApp+Plugins`, `KSDemoHostFactory` |
 | `KalsaeMacros` | [Sources/KalsaeMacros/](../Sources/KalsaeMacros/) | `@KSCommand` 매크로 선언부 (소비자 측) |
 | `KalsaeMacrosPlugin` | [Sources/KalsaeMacrosPlugin/](../Sources/KalsaeMacrosPlugin/) | SwiftSyntax 매크로 구현 (컴파일러 플러그인) |
 
-**경계 규칙**: `Kalsae`는 `KalsaeCore`만 직접 의존. 구체 PAL은 `#if os(...)` +
-`AnyPlatformHost`로 간접 선택.
+**경계 규칙**: `Kalsae`는 `KalsaeCore`만 직접 의존. 구체 PAL 호스트는 `#if os(...)` +
+`KSDemoHostFactory.makeHost()`로 런타임에 선택되며 `any KSDemoHost`로 다뤄진다.
 
 ---
 

@@ -176,7 +176,8 @@ extension KSPackager {
             outputPath: bundleURL.path,
             zipPath: zipPath,
             policy: "macos-app",
-            warnings: warnings)
+            warnings: warnings,
+            standalone: nil)
     }
 
     private static func renderMacInfoPlist(opts: MacOptions) -> String {

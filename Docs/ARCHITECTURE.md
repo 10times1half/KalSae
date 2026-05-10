@@ -51,19 +51,28 @@ CGtk4, CWebKitGTK (systemLibrary modulemaps, Linux pkg-config)
 
 ## Boot Sequence
 
-1. **Config Loading** — `KSConfigLoader.load(from:)` reads `Kalsae.json` and validates the schema.
-2. **Window Selection** — `selectWindow(from:label:)` picks the target window config.
-3. **Command Registry** — `KSCommandRegistry` is created; `commandAllowlist` is applied before user registration.
+`KSApp.boot()` is a thin coordinator that delegates the platform-agnostic
+decisions to `KSBootOrchestrator` (in `KalsaeCore`). The platform host itself
+is created by `KSDemoHostFactory.makeHost(...)` which returns `any KSDemoHost`
+selected at compile time via `#if os(...)`.
+
+1. **Config Loading** — `KSConfigLoader.load(from:)` reads `Kalsae.json` and validates the schema. In debug builds, `KALSAE_CONFIG` / `--kalsae-config` may override the path; release builds ignore the override.
+2. **Window Selection** — `KSBootOrchestrator.selectWindow(from:label:)` picks the target window config.
+3. **Command Registry** — `KSCommandRegistry` is created; `commandAllowlist` and `commandRateLimit` are applied **before** user registration.
 4. **User Registration** — The `configure` closure runs, registering `@KSCommand` handlers.
-5. **Platform Host** — Platform-specific `DemoHost` is created (e.g. `KSWindowsDemoHost`).
-6. **Serving Mode** — `decideServingMode()` determines how frontend assets are served:
+5. **Platform Host** — `KSDemoHostFactory.makeHost(...)` returns an `any KSDemoHost` (e.g. `KSWindowsDemoHost`, `KSMacDemoHost`, `KSLinuxDemoHost`, `KSiOSDemoHost`, `KSAndroidDemoHost`).
+6. **Serving Mode** — `KSBootOrchestrator.decideServingMode()` chooses how frontend assets are served:
    - `.virtualHost(root)` — local files served via `https://app.kalsae/` (Windows) or `ks://app/` (others)
    - `.devServer` — direct connection to a live dev server
    - `.fallback` — raw URL passthrough
-7. **Security Setup** — CSP injection script, context menu policy, external drop policy applied.
-8. **Builtin Commands** — `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`, `__ks.app.*`, etc. registered.
+7. **Security Setup** — CSP injection script, context menu policy, external drop policy, navigation/download/popup gates applied.
+8. **Builtin Commands** — `__ks.window.*`, `__ks.shell.*`, `__ks.clipboard.*`, `__ks.app.*`, `__ks.dialog.*`, `__ks.fs.*`, `__ks.http.fetch`, `__ks.notification.*`, `__ks.autostart.*`, `__ks.deepLink.*` registered.
 9. **Deep Link & Autostart** — Optional backends initialized from config.
 10. **Menu/Tray Subscription** — Native menu/tray clicks routed to JS events and command dispatch.
+
+`KS{Mac,Linux,iOS,Windows,Android}Platform.runOnMain()` carries only the
+platform-specific message-loop / lifecycle work; the boot decisions above live
+in `KSBootOrchestrator` (single source of truth).
 
 ## IPC Architecture
 
@@ -123,8 +132,8 @@ Each platform implements the `KSPlatform` protocol, which exposes:
 | Windows | ✅ Stable | Full PAL, WebView2, WinRT notifications, Registry autostart, WM_COPYDATA single instance |
 | macOS | ✅ Stable | Full PAL, WKWebView, UserNotifications, SMAppService autostart, NSRunningApp single instance |
 | Linux | 🔶 Preview | Full PAL, WebKitGTK 6.0, D-Bus SNI tray, Unix socket single instance |
-| iOS | 🔶 Preview | PAL implemented, `run()` throws `unsupportedPlatform` |
-| Android | 🔶 Preview | PAL implemented, `run()` throws `unsupportedPlatform` (JVM Activity-controlled lifecycle) |
+| iOS | 🔶 Preview | PAL implemented, `run()` path available; security handlers wired in `runOnMain()` |
+| Android | 🔶 Preview | PAL implemented, `run()` is permanently unsupported (JVM Activity-controlled lifecycle) — use `KSApp.boot()` + `KSAndroidDemoHost` from a Kotlin host |
 
 ## Key Design Decisions
 

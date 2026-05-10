@@ -61,6 +61,12 @@ public enum KSPackager {
         public var architecture: Architecture
         public var policy: WebView2Policy
         public var standalone: Bool
+        /// `standalone` 이면서 PE 편집기(ResourceHacker / rcedit)가
+        /// PATH 에 없을 때, true 면 경고만 남기고 외부 파일 구성으로
+        /// 폴백. false 면 패키지에서 hard-error 를 던져 사일랰트 실패를
+        /// 차단한다. CLI 기본값은 false (`--standalone-allow-fallback` 로
+        /// 옵트인). 라이브러리 기본값은 true (기존 테스트 호환).
+        public var standaloneAllowFallback: Bool
         public var webView2InstallMode: WebView2InstallMode?
         public var iconPath: URL?  // .ico copied as-is when present
         public var vendorRuntimeRoot: URL?  // Vendor/WebView2/runtimes/<arch>/
@@ -83,6 +89,7 @@ public enum KSPackager {
             architecture: Architecture,
             policy: WebView2Policy,
             standalone: Bool = false,
+            standaloneAllowFallback: Bool = true,
             webView2InstallMode: WebView2InstallMode? = nil,
             iconPath: URL? = nil,
             vendorRuntimeRoot: URL? = nil,
@@ -102,6 +109,7 @@ public enum KSPackager {
             self.architecture = architecture
             self.policy = policy
             self.standalone = standalone
+            self.standaloneAllowFallback = standaloneAllowFallback
             self.webView2InstallMode = webView2InstallMode
             self.iconPath = iconPath
             self.vendorRuntimeRoot = vendorRuntimeRoot
@@ -117,13 +125,40 @@ public enum KSPackager {
         public let zipPath: String?
         public let policy: String
         public let warnings: [String]
+        /// standalone 빌드일 때 PE embed 결과. 일반 빌드에서는 nil.
+        public let standalone: StandaloneEmbedReport?
+
+        public struct StandaloneEmbedReport: Sendable {
+            public let loaderEmbedded: Bool
+            public let manifestEmbedded: Bool
+            public let assetsEmbedded: Bool
+            public let iconEmbedded: Bool
+            public let versionEmbedded: Bool
+        }
 
         public var description: String {
             var s = "Packaged \(policy) at \(outputPath)"
             if let z = zipPath { s += "\nArchive: \(z)" }
+            if let st = standalone {
+                func mark(_ ok: Bool) -> String { ok ? "✔" : "✘" }
+                s += "\nStandalone embed:"
+                s += "\n  \(mark(st.loaderEmbedded)) WebView2Loader.dll (RCDATA)"
+                s += "\n  \(mark(st.manifestEmbedded)) RT_MANIFEST"
+                s += "\n  \(mark(st.assetsEmbedded)) frontend assets (RCDATA)"
+                s += "\n  \(mark(st.iconEmbedded)) icon"
+                s += "\n  \(mark(st.versionEmbedded)) version metadata"
+            }
             for w in warnings { s += "\n  ! \(w)" }
             return s
         }
+    }
+
+    /// Standalone PE 편집기 부재 시 패키지에서 던지는 에러.
+    /// `--standalone-allow-fallback` 플래그 없이 실제 standalone 빌드가
+    /// 일반 빌드와 구별없는 상태로 배포되는 것을 차단한다.
+    public struct StandaloneToolsMissingError: Error, CustomStringConvertible {
+        public let message: String
+        public var description: String { message }
     }
 
     /// Runs packaging: file copy, manifest/runtime materialization,
@@ -131,12 +166,6 @@ public enum KSPackager {
     public static func run(_ opts: Options) throws -> Report {
         let fm = FileManager.default
         var warnings: [String] = []
-
-        if opts.standalone {
-            warnings.append(
-                "Standalone mode is enabled (phase 1 in progress): packaging keeps compatibility layout while new standalone pipeline is being integrated."
-            )
-        }
 
         // Output 디렉터리 청소 정책 (RFC-002 §3.1(a)):
         // 직전 빌드의 fingerprint 와 이번 빌드의 fingerprint 를 비교해, 정책/아키텍처/
@@ -269,7 +298,12 @@ public enum KSPackager {
 
         let runtimeURL = opts.output.appendingPathComponent("kalsae.runtime.json")
 
-        // 7) Standalone 후처리 파이프라인 (Phase 0/1/2 entry point)
+        // 7) Standalone 후처리 파이프라인. PE 편집기(ResourceHacker / rcedit) 로
+        //    WebView2Loader.dll / RT_MANIFEST / icon / version / asset zip 을 EXE 내부에
+        //    embed 하고, 성공한 대상의 외부 파일은 제거한다. PE 편집기가 없으면
+        //    `standaloneAllowFallback` 여부에 따라 (a) 경고 + 호환성 폴백 혹은
+        //    (b) hard-error 로 끝난다.
+        var standaloneEmbed: Report.StandaloneEmbedReport? = nil
         if opts.standalone {
             var embeddedAssetsZipURL: URL?
             if let frontendDist = opts.frontendDist, fm.fileExists(atPath: frontendDist.path) {
@@ -304,6 +338,26 @@ public enum KSPackager {
                     iconPath: opts.iconPath,
                     assetsZipPath: embeddedAssetsZipURL))
             warnings.append(contentsOf: standaloneReport.warnings)
+
+            // PE 편집기가 아예 없고 fallback 도 허용되지 않으면 즉시 실패.
+            // `standalone` 이 일반 빌드와 구별없는 상태로 배포되는 사일랰트 실패를 차단.
+            if standaloneReport.toolsMissing, !opts.standaloneAllowFallback {
+                throw StandaloneToolsMissingError(
+                    message:
+                        "--standalone build requires a PE editor (ResourceHacker or rcedit) on PATH; "
+                        + "none was found, so the package would be byte-identical to a non-standalone "
+                        + "build. Install ResourceHacker (`winget install Resource-Hacker` or "
+                        + "`choco install resource-hacker`) and rcedit (`winget install electron.rcedit`) "
+                        + "and rebuild, or pass --standalone-allow-fallback to keep the compatibility "
+                        + "layout intentionally.")
+            }
+
+            standaloneEmbed = Report.StandaloneEmbedReport(
+                loaderEmbedded: standaloneReport.loaderEmbedded,
+                manifestEmbedded: standaloneReport.manifestEmbedded,
+                assetsEmbedded: standaloneReport.assetsEmbedded,
+                iconEmbedded: standaloneReport.iconEmbedded,
+                versionEmbedded: standaloneReport.versionEmbedded)
 
             if standaloneReport.assetsEmbedded {
                 runtime["embeddedAssetsEnabled"] = true
@@ -385,7 +439,8 @@ public enum KSPackager {
             outputPath: opts.output.path,
             zipPath: zipPath,
             policy: opts.policy.rawValue,
-            warnings: warnings)
+            warnings: warnings,
+            standalone: standaloneEmbed)
     }
 
     // MARK: - Packaged config rewrite

@@ -162,6 +162,8 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--nsis-publisher <name>` | Hint passed to the NSIS template Publisher field (default: `app.identifier`). |
 | `--signtool-cmd "<template>"` | Windows: codesign the packaged executable. The template runs through the host shell. Use `{file}` as a placeholder for the absolute exe path; if omitted, the path is appended automatically. Honors `--dryrun` (printed only). |
 | `--nsis-signtool-cmd "<template>"` | Windows: codesign the NSIS installer after `makensis`. Same template syntax as `--signtool-cmd`. Requires `--nsis`. |
+| `--standalone` | Windows: produce a single-file standalone bundle that embeds `WebView2Loader.dll`, manifest, icon, version metadata, and frontend assets directly into the EXE (PE resources). Output is auto-suffixed: `dist/<name>-<ver>-<arch>-standalone/`. Requires `ResourceHacker` and/or `rcedit` on PATH — without either, the build fails (see `--standalone-allow-fallback`). |
+| `--standalone-allow-fallback` | When `--standalone` is on but no PE editor is on PATH, fall back to the compatibility layout (external `WebView2Loader.dll` + `.manifest`) instead of failing. Off by default — without this flag, missing PE editors hard-error so a "standalone" build is never silently identical to a regular build. |
 | `--no-auto-fetch-web-view2` | Disable automatic fetching of the WebView2 SDK on Windows. |
 | `--webview2-sdk-version <ver>` | WebView2 SDK version when auto-fetching. |
 | `--timings` / `--no-timings` | Print stage-by-stage wall-clock timings after the build. **Default: ON**. The summary distinguishes `WALL` (real elapsed time) from the stage sum when parallel stages overlap. |
@@ -227,6 +229,42 @@ also produces a `.zip` archive (`--zip`).
 - Certificate / key management is the user's responsibility; these flags are
   thin shell hooks. Use `{file}` to control where the absolute path is
   inserted in your template.
+
+**Standalone bundle (`--standalone`, Windows only)**:
+
+- Output directory is auto-suffixed when `--output` is not specified:
+  `dist/<name>-<ver>-<arch>-standalone/` (so a regular build and a
+  standalone build can coexist on disk without wiping each other).
+- Embeds the following into the EXE as PE resources via
+  [ResourceHacker](https://www.angusj.com/resourcehacker/) and
+  [rcedit](https://github.com/electron/rcedit):
+  - `WebView2Loader.dll` (RCDATA `KWV2_LOADER_DLL`)
+  - Application manifest (`RT_MANIFEST` / `1`)
+  - Frontend asset bundle as a single zip (RCDATA `KSAS_ASSETS_ZIP`)
+  - Application icon
+  - Version metadata (`ProductName`, `FileVersion`, etc.)
+- After successful embedding, the corresponding **external files are
+  removed** from the package directory — the result is a single-file
+  bundle plus `Kalsae.json` and `kalsae.runtime.json`.
+- Tool installation:
+  ```powershell
+  winget install Resource-Hacker        # or: choco install resource-hacker
+  winget install electron.rcedit
+  ```
+- Without either tool on PATH, the build **hard-errors** with installation
+  guidance. Pass `--standalone-allow-fallback` to opt into the
+  compatibility layout (external files kept) when you understand the
+  result will be byte-identical to a non-standalone build.
+- The packaging report ends with a checkbox summary of what was actually
+  embedded:
+  ```
+  Standalone embed:
+    ✔ WebView2Loader.dll (RCDATA)
+    ✔ RT_MANIFEST
+    ✔ frontend assets (RCDATA)
+    ✔ icon
+    ✔ version metadata
+  ```
 
 ### `kalsae version`
 

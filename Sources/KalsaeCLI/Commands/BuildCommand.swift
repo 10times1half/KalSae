@@ -47,6 +47,13 @@ struct BuildCommand: ParsableCommand {
     )
     var standalone: Bool = false
 
+    @Flag(
+        name: .long,
+        help:
+            "When --standalone is on but no PE editor (ResourceHacker / rcedit) is on PATH, fall back to compatibility layout instead of failing the build. Off by default — without this flag, missing PE editors hard-error so a 'standalone' build is never silently identical to a regular build."
+    )
+    var standaloneAllowFallback: Bool = false
+
     @Option(
         name: .long,
         help: "Target architecture for the package: x64 | arm64 | x86.")
@@ -426,10 +433,15 @@ struct BuildCommand: ParsableCommand {
 
             let outputURL: URL = {
                 if let o = output {
+                    // 사용자가 명시한 --output 은 그대로 존중. standalone 토글 시 같은 폴더를
+                    // 공유하면 fingerprint mismatch 로 자동 wipe 후 재생성됨 (Packager.swift §3.1).
                     return URL(fileURLWithPath: o, relativeTo: cwd)
                 }
+                // standalone 빌드는 일반 빌드와 산출물 내용이 다르므로 (PE 리소스 embed 후
+                // 외부 파일 제거) 기본 출력 경로를 분리해 두 빌드를 동시에 보존한다.
+                let suffix = standalone ? "-standalone" : ""
                 return cwd.appendingPathComponent(
-                    "dist/\(info.appName)-\(info.version)-\(archEnum.rawValue)")
+                    "dist/\(info.appName)-\(info.version)-\(archEnum.rawValue)\(suffix)")
             }()
 
             let opts = KSPackager.Options(
@@ -444,6 +456,7 @@ struct BuildCommand: ParsableCommand {
                 architecture: archEnum,
                 policy: policy,
                 standalone: standalone,
+                standaloneAllowFallback: standaloneAllowFallback,
                 webView2InstallMode: installMode,
                 iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
                 vendorRuntimeRoot: vendorRoot,
@@ -456,7 +469,13 @@ struct BuildCommand: ParsableCommand {
             print(
                 "📦  Packaging \(info.appName) v\(info.version) (\(archEnum.rawValue), mode: \(modeLabel), standalone: \(standalone))"
             )
-            let report = try KSPackager.run(opts)
+            let report: KSPackager.Report
+            do {
+                report = try KSPackager.run(opts)
+            } catch let err as KSPackager.StandaloneToolsMissingError {
+                // standalone hard-error 를 사용자 친화적인 ValidationError 로 승격.
+                throw ValidationError(err.message)
+            }
             print(report.description)
 
             // 패키지된 exe 코드사이닝 hook (P3-2). NSIS 인스톨러보다 먼저 수행해야

@@ -180,7 +180,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   WKUserScript (preventDefault on `contextmenu` / `dragover` / `drop`).
   `installSecurityHandlers(allowPopups:openExternal:)` installs a WKUIDelegate
   (popup blocking + media-capture deny) and WKNavigationDelegate (external URL
-  routing) — wired in `runOnMain()` (RFC-008 §2.1–2.3).
+  routing) — wired in `runOnMain()` (see [Docs/SECURITY.md](Docs/SECURITY.md)).
 - **Known gaps:** `installFileDropEmitter` is a best-effort warning stub;
   proper external file-drop forwarding requires NSWindow draggingDestination
   integration (deferred).
@@ -201,9 +201,9 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer`.
 - Security: WebKit signal handlers in CKalsaeGtk enforce `contextMenu`,
   `allowExternalDrop`, and `allowPopups` (via `decide-policy` for new-window
-  actions, with external URL routing) — wired in `runOnMain()` (RFC-008 §2.4).
-  Menu/tray clicks route through `KSLinuxCommandRouter` to JS + commandRegistry
-  (RFC-008 §2.6); `appMenu` / `windowMenu` install in `runOnMain()` (§2.5).
+  actions, with external URL routing) — wired in `runOnMain()` (see [Docs/SECURITY.md](Docs/SECURITY.md)).
+  Menu/tray clicks route through `KSLinuxCommandRouter` to JS + commandRegistry;
+  `appMenu` / `windowMenu` install in `runOnMain()`.
 - **Stubs (planned):** system-wide global hot-keys (deferred — no standard
   Wayland protocol), tray submenus (v1 ships with flat menus only),
   `installFileDropEmitter` (WebKitGTK does not expose external drop interception).
@@ -215,7 +215,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   clipboard, deep link.
 - WebView bridge: `WKWebView` + `WKUserContentController` message handler.
 - Security: same WKUserScript + WKUIDelegate / WKNavigationDelegate pattern as
-  macOS (RFC-008 §4.2). `installFileDropEmitter` is a stub (UIDropInteraction
+  macOS (see [Docs/SECURITY.md](Docs/SECURITY.md)). `installFileDropEmitter` is a stub (UIDropInteraction
   integration deferred).
 
 ### Android
@@ -231,7 +231,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   `KSAndroidDemoHost` with Kotlin host instead.
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows = 풀 PAL. macOS = 풀 PAL (RFC-008 §2.1~2.3 보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풀 PAL (RFC-008 §2.4~2.6 보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러(RFC-008 §4.2) 적용. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델)._
+_🇰🇷 Windows = 풍 PAL. macOS = 풍 PAL (보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._
 
 ---
 

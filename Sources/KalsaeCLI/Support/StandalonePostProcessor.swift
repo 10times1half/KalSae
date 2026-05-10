@@ -11,6 +11,11 @@ internal enum KSStandalonePostProcessor {
         let loaderEmbedded: Bool
         let manifestEmbedded: Bool
         let assetsEmbedded: Bool
+        let iconEmbedded: Bool
+        let versionEmbedded: Bool
+        /// Windows host 이면서 ResourceHacker 와 rcedit 둘 다 PATH 에서
+        /// 찾을 수 없을 때 true. 상위에서 standalone hard-error 판단에 사용.
+        let toolsMissing: Bool
     }
 
     internal struct Options: Sendable {
@@ -39,6 +44,10 @@ internal enum KSStandalonePostProcessor {
         var loaderEmbedded = false
         var manifestEmbedded = false
         var assetsEmbedded = false
+        var iconEmbedded = false
+        var versionEmbedded = false
+        // toolsMissing 은 PE \ud3b8\uc9d1\uae30 2\uac1c\uac00 \ubaa8\ub450 \uc5c6\ub294 \uc870\uae30 \ub9ac\ud134 \uacbd\ub85c\uc5d0\uc11c\ub9cc true.
+        // \uadf8 \uc678 \uacbd\ub85c\ub294 \ubd84\uae30\uc5d0 \ub3c4\ub2ec\ud558\uc9c0 \uc54a\uc73c\ubbc0\ub85c \ucd5c\uc885 return \uc740 \uc0c1\uc218 false.
         let fm = FileManager.default
 
         guard fm.fileExists(atPath: options.executable.path) else {
@@ -48,7 +57,10 @@ internal enum KSStandalonePostProcessor {
                 ],
                 loaderEmbedded: false,
                 manifestEmbedded: false,
-                assetsEmbedded: false)
+                assetsEmbedded: false,
+                iconEmbedded: false,
+                versionEmbedded: false,
+                toolsMissing: false)
         }
 
         #if os(Windows)
@@ -64,7 +76,10 @@ internal enum KSStandalonePostProcessor {
                     warnings: warnings,
                     loaderEmbedded: false,
                     manifestEmbedded: false,
-                    assetsEmbedded: false)
+                    assetsEmbedded: false,
+                    iconEmbedded: false,
+                    versionEmbedded: false,
+                    toolsMissing: true)
             }
 
             if let resourceHacker {
@@ -158,6 +173,8 @@ internal enum KSStandalonePostProcessor {
                         label: "set executable icon")
                     {
                         warnings.append(warning)
+                    } else {
+                        iconEmbedded = true
                     }
                 }
 
@@ -179,6 +196,8 @@ internal enum KSStandalonePostProcessor {
                     label: "set version metadata")
                 {
                     warnings.append(warning)
+                } else {
+                    versionEmbedded = true
                 }
             } else {
                 warnings.append(
@@ -193,7 +212,10 @@ internal enum KSStandalonePostProcessor {
             warnings: warnings,
             loaderEmbedded: loaderEmbedded,
             manifestEmbedded: manifestEmbedded,
-            assetsEmbedded: assetsEmbedded)
+            assetsEmbedded: assetsEmbedded,
+            iconEmbedded: iconEmbedded,
+            versionEmbedded: versionEmbedded,
+            toolsMissing: false)
     }
 
     private static func runToolBestEffort(

@@ -110,28 +110,60 @@ The host registers the following built-in command namespaces during boot:
 
 ### `__ks.window.*`
 
+State / lifecycle:
+
 | Command | Description |
 |---|---|
-| `__ks.window.close` | Close the current window |
 | `__ks.window.minimize` | Minimize the window |
 | `__ks.window.maximize` | Maximize the window |
-| `__ks.window.unmaximize` | Restore from maximized |
-| `__ks.window.isMaximized` | Check if window is maximized |
+| `__ks.window.restore` | Restore from minimized/maximized |
+| `__ks.window.toggleMaximize` | Toggle the maximized state |
 | `__ks.window.show` | Show the window |
 | `__ks.window.hide` | Hide the window |
-| `__ks.window.setTitle` | Set the window title |
-| `__ks.window.getTitle` | Get the current window title |
-| `__ks.window.setSize` | Set window dimensions |
+| `__ks.window.focus` | Bring the window to front and focus it |
+| `__ks.window.close` | Close the current window |
+| `__ks.window.reload` | Reload the WebView contents |
+| `__ks.window.center` | Center the window on screen |
+| `__ks.window.startDrag` | Start a native window drag (desktop only; mobile no-op) |
+| `__ks.window.setCloseInterceptor` | When enabled, close requests fire the `__ks.window.beforeClose` event instead of closing immediately |
+| `__ks.window.isMinimized` | Check if window is minimized |
+| `__ks.window.isMaximized` | Check if window is maximized |
+| `__ks.window.isFullscreen` | Check if window is fullscreen |
+| `__ks.window.isNormal` | True when none of minimized/maximized/fullscreen apply |
+
+Geometry / appearance:
+
+| Command | Description |
+|---|---|
+| `__ks.window.setSize` | Set window dimensions (1..=65535) |
 | `__ks.window.getSize` | Get current window dimensions |
-| `__ks.window.setPosition` | Set window position |
+| `__ks.window.setMinSize` | Set the minimum window size |
+| `__ks.window.setMaxSize` | Set the maximum window size |
+| `__ks.window.setPosition` | Set window position (multi-monitor coordinates allowed) |
 | `__ks.window.getPosition` | Get current window position |
 | `__ks.window.setFullscreen` | Toggle fullscreen mode |
-| `__ks.window.isFullscreen` | Check if window is fullscreen |
 | `__ks.window.setAlwaysOnTop` | Set always-on-top state |
-| `__ks.window.setResizable` | Set resizable state |
-| `__ks.window.setDecorations` | Set window decorations (title bar) |
-| `__ks.window.center` | Center the window on screen |
-| `__ks.window.beforeClose` | Register a close handler (return `{ cancel: true }` to prevent close) |
+| `__ks.window.setTitle` | Set the window title |
+| `__ks.window.setTheme` | Set window theme (`light` / `dark` / `system`) |
+| `__ks.window.setBackgroundColor` | Set background color (RGBA, 0..=255 each) |
+| `__ks.window.setZoom` | Set the WebView zoom factor |
+| `__ks.window.getZoom` | Get the WebView zoom factor |
+
+Display / taskbar:
+
+| Command | Description |
+|---|---|
+| `__ks.window.displays` | Enumerate connected displays |
+| `__ks.window.currentDisplay` | Display the current window resides on |
+| `__ks.window.setTaskbarProgress` | Taskbar progress indicator (Windows only; other platforms no-op) |
+| `__ks.window.setOverlayIcon` | Taskbar overlay icon (Windows only; `iconPath` validated against `security.fs`) |
+
+WebView features:
+
+| Command | Description |
+|---|---|
+| `__ks.window.print` | Show the print UI (`systemDialog?: bool`) |
+| `__ks.window.capturePreview` | Capture window preview as base64 PNG/JPEG |
 
 #### Multi-window (v0.3+)
 
@@ -156,16 +188,27 @@ The host registers the following built-in command namespaces during boot:
 |---|---|
 | `__ks.clipboard.readText` | Read text from system clipboard |
 | `__ks.clipboard.writeText` | Write text to system clipboard |
+| `__ks.clipboard.clear` | Clear the system clipboard |
+| `__ks.clipboard.hasFormat` | Check whether the clipboard currently holds a given format |
 
-### `__ks.app.*`
+### `__ks.dialog.*`
 
 | Command | Description |
 |---|---|
-| `__ks.app.getVersion` | Get app version |
-| `__ks.app.getName` | Get app name |
-| `__ks.app.getIdentifier` | Get app identifier |
-| `__ks.app.exit` | Exit the application |
-| `__ks.app.getConfig` | Get the app config (redacted) |
+| `__ks.dialog.openFile` | Native open-file dialog (single or multiple) |
+| `__ks.dialog.saveFile` | Native save-file dialog |
+| `__ks.dialog.selectFolder` | Native folder-picker dialog |
+| `__ks.dialog.message` | Native message dialog (info/warning/error/question) |
+
+> `defaultDirectory` arguments on `openFile` / `saveFile` / `selectFolder` are validated against `security.fs` (RFC-002 §2.x).
+
+### `__ks.app.*` / `__ks.environment` / `__ks.log`
+
+| Command | Description |
+|---|---|
+| `__ks.app.quit` | Request a graceful quit of the host process |
+| `__ks.environment` | Return `{ os, arch, platform, osVersion, locale, appVersion, kalsaeVersion }` |
+| `__ks.log` | Forward a `{ level, message }` entry to the native logger (`trace`/`debug`/`info`/`warn`/`error`) |
 
 ### `__ks.notification.*`
 
@@ -179,17 +222,19 @@ The host registers the following built-in command namespaces during boot:
 
 | Command | Description |
 |---|---|
-| `__ks.fs.readTextFile` | Read a text file |
-| `__ks.fs.writeTextFile` | Write a text file |
-| `__ks.fs.readBinaryFile` | Read a binary file |
-| `__ks.fs.writeBinaryFile` | Write a binary file |
-| `__ks.fs.readDir` | List directory contents |
-| `__ks.fs.createDir` | Create a directory |
-| `__ks.fs.removeDir` | Remove a directory |
-| `__ks.fs.removeFile` | Remove a file |
-| `__ks.fs.rename` | Rename a file or directory |
+| `__ks.fs.readTextFile` | Read a UTF-8 text file |
+| `__ks.fs.writeTextFile` | Write a UTF-8 text file |
+| `__ks.fs.readFile` | Read a binary file (returns base64) |
+| `__ks.fs.writeFile` | Write a binary file (base64 input) |
 | `__ks.fs.exists` | Check if a path exists |
-| `__ks.fs.stat` | Get file metadata |
+| `__ks.fs.metadata` | Get file metadata (size, mtime, kind) |
+| `__ks.fs.readDir` | List directory contents |
+| `__ks.fs.createDir` | Create a directory (`recursive?: bool`) |
+| `__ks.fs.remove` | Remove a file or directory (`recursive?: bool`) |
+| `__ks.fs.rename` | Rename / move a file or directory |
+| `__ks.fs.copyFile` | Copy a file |
+
+> All `__ks.fs.*` paths are validated against `security.fs` (`allow` / `deny` glob patterns). The standardised, expanded path is forwarded to the platform layer to prevent TOCTOU bypass (RFC-002 §2).
 
 ### `__ks.http.fetch`
 
@@ -199,11 +244,7 @@ The host registers the following built-in command namespaces during boot:
 
 ### `__ks.environment.*`
 
-| Command | Description |
-|---|---|
-| `__ks.environment.getOS` | Get the OS type |
-| `__ks.environment.getArch` | Get the CPU architecture |
-| `__ks.environment.getLocale` | Get the system locale |
+The single `__ks.environment` query (see `__ks.app.*` table above) returns all environment fields (`os`, `arch`, `platform`, `osVersion`, `locale`, `appVersion`, `kalsaeVersion`) in one call. Per-field accessors are not registered.
 
 ### `__ks.autostart.*`
 
@@ -217,7 +258,10 @@ The host registers the following built-in command namespaces during boot:
 
 | Command | Description |
 |---|---|
-| `__ks.deepLink.openURL` | Event emitted when a deep link URL is received |
+| `__ks.deepLink.register` | Register a custom URL scheme |
+| `__ks.deepLink.unregister` | Unregister a custom URL scheme |
+| `__ks.deepLink.isRegistered` | Check whether a scheme is currently registered |
+| `__ks.deepLink.currentLaunchURLs` | Return URLs that launched the app, if any |
 
 ## Events
 
@@ -227,8 +271,9 @@ The host emits the following events to the JS frontend:
 |---|---|---|
 | `menu` | `{ command, itemID }` | Native menu item clicked |
 | `__ks.deepLink.openURL` | `{ url }` | Deep link URL received |
-| `__ks.file.drop` | `{ paths: string[] }` | Files dropped onto window |
+| `__ks.file.drop` | `{ paths: string[] }` | Files dropped onto window (when `security.allowExternalDrop` is `false`) |
 | `__ks.webview.downloadStarting` | `{ url, mimeType }` | Download initiated |
+| `__ks.window.beforeClose` | `{ label }` | Fired when a close request is intercepted via `__ks.window.setCloseInterceptor`. JS may call `__ks.window.close` to honour, or do nothing to cancel. |
 | `__ks.window.created` | `{ label }` | A new window was created. Broadcast to all open windows (Windows / macOS, v0.3+). |
 | `__ks.window.closed` | `{ label }` | A window was closed. Broadcast to all remaining windows (Windows / macOS, v0.3+). |
 
