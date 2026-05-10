@@ -3,10 +3,20 @@ import Foundation
 extension KSBuiltinCommands {
     /// `__ks.window.*` 핸들러를 등록한다 — minimize, maximize, restore,
     /// fullscreen, 위치/크기 조회 및 변경, 테마 등.
+    ///
+    /// RFC-002 —
+    /// - `setOverlayIcon` 은 `iconPath` 를 `fsScope` 로 검증한다(§2.2, 검증된 expanded
+    ///   경로를 PAL에 전달).
+    /// - `create` 는 창을 생성하기 전에 `navigationScope.permits()`로 URL을 검증한다(§2.4).
+    /// - `setPosition` 은 NaN/Inf만 거부하며 멀티모니터 희쪽 좌표 자체는 클램프하지 않는다(§2.6).
+    /// - `setSize` 는 양수와 65535 이하를 요구한다(§2.6).
     static func registerWindowCommands(
         into registry: KSCommandRegistry,
         windows: any KSWindowBackend,
-        resolver: WindowResolver
+        resolver: WindowResolver,
+        fsScope: KSFSScope,
+        fsCtx: KSFSScope.ExpansionContext,
+        navigationScope: KSNavigationScope
     ) async {
         await register(registry, "__ks.window.minimize") { _ throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: nil)
@@ -57,6 +67,8 @@ extension KSBuiltinCommands {
         }
         await register(registry, "__ks.window.setPosition") { (args: PositionArg) throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: args.window)
+            // RFC-002 §2.6 — PositionArg.x/y 는 Int이므로 NaN/Inf 가 구조적으로 불가능하고,
+            // 멀티모니터 환경에서 좌표가 수만 단위가 될 수 있어 의도적으로 클램프하지 않는다.
             try await windows.setPosition(h, x: args.x, y: args.y)
             return Empty()
         }
@@ -70,6 +82,17 @@ extension KSBuiltinCommands {
         }
         await register(registry, "__ks.window.setSize") { (args: SizeArg) throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: args.window)
+            // RFC-002 §2.6 — 양수와 합리적 상한(65535, 16-bit 경계) 검증.
+            guard args.width > 0, args.height > 0 else {
+                throw KSError(
+                    code: .invalidArgument,
+                    message: "window.setSize: width and height must be positive")
+            }
+            guard args.width <= 65535, args.height <= 65535 else {
+                throw KSError(
+                    code: .invalidArgument,
+                    message: "window.setSize: width and height must not exceed 65535")
+            }
             try await windows.setSize(h, width: args.width, height: args.height)
             return Empty()
         }
@@ -172,6 +195,22 @@ extension KSBuiltinCommands {
         // Multi-window: 새 창 생성. JS -> `__KS_.invoke("__ks.window.create", config)`.
         // `url` 필드를 지정하면 생성 즉시 해당 URL로 탐색한다.
         await register(registry, "__ks.window.create") { (args: KSWindowConfig) throws(KSError) -> LabelResult in
+            // RFC-002 §2.4 — 창을 만들기 전에 URL 검증. 이렇게 해야 거부된 URL이 임시로도
+            // 로드되지 않고, 전파가 안 되는 핀팝 팅을 차단하며, 다음 창 핸들 누수도 없다.
+            if let urlStr = args.url, !urlStr.isEmpty {
+                guard navigationScope.permits(urlString: urlStr) else {
+                    throw KSError(
+                        code: .commandNotAllowed,
+                        message: "security.navigation denies URL",
+                        data: .string(urlStr))
+                }
+                guard URL(string: urlStr) != nil else {
+                    throw KSError(
+                        code: .invalidArgument,
+                        message: "window.create: invalid URL",
+                        data: .string(urlStr))
+                }
+            }
             let handle = try await windows.create(args)
             if let urlStr = args.url, let url = URL(string: urlStr) {
                 let webview = try await windows.webView(for: handle)
@@ -250,8 +289,22 @@ extension KSBuiltinCommands {
         await register(registry, "__ks.window.setOverlayIcon") {
             (args: OverlayIconArg) throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: args.window)
+            // RFC-002 §2.2 — iconPath가 있으면 fsScope로 검증. 검증한 expanded 경로를
+            // PAL에 그대로 전달해 TOCTOU 우회를 차단한다.
+            var resolvedIcon: String? = nil
+            if let raw = args.iconPath, !raw.isEmpty {
+                let expanded = KSFSScope.expand(raw, in: fsCtx)
+                let url = URL(fileURLWithPath: expanded).standardizedFileURL
+                guard fsScope.permits(absolutePath: url.path, in: fsCtx) else {
+                    throw KSError(
+                        code: .fsScopeDenied,
+                        message: "security.fs denies setOverlayIcon iconPath",
+                        data: .string(url.path))
+                }
+                resolvedIcon = url.path
+            }
             try await windows.setOverlayIcon(
-                h, iconPath: args.iconPath, description: args.description)
+                h, iconPath: resolvedIcon, description: args.description)
             return Empty()
         }
 

@@ -232,18 +232,32 @@ public struct KSShellScope: Codable, Sendable, Equatable {
     /// `moveToTrash` 자체를 허용할지 여부.
     public var moveToTrash: Bool
 
+    /// `showItemInFolder` / `moveToTrash` 가 접근할 수 있는 경로 범위.
+    ///
+    /// RFC-002 §2.1 — boolean 플래그만으로는 *어떤* 경로에 접근하는지 통제할 수 없어,
+    /// 공격자가 임의 경로(예: `C:\Windows\System32`, `/etc/shadow`)를 노출/삭제할 수
+    /// 있었다. 이제 모든 셸 경로는 `__ks.fs.*` 와 동일하게 `KSFSScope.permits()` 를
+    /// 통과해야 한다.
+    ///
+    /// 기본값은 빈 `KSFSScope` (= **모든 경로 거부**, default-deny). 기존 호스트 앱은
+    /// `Kalsae.json` 의 `security.shell.fsScope.allow` 에 명시적으로 허용 패턴을 두어야
+    /// `showItemInFolder` / `moveToTrash` 가 동작한다.
+    public var fsScope: KSFSScope
+
     public init(
         openExternalSchemes: [String]? = ["http", "https", "mailto"],
         showItemInFolder: Bool = true,
-        moveToTrash: Bool = true
+        moveToTrash: Bool = true,
+        fsScope: KSFSScope = .init()
     ) {
         self.openExternalSchemes = openExternalSchemes
         self.showItemInFolder = showItemInFolder
         self.moveToTrash = moveToTrash
+        self.fsScope = fsScope
     }
 
     private enum CodingKeys: String, CodingKey {
-        case openExternalSchemes, showItemInFolder, moveToTrash
+        case openExternalSchemes, showItemInFolder, moveToTrash, fsScope
     }
 
     public init(from decoder: any Decoder) throws {
@@ -262,6 +276,10 @@ public struct KSShellScope: Codable, Sendable, Equatable {
         self.moveToTrash =
             try c.decodeIfPresent(
                 Bool.self, forKey: .moveToTrash) ?? true
+        // `fsScope` 키 부재 시 빈 scope (= 모든 경로 거부, default-deny). RFC-002 §2.1.
+        self.fsScope =
+            try c.decodeIfPresent(
+                KSFSScope.self, forKey: .fsScope) ?? .init()
     }
 
     /// `scheme`이(대소문자 무시) `openExternalSchemes`에 의해 허용되면 `true`를 반환한다.

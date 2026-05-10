@@ -135,6 +135,25 @@ static gchar *dup_string(const char *s)
     return s ? g_strdup(s) : NULL;
 }
 
+static void ks_copy_string(char *dst, size_t dst_len, const char *src)
+{
+    if (!dst || dst_len == 0) return;
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+    g_strlcpy(dst, src, dst_len);
+}
+
+static GdkDisplay *ks_get_display_from_host(KSGtkHost *host)
+{
+    if (host && host->window) {
+        GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(host->window));
+        if (display) return display;
+    }
+    return gdk_display_get_default();
+}
+
 static void clear_string(char **slot)
 {
     if (*slot) { g_free(*slot); *slot = NULL; }
@@ -621,6 +640,46 @@ void ks_gtk_host_quit(KSGtkHost *host)
     KSGtkQuitJob *job = g_new0(KSGtkQuitJob, 1);
     job->app = G_APPLICATION(host->app);
     g_idle_add(ks_gtk_quit_trampoline, job);
+}
+
+int ks_gtk_host_send_notification(
+    KSGtkHost *host,
+    const char *id,
+    const char *title,
+    const char *body,
+    const char *icon_path,
+    int urgent)
+{
+    if (!host || !host->app || !title || title[0] == '\0') return 0;
+
+    const char *notif_id = (id && id[0] != '\0') ? id : "kalsae.notification";
+    GNotification *n = g_notification_new(title);
+    if (body && body[0] != '\0') {
+        g_notification_set_body(n, body);
+    }
+    if (icon_path && icon_path[0] != '\0') {
+        GFile *f = g_file_new_for_path(icon_path);
+        if (f) {
+            GIcon *icon = G_ICON(g_file_icon_new(f));
+            if (icon) {
+                g_notification_set_icon(n, icon);
+                g_object_unref(icon);
+            }
+            g_object_unref(f);
+        }
+    }
+    g_notification_set_priority(
+        n,
+        urgent ? G_NOTIFICATION_PRIORITY_URGENT : G_NOTIFICATION_PRIORITY_NORMAL);
+    g_application_send_notification(G_APPLICATION(host->app), notif_id, n);
+    g_object_unref(n);
+    return 1;
+}
+
+void ks_gtk_host_withdraw_notification(KSGtkHost *host, const char *id)
+{
+    if (!host || !host->app || !id || id[0] == '\0') return;
+    g_application_withdraw_notification(G_APPLICATION(host->app), id);
 }
 
 /* -- 스레드 간 디스패치 ----------------------------------------- */
@@ -1283,6 +1342,175 @@ int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y)
     }
 #endif
     return 0;
+}
+
+int ks_gtk_host_start_drag(KSGtkHost *host)
+{
+    if (!host || !host->window) return 0;
+    GdkSurface *surface = ks_gtk_window_surface(host->window);
+    if (!surface || !GDK_IS_TOPLEVEL(surface)) return 0;
+
+    GdkDisplay *display = gtk_widget_get_display(GTK_WIDGET(host->window));
+    if (!display) return 0;
+    GdkSeat *seat = gdk_display_get_default_seat(display);
+    if (!seat) return 0;
+    GdkDevice *pointer = gdk_seat_get_pointer(seat);
+    if (!pointer) return 0;
+
+    GtkWidget *widget = GTK_WIDGET(host->window);
+    int win_w = gtk_widget_get_width(widget);
+    int win_h = gtk_widget_get_height(widget);
+    double x = win_w > 0 ? (double) win_w / 2.0 : 0.0;
+    double y = win_h > 0 ? 16.0 : 0.0;
+
+    gdk_toplevel_begin_move(
+        GDK_TOPLEVEL(surface),
+        pointer,
+        1,   /* left button */
+        x,
+        y,
+        GDK_CURRENT_TIME);
+    return 1;
+}
+
+static int ks_get_monitor_count(GdkDisplay *display)
+{
+    if (!display) return 0;
+    GListModel *monitors = gdk_display_get_monitors(display);
+    if (!monitors) return 0;
+    return (int) g_list_model_get_n_items(monitors);
+}
+
+static GdkMonitor *ks_get_monitor_at_index(GdkDisplay *display, int index)
+{
+    if (!display || index < 0) return NULL;
+    GListModel *monitors = gdk_display_get_monitors(display);
+    if (!monitors) return NULL;
+    guint n = g_list_model_get_n_items(monitors);
+    if ((guint) index >= n) return NULL;
+    return GDK_MONITOR(g_list_model_get_item(monitors, (guint) index));
+}
+
+static int ks_find_primary_monitor_index(GdkDisplay *display)
+{
+    if (!display) return -1;
+#if KS_GTK_HAS_X11
+    if (GDK_IS_X11_DISPLAY(display)) {
+        GdkMonitor *primary = gdk_x11_display_get_primary_monitor(display);
+        if (!primary) return -1;
+        GListModel *monitors = gdk_display_get_monitors(display);
+        if (!monitors) return -1;
+        guint n = g_list_model_get_n_items(monitors);
+        for (guint i = 0; i < n; ++i) {
+            GdkMonitor *m = GDK_MONITOR(g_list_model_get_item(monitors, i));
+            gboolean match = (m == primary);
+            g_object_unref(m);
+            if (match) return (int) i;
+        }
+    }
+#endif
+    return 0;
+}
+
+int ks_gtk_host_get_display_count(KSGtkHost *host)
+{
+    GdkDisplay *display = ks_get_display_from_host(host);
+    return ks_get_monitor_count(display);
+}
+
+int ks_gtk_host_get_display_info(
+    KSGtkHost *host,
+    int index,
+    char *out_id,
+    size_t out_id_len,
+    char *out_name,
+    size_t out_name_len,
+    int *out_x,
+    int *out_y,
+    int *out_width,
+    int *out_height,
+    int *out_work_x,
+    int *out_work_y,
+    int *out_work_width,
+    int *out_work_height,
+    double *out_scale_factor,
+    int *out_refresh_rate,
+    int *out_is_primary)
+{
+    if (!out_x || !out_y || !out_width || !out_height ||
+        !out_work_x || !out_work_y || !out_work_width || !out_work_height ||
+        !out_scale_factor || !out_refresh_rate || !out_is_primary) {
+        return 0;
+    }
+
+    GdkDisplay *display = ks_get_display_from_host(host);
+    GdkMonitor *monitor = ks_get_monitor_at_index(display, index);
+    if (!monitor) return 0;
+
+    GdkRectangle geometry;
+    gdk_monitor_get_geometry(monitor, &geometry);
+
+    *out_x = geometry.x;
+    *out_y = geometry.y;
+    *out_width = geometry.width;
+    *out_height = geometry.height;
+    /* GTK4/GDK4에는 범용 workarea API가 없으므로 geometry를 사용한다. */
+    *out_work_x = geometry.x;
+    *out_work_y = geometry.y;
+    *out_work_width = geometry.width;
+    *out_work_height = geometry.height;
+
+    *out_scale_factor = (double) gdk_monitor_get_scale_factor(monitor);
+    int refresh_mhz = gdk_monitor_get_refresh_rate(monitor);
+    *out_refresh_rate = refresh_mhz > 0 ? (refresh_mhz / 1000) : 0;
+    *out_is_primary = (index == ks_find_primary_monitor_index(display)) ? 1 : 0;
+
+    const char *model = gdk_monitor_get_model(monitor);
+    const char *manufacturer = gdk_monitor_get_manufacturer(monitor);
+
+    char id_buf[128];
+    if (model && model[0] != '\0') {
+        g_snprintf(id_buf, sizeof(id_buf), "%s-%d", model, index);
+    } else {
+        g_snprintf(id_buf, sizeof(id_buf), "display-%d", index);
+    }
+    ks_copy_string(out_id, out_id_len, id_buf);
+
+    char name_buf[256];
+    if (manufacturer && manufacturer[0] != '\0' && model && model[0] != '\0') {
+        g_snprintf(name_buf, sizeof(name_buf), "%s %s", manufacturer, model);
+        ks_copy_string(out_name, out_name_len, name_buf);
+    } else if (model && model[0] != '\0') {
+        ks_copy_string(out_name, out_name_len, model);
+    } else {
+        g_snprintf(name_buf, sizeof(name_buf), "Display %d", index + 1);
+        ks_copy_string(out_name, out_name_len, name_buf);
+    }
+
+    g_object_unref(monitor);
+    return 1;
+}
+
+int ks_gtk_host_get_current_display_index(KSGtkHost *host)
+{
+    if (!host || !host->window) return -1;
+    GdkDisplay *display = ks_get_display_from_host(host);
+    GdkSurface *surface = ks_gtk_window_surface(host->window);
+    if (!display || !surface) return -1;
+
+    GdkMonitor *current = gdk_display_get_monitor_at_surface(display, surface);
+    if (!current) return -1;
+
+    GListModel *monitors = gdk_display_get_monitors(display);
+    if (!monitors) return -1;
+    guint n = g_list_model_get_n_items(monitors);
+    for (guint i = 0; i < n; ++i) {
+        GdkMonitor *m = GDK_MONITOR(g_list_model_get_item(monitors, i));
+        gboolean match = (m == current);
+        g_object_unref(m);
+        if (match) return (int) i;
+    }
+    return -1;
 }
 
 void ks_gtk_host_center(KSGtkHost *host)
@@ -1950,7 +2178,7 @@ void ks_gtk_host_show_context_menu(KSGtkHost *host,
  * ================================================================
  * 본 구현은 GIO `GDBusConnection`만 사용해 SNI/DBusMenu를 D-Bus
  * 세션 버스에 직접 노출한다. AppIndicator3/libayatana 의존성 없음.
- * 메뉴는 평탄 구조(서브메뉴 미지원, v1 스코프).
+ * 메뉴는 트리 구조(flat + parent_id)를 지원한다.
  */
 
 #define KS_TRAY_SNI_PATH      "/StatusNotifierItem"
@@ -1963,6 +2191,7 @@ void ks_gtk_host_show_context_menu(KSGtkHost *host,
 
 typedef struct KSGtkTrayItem {
     int   id;             /* 0은 root reserved; 항목은 1부터 시작. */
+    int   parent_id;      /* 0=root, 그 외 부모 id */
     char *label;          /* 구분선이면 NULL. */
     char *command_id;     /* nullable. */
     int   enabled;        /* 0/1 */
@@ -2091,7 +2320,8 @@ static void ks_tray_set_items(KSGtkTray *tray,
     tray->items = g_new0(KSGtkTrayItem, item_count);
     tray->item_count = item_count;
     for (int i = 0; i < item_count; ++i) {
-        tray->items[i].id           = i + 1;
+        tray->items[i].id           = items[i].id > 0 ? items[i].id : (i + 1);
+        tray->items[i].parent_id    = items[i].parent_id;
         tray->items[i].label        = items[i].label
             ? g_strdup(items[i].label) : NULL;
         tray->items[i].command_id   = items[i].command_id
@@ -2099,6 +2329,24 @@ static void ks_tray_set_items(KSGtkTray *tray,
         tray->items[i].enabled      = items[i].enabled ? 1 : 0;
         tray->items[i].is_separator = items[i].is_separator ? 1 : 0;
     }
+}
+
+static int ks_tray_find_item_index(const KSGtkTray *tray, int id)
+{
+    if (!tray || id <= 0) return -1;
+    for (int i = 0; i < tray->item_count; ++i) {
+        if (tray->items[i].id == id) return i;
+    }
+    return -1;
+}
+
+static int ks_tray_has_children(const KSGtkTray *tray, int parent_id)
+{
+    if (!tray) return 0;
+    for (int i = 0; i < tray->item_count; ++i) {
+        if (tray->items[i].parent_id == parent_id) return 1;
+    }
+    return 0;
 }
 
 /* ---------------------------------------------------------------- */
@@ -2195,7 +2443,8 @@ static const GDBusInterfaceVTable ks_tray_sni_vtable = {
 
 /* 단일 항목의 a{sv} 프로퍼티 dict를 만든다(GetLayout/GetGroupProperties
  * 양쪽에서 공유). */
-static GVariant *ks_tray_item_props(const KSGtkTrayItem *item)
+static GVariant *ks_tray_item_props(const KSGtkTray *tray,
+                                    const KSGtkTrayItem *item)
 {
     GVariantBuilder b;
     g_variant_builder_init(&b, G_VARIANT_TYPE("a{sv}"));
@@ -2211,32 +2460,62 @@ static GVariant *ks_tray_item_props(const KSGtkTrayItem *item)
                               g_variant_new_boolean(item->enabled ? TRUE : FALSE));
         g_variant_builder_add(&b, "{sv}", "visible",
                               g_variant_new_boolean(TRUE));
+        if (ks_tray_has_children(tray, item->id)) {
+            g_variant_builder_add(&b, "{sv}", "children-display",
+                                  g_variant_new_string("submenu"));
+        }
     }
     return g_variant_builder_end(&b);
 }
 
-/* 루트 (id=0)의 자식 트리를 (ia{sv}av) 형태로 구성. */
-static GVariant *ks_tray_build_layout(KSGtkTray *tray)
+static void ks_tray_append_children_layout(KSGtkTray *tray,
+                                           int parent_id,
+                                           GVariantBuilder *children)
 {
-    /* root props: children-display=submenu */
-    GVariantBuilder root_props;
-    g_variant_builder_init(&root_props, G_VARIANT_TYPE("a{sv}"));
-    g_variant_builder_add(&root_props, "{sv}", "children-display",
-                          g_variant_new_string("submenu"));
-
-    /* children: av (각 자식은 v(ia{sv}av)) */
-    GVariantBuilder children;
-    g_variant_builder_init(&children, G_VARIANT_TYPE("av"));
     for (int i = 0; i < tray->item_count; ++i) {
-        GVariant *child_props = ks_tray_item_props(&tray->items[i]);
-        GVariantBuilder empty_children;
-        g_variant_builder_init(&empty_children, G_VARIANT_TYPE("av"));
+        if (tray->items[i].parent_id != parent_id) continue;
+        GVariant *child_props = ks_tray_item_props(tray, &tray->items[i]);
+        GVariantBuilder child_children;
+        g_variant_builder_init(&child_children, G_VARIANT_TYPE("av"));
+        ks_tray_append_children_layout(tray, tray->items[i].id, &child_children);
         GVariant *child = g_variant_new(
             "(i@a{sv}av)",
-            tray->items[i].id, child_props, &empty_children);
-        g_variant_builder_add(&children, "v", child);
+            tray->items[i].id, child_props, &child_children);
+        g_variant_builder_add(children, "v", child);
     }
-    return g_variant_new("(ia{sv}av)", 0, &root_props, &children);
+}
+
+/* parent_id 노드를 (ia{sv}av) 형태로 구성한다. */
+static GVariant *ks_tray_build_layout(KSGtkTray *tray, int parent_id)
+{
+    GVariantBuilder node_props;
+    g_variant_builder_init(&node_props, G_VARIANT_TYPE("a{sv}"));
+    if (parent_id == 0) {
+        g_variant_builder_add(&node_props, "{sv}", "children-display",
+                              g_variant_new_string("submenu"));
+    } else {
+        int idx = ks_tray_find_item_index(tray, parent_id);
+        if (idx < 0) {
+            g_variant_builder_add(&node_props, "{sv}", "visible",
+                                  g_variant_new_boolean(FALSE));
+        } else {
+            GVariant *props = ks_tray_item_props(tray, &tray->items[idx]);
+            GVariantIter iter;
+            const gchar *key;
+            GVariant *value = NULL;
+            g_variant_iter_init(&iter, props);
+            while (g_variant_iter_next(&iter, "{sv}", &key, &value)) {
+                g_variant_builder_add(&node_props, "{sv}", key, value);
+                g_variant_unref(value);
+            }
+            g_variant_unref(props);
+        }
+    }
+
+    GVariantBuilder children;
+    g_variant_builder_init(&children, G_VARIANT_TYPE("av"));
+    ks_tray_append_children_layout(tray, parent_id, &children);
+    return g_variant_new("(ia{sv}av)", parent_id, &node_props, &children);
 }
 
 static void ks_tray_menu_method(GDBusConnection *conn,
@@ -2252,7 +2531,14 @@ static void ks_tray_menu_method(GDBusConnection *conn,
     KSGtkTray *tray = (KSGtkTray *) user_data;
 
     if (g_strcmp0(method_name, "GetLayout") == 0) {
-        GVariant *layout = ks_tray_build_layout(tray);
+        gint32 parent_id = 0;
+        gint32 recursion_depth = -1;
+        GVariantIter *property_names = NULL;
+        g_variant_get(parameters, "(iias)", &parent_id, &recursion_depth, &property_names);
+        (void) recursion_depth;
+        if (property_names) g_variant_iter_free(property_names);
+
+        GVariant *layout = ks_tray_build_layout(tray, parent_id);
         g_dbus_method_invocation_return_value(
             inv, g_variant_new("(u@(ia{sv}av))",
                                 tray->menu_revision, layout));
@@ -2273,7 +2559,7 @@ static void ks_tray_menu_method(GDBusConnection *conn,
                 if (tray->items[i].id == id) {
                     g_variant_builder_add(
                         &result, "(i@a{sv})",
-                        id, ks_tray_item_props(&tray->items[i]));
+                        id, ks_tray_item_props(tray, &tray->items[i]));
                     break;
                 }
             }

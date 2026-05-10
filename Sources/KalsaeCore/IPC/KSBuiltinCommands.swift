@@ -93,33 +93,51 @@ public enum KSBuiltinCommands {
         notificationScope: KSNotificationScope = .init(),
         fsScope: KSFSScope = .init(),
         httpScope: KSHTTPScope = .init(),
+        navigationScope: KSNavigationScope = .init(),
         autostart: (any KSAutostartBackend)? = nil,
         deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
         appDirectory: URL? = nil
     ) async {
         let resolver = WindowResolver(windows: windows, mainWindow: mainWindow)
+        let appDir =
+            appDirectory
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        // RFC-002: 셸/윈도우/다이얼로그/알림 핸들러가 모두 동일한 placeholder
+        // 확장(`$APP`/`$HOME`/`$DOCS`/`$TEMP`)을 공유하도록 컨텍스트를 한 번만 만든다.
+        let fsCtx = KSFSScope.ExpansionContext.current(appDirectory: appDir)
 
-        await registerWindowCommands(into: registry, windows: windows, resolver: resolver)
+        await registerWindowCommands(
+            into: registry,
+            windows: windows,
+            resolver: resolver,
+            fsScope: fsScope,
+            fsCtx: fsCtx,
+            navigationScope: navigationScope)
         if let shell {
             await registerShellCommands(
-                into: registry, shell: shell, scope: shellScope)
+                into: registry, shell: shell, scope: shellScope, fsCtx: fsCtx)
         }
         if let clipboard {
             await registerClipboardCommands(into: registry, clipboard: clipboard)
         }
         if let notifications {
             await registerNotificationCommands(
-                into: registry, notifications: notifications, scope: notificationScope)
+                into: registry,
+                notifications: notifications,
+                scope: notificationScope,
+                fsScope: fsScope,
+                fsCtx: fsCtx)
         }
         if let dialogs {
             await registerDialogCommands(
-                into: registry, dialogs: dialogs, resolver: resolver)
+                into: registry,
+                dialogs: dialogs,
+                resolver: resolver,
+                fsScope: fsScope,
+                fsCtx: fsCtx)
         }
         await registerAppCommands(
             into: registry, quit: quit, platformName: platformName)
-        let appDir =
-            appDirectory
-            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         await registerFSCommands(
             into: registry, scope: fsScope, appDirectory: appDir)
         await registerHTTPCommands(

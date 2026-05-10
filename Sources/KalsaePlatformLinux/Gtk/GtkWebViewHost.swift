@@ -457,6 +457,79 @@
             return KSPoint(x: Double(x), y: Double(y))
         }
 
+        public func startDrag() {
+            _ = ks_gtk_host_start_drag(hostPtr)
+        }
+
+        public func displayCount() -> Int {
+            Int(ks_gtk_host_get_display_count(hostPtr))
+        }
+
+        public func currentDisplayIndex() -> Int {
+            Int(ks_gtk_host_get_current_display_index(hostPtr))
+        }
+
+        public func displayInfo(at index: Int) -> KSDisplayInfo? {
+            var idBuf = [CChar](repeating: 0, count: 128)
+            var nameBuf = [CChar](repeating: 0, count: 256)
+
+            var x: Int32 = 0
+            var y: Int32 = 0
+            var width: Int32 = 0
+            var height: Int32 = 0
+            var workX: Int32 = 0
+            var workY: Int32 = 0
+            var workWidth: Int32 = 0
+            var workHeight: Int32 = 0
+            var scale: Double = 1.0
+            var refreshRate: Int32 = 0
+            var isPrimary: Int32 = 0
+
+            let ok = idBuf.withUnsafeMutableBufferPointer { idPtr in
+                nameBuf.withUnsafeMutableBufferPointer { namePtr in
+                    ks_gtk_host_get_display_info(
+                        hostPtr,
+                        Int32(index),
+                        idPtr.baseAddress,
+                        idBuf.count,
+                        namePtr.baseAddress,
+                        nameBuf.count,
+                        &x,
+                        &y,
+                        &width,
+                        &height,
+                        &workX,
+                        &workY,
+                        &workWidth,
+                        &workHeight,
+                        &scale,
+                        &refreshRate,
+                        &isPrimary)
+                }
+            }
+
+            guard ok != 0 else { return nil }
+
+            let id = String(cString: idBuf)
+            let name = String(cString: nameBuf)
+            return KSDisplayInfo(
+                id: id,
+                name: name,
+                bounds: KSRect(
+                    x: Int(x),
+                    y: Int(y),
+                    width: Int(width),
+                    height: Int(height)),
+                workArea: KSRect(
+                    x: Int(workX),
+                    y: Int(workY),
+                    width: Int(workWidth),
+                    height: Int(workHeight)),
+                scaleFactor: scale,
+                refreshRate: refreshRate > 0 ? Int(refreshRate) : nil,
+                isPrimary: isPrimary != 0)
+        }
+
         public func centerOnScreen() {
             ks_gtk_host_center(hostPtr)
         }

@@ -59,6 +59,24 @@ Controls `__ks.shell.*` JS commands:
 | `openExternalSchemes` | `[String]?` | `["http", "https", "mailto"]` | Allowed URL schemes for `openExternal`. `null` = all schemes allowed. |
 | `showItemInFolder` | `Bool` | `true` | Allow revealing files in system file manager. |
 | `moveToTrash` | `Bool` | `true` | Allow moving files to trash. |
+| `fsScope` | `KSFSScope` | empty (deny-all) | **(RFC-002 §2.1)** Path-level scope applied to `showItemInFolder`/`moveToTrash` arguments. An empty scope denies all paths. Existing apps using these commands MUST add explicit `allow` patterns. |
+
+> **Migration note (RFC-002):** `KSShellScope.fsScope` is new in this release.
+> Apps using `__ks.shell.showItemInFolder` or `__ks.shell.moveToTrash` must add
+> path patterns explicitly, e.g.:
+>
+> ```json
+> {
+>   "security": {
+>     "shell": {
+>       "fsScope": { "allow": ["$HOME/Documents/**", "$DOCS/**"] }
+>     }
+>   }
+> }
+> ```
+>
+> Without an `allow` list, both commands return `fsScopeDenied` for every
+> argument (default-deny).
 
 ### 5. HTTP Fetch (`security.http`)
 
@@ -163,6 +181,37 @@ Controls WebView download capability:
 
 - `security.devtools: true` enables WebView DevTools in debug builds.
 - In release builds, DevTools are **always disabled** regardless of this setting.
+
+### 14. IPC Argument Path/URL Validation (RFC-002)
+
+All IPC commands that accept a path or URL from JavaScript validate it against
+the relevant scope **before** the value crosses into PAL code. After validation
+the standardised, expanded value is forwarded to the platform layer (no
+TOCTOU window between check and use).
+
+| Command | Argument | Scope checked | Behaviour on deny |
+|---|---|---|---|
+| `__ks.shell.showItemInFolder` | `url` | `security.shell.fsScope` | `fsScopeDenied` |
+| `__ks.shell.moveToTrash` | `url` | `security.shell.fsScope` | `fsScopeDenied` |
+| `__ks.window.setOverlayIcon` | `iconPath` | `security.fs` | `fsScopeDenied` |
+| `__ks.window.create` | `url` | `security.navigation` | `commandNotAllowed` (validated **before** backend creates the window — no leak) |
+| `__ks.window.setSize` | `width` / `height` | range `1..=65535` | `invalidArgument` |
+| `__ks.window.setPosition` | `x` / `y` | none (multi-monitor compatibility — `Int` type prevents NaN/Inf) | — |
+| `__ks.dialog.openFile` | `defaultDirectory` | `security.fs` | `fsScopeDenied` |
+| `__ks.dialog.saveFile` | `defaultDirectory` | `security.fs` | `fsScopeDenied` |
+| `__ks.dialog.selectFolder` | `defaultDirectory` | `security.fs` | `fsScopeDenied` |
+| `__ks.notification.post` | `iconPath` | `security.fs` | `fsScopeDenied` |
+
+> Empty `KSNavigationScope.allow` retains the legacy "no restriction" semantics
+> for `__ks.window.create`. To actually restrict creatable URLs, set
+> `security.navigation.allow` to an explicit list.
+
+### 15. External Config Override (Debug-only)
+
+`KSApp.boot()` can read `KALSAE_CONFIG` / `--kalsae-config` to override the
+config path. To prevent supply-chain hijacking in shipped apps, this override
+is honoured **only in debug builds** (`#if DEBUG`). Release binaries always
+load the bundled `kalsae.json` and ignore the environment variable / argument.
 
 ## Security Checklist for Production Apps
 

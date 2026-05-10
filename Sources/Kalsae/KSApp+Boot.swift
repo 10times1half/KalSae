@@ -24,29 +24,11 @@ extension KSApp {
     static func selectWindow(
         from config: KSConfig, label: String?
     ) throws(KSError) -> KSWindowConfig {
-        if let label {
-            guard let match = config.windows.first(where: { $0.label == label }) else {
-                throw KSError.configInvalid("no window labelled '\(label)'")
-            }
-            return match
-        }
-        guard let first = config.windows.first else {
-            throw KSError.configInvalid("config.windows is empty")
-        }
-        return first
+        try KSBootOrchestrator.selectWindow(from: config, label: label)
     }
 
-    /// 프론트엔드 제공 방식 결정. 세 가지 결과:
-    ///   - `.virtualHost(root)`     — `https://app.kalsae/`(Windows) 또는
-    ///                                `ks://app/`(macOS/Linux)로 로컬 자산 제공.
-    ///   - `.devServer`             — `config.build.devServerURL`로 직접 전달.
-    ///   - `.fallback`              — 가상 호스트도 라이브 dev 서버도 없음;
-    ///                                호출자가 dev URL 문자열로 폴백.
-    enum ServingMode: Sendable {
-        case virtualHost(URL)
-        case devServer
-        case fallback
-    }
+    /// 프론트엔드 제공 방식 결정 결과 — `KSBootOrchestrator.ServingMode`의 별칭.
+    typealias ServingMode = KSBootOrchestrator.ServingMode
 
     static func decideServingMode(
         urlOverride: String?,
@@ -54,37 +36,38 @@ extension KSApp {
         devServerURL: String,
         resourceRoot: URL?
     ) -> ServingMode {
-        let devIsRemote = isRemoteURL(devServerURL)
-        // 호출자/윈도우가 명시 URL을 안 줬고 dev 서버가 살아있으면 dev 우선.
-        // release 빌드에서는 dev 서버 분기를 차단해 패키징 산출물이 우연히
-        // `http://localhost:5173` 같은 잔존 dev URL 로 navigate 하지 않도록
-        // 한다(잔존 시 Vite 부재 → `chrome-error://` → 흰 화면). 동일 보호는
-        // `KSApp.boot` 의 `security.devtools` 강제 off 와 동일 신호(`#if !DEBUG`)를
-        // 사용해 정책 일관성을 맞춘다.
-        if urlOverride == nil, windowURL == nil, devIsRemote {
-            #if DEBUG
-                // DEBUG 에서도 dev 서버가 실제로 응답하지 않으면 가상 호스트로
-                // 폴백한다. Vite 가 안 떠 있을 때 `chrome-error://` 가 뜨는
-                // 흰 화면을 막는다. probe 가 200ms+슬랙 으로 짧기 때문에
-                // 부팅 지연은 사실상 무시 가능.
-                if isDevServerReachable(devServerURL) {
-                    return .devServer
-                }
-                KSLog.logger("kalsae.app").warning(
-                    "dev server unreachable at \(devServerURL); falling back to virtualHost/file"
-                )
-            #endif
-            // release: 가상 호스트 / fallback 분기로 떨어진다.
-        }
-        if let resourceRoot, isDirectory(resourceRoot) {
-            return .virtualHost(resourceRoot)
-        }
-        #if os(Windows)
-            if KSEmbeddedAssetResolverFactory.shouldPreferEmbeddedAssets() {
-                return .virtualHost(resourceRoot ?? URL(fileURLWithPath: "."))
-            }
+        // dev 서버 reachability 검사는 KSApp 전용 — DEBUG 빌드에서만 활성화.
+        let probe: ((String) -> Bool)?
+        #if DEBUG
+            probe = { Self.isDevServerReachable($0) }
+        #else
+            probe = nil
         #endif
-        return .fallback
+        // probe 실패 시 한 줄 진단 로그 — `KSBootOrchestrator` 는 stateless 라
+        // 로깅 책임은 호출자(KSApp)가 진다.
+        let isRemote = KSBootOrchestrator.isRemoteURL(devServerURL)
+        if urlOverride == nil, windowURL == nil, isRemote {
+            #if DEBUG
+                if !(probe?(devServerURL) ?? true) {
+                    KSLog.logger("kalsae.app").warning(
+                        "dev server unreachable at \(devServerURL); falling back to virtualHost/file"
+                    )
+                }
+            #endif
+        }
+        let preferEmbedded: Bool
+        #if os(Windows)
+            preferEmbedded = KSEmbeddedAssetResolverFactory.shouldPreferEmbeddedAssets()
+        #else
+            preferEmbedded = false
+        #endif
+        return KSBootOrchestrator.decideServingMode(
+            urlOverride: urlOverride,
+            windowURL: windowURL,
+            devServerURL: devServerURL,
+            resourceRoot: resourceRoot,
+            isDevServerReachable: probe,
+            preferEmbeddedAssets: preferEmbedded)
     }
 
     /// 윈도우에 로드할 실제 URL 문자열을 결정한다. 우선순위:
@@ -101,22 +84,20 @@ extension KSApp {
         devServerURL: String,
         servingMode: ServingMode
     ) -> String {
-        if let urlOverride { return urlOverride }
-        if let windowURL { return windowURL }
-        switch servingMode {
-        case .virtualHost:
-            #if os(Windows)
-                return "https://\(virtualHost)/index.html"
-            #else
-                // WebKit은 커스텀 스키마가 필요하다 — http/https에는 스키마
-                // 핸들러를 등록할 수 없다. 크로스플랫폼에서 `ks://app/...`을 쓴다.
-                return "ks://app/index.html"
-            #endif
-        case .devServer:
-            return devServerURL
-        case .fallback:
-            return diagnosticDataURL(attemptedURL: devServerURL)
-        }
+        #if os(Windows)
+            let virtualURL = "https://\(virtualHost)/index.html"
+        #else
+            // WebKit은 커스텀 스키마가 필요하다 — http/https에는 스키마
+            // 핸들러를 등록할 수 없다. 크로스플랫폼에서 `ks://app/...`을 쓴다.
+            let virtualURL = "ks://app/index.html"
+        #endif
+        return KSBootOrchestrator.resolveStartURL(
+            urlOverride: urlOverride,
+            windowURL: windowURL,
+            devServerURL: devServerURL,
+            servingMode: servingMode,
+            virtualHostURL: virtualURL,
+            fallbackURL: diagnosticDataURL(attemptedURL: devServerURL))
     }
 
     #if os(Windows)

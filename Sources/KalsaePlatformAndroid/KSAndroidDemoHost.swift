@@ -10,7 +10,7 @@
     /// 외부 샘플은 `webViewHost`를 얻어 훅을 연결한 후 `onViewCreated`에서
     /// `flushPendingURL()`을 호출한다.
     @MainActor
-    public final class KSAndroidDemoHost {
+    public final class KSAndroidDemoHost: KSDemoHost {
         public let registry: KSCommandRegistry
 
         /// JNI 훅 연결을 위해 `KS_android_register_evaluate_js` /
@@ -127,6 +127,7 @@
             notificationScope: KSNotificationScope = .init(),
             fsScope: KSFSScope = .init(),
             httpScope: KSHTTPScope = .init(),
+            navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
             appDirectory: URL? = nil,
@@ -160,6 +161,7 @@
                 notificationScope: notificationScope,
                 fsScope: fsScope,
                 httpScope: httpScope,
+                navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))

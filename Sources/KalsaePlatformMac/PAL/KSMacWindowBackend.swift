@@ -267,7 +267,94 @@
             }
         }
 
+        public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
+            let result: Result<[KSDisplayInfo], KSError> = await MainActor.run {
+                let screens = NSScreen.screens
+                guard !screens.isEmpty else {
+                    return .failure(
+                        KSError(
+                            code: .unsupportedPlatform,
+                            message: "NSScreen.screens is empty"))
+                }
+                let main = NSScreen.main
+                let displays = screens.map { Self.makeDisplayInfo(for: $0, isPrimary: $0 == main) }
+                return .success(displays)
+            }
+            return try result.unwrap()
+        }
+
+        public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
+            let result: Result<KSDisplayInfo, KSError> = await MainActor.run {
+                do {
+                    let w = try self.window(for: handle)
+                    let frame = w.nsWindow.frame
+                    let screens = NSScreen.screens
+                    guard !screens.isEmpty else {
+                        return .failure(
+                            KSError(
+                                code: .unsupportedPlatform,
+                                message: "NSScreen.screens is empty"))
+                    }
+
+                    var best = screens[0]
+                    var bestArea: CGFloat = -1
+                    for screen in screens {
+                        let inter = frame.intersection(screen.frame)
+                        let area = inter.isNull ? 0 : (inter.width * inter.height)
+                        if area > bestArea {
+                            bestArea = area
+                            best = screen
+                        }
+                    }
+                    let main = NSScreen.main
+                    return .success(Self.makeDisplayInfo(for: best, isPrimary: best == main))
+                } catch {
+                    return .failure(
+                        error as? KSError
+                            ?? KSError(code: .internal, message: "\(error)"))
+                }
+            }
+            return try result.unwrap()
+        }
+
         // MARK: - Internals
+
+        @MainActor
+        private static func makeDisplayInfo(for screen: NSScreen, isPrimary: Bool) -> KSDisplayInfo {
+            let displayID: UInt32 = {
+                let key = NSDeviceDescriptionKey("NSScreenNumber")
+                let value = screen.deviceDescription[key] as? NSNumber
+                return value?.uint32Value ?? 0
+            }()
+
+            let frame = screen.frame
+            let visible = screen.visibleFrame
+
+            let refreshRate: Int? = {
+                guard displayID != 0,
+                    let mode = CGDisplayCopyDisplayMode(displayID)
+                else { return nil }
+                let hz = Int(mode.refreshRate.rounded())
+                return hz > 0 ? hz : nil
+            }()
+
+            return KSDisplayInfo(
+                id: String(displayID),
+                name: "Display \(displayID)",
+                bounds: KSRect(
+                    x: Int(frame.origin.x),
+                    y: Int(frame.origin.y),
+                    width: Int(frame.size.width),
+                    height: Int(frame.size.height)),
+                workArea: KSRect(
+                    x: Int(visible.origin.x),
+                    y: Int(visible.origin.y),
+                    width: Int(visible.size.width),
+                    height: Int(visible.size.height)),
+                scaleFactor: screen.backingScaleFactor,
+                refreshRate: refreshRate,
+                isPrimary: isPrimary)
+        }
 
         private func runMain(
             _ handle: KSWindowHandle,

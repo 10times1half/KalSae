@@ -227,6 +227,19 @@ int ks_gtk_host_run(KSGtkHost *host, int argc, char **argv);
  *  어느 스레드에서도 안전하게 호출할 수 있다.                                 */
 void ks_gtk_host_quit(KSGtkHost *host);
 
+/** GtkApplication 기반 네이티브 데스크톱 알림을 게시한다.
+ *  성공 시 1, 실패 시 0을 반환한다. */
+int ks_gtk_host_send_notification(
+    KSGtkHost *host,
+    const char *id,
+    const char *title,
+    const char *body,
+    const char *icon_path,
+    int urgent);
+
+/** id로 네이티브 알림을 취소(withdraw)한다. */
+void ks_gtk_host_withdraw_notification(KSGtkHost *host, const char *id);
+
 /** 메인 스레드에서 `fn(ctx)`를 실행하도록 예약한다. 스레드 안전;
  *  `g_idle_add`로 구현. Task.detached 완료 후 UI 스레드로
  *  돌아오는 데 Swift 브리지가 사용한다.           */
@@ -297,6 +310,40 @@ void ks_gtk_host_set_position(KSGtkHost *host, int x, int y);
 /** 현재 윈도우 위치를 (*out_x, *out_y)에 읽어 담는다.
  *  성공 시 1, 사용 불가 시 0(Wayland 등)을 반환한다.      */
 int ks_gtk_host_get_position(KSGtkHost *host, int *out_x, int *out_y);
+
+/** 현재 마우스 위치를 기준으로 윈도우 드래그를 시작한다.
+ *  성공 시 1, 실패 시 0을 반환한다. */
+int ks_gtk_host_start_drag(KSGtkHost *host);
+
+/** 현재 디스플레이 개수를 반환한다. 조회할 display가 없으면 0. */
+int ks_gtk_host_get_display_count(KSGtkHost *host);
+
+/** index번째 디스플레이 정보를 읽는다.
+ *  out_id/out_name은 UTF-8 NUL 종료 문자열 버퍼이며 길이는 각각
+ *  out_id_len/out_name_len로 전달한다.
+ *  성공 시 1, 실패 시 0을 반환한다. */
+int ks_gtk_host_get_display_info(
+    KSGtkHost *host,
+    int index,
+    char *out_id,
+    size_t out_id_len,
+    char *out_name,
+    size_t out_name_len,
+    int *out_x,
+    int *out_y,
+    int *out_width,
+    int *out_height,
+    int *out_work_x,
+    int *out_work_y,
+    int *out_work_width,
+    int *out_work_height,
+    double *out_scale_factor,
+    int *out_refresh_rate,
+    int *out_is_primary);
+
+/** host 윈도우가 위치한 디스플레이 인덱스를 반환한다.
+ *  실패 시 -1을 반환한다. */
+int ks_gtk_host_get_current_display_index(KSGtkHost *host);
 
 /** 기본 모니터의 작업 영역 가운데에 윈도우를 배치한다.         */
 void ks_gtk_host_center(KSGtkHost *host);
@@ -521,7 +568,8 @@ void ks_gtk_host_show_context_menu(KSGtkHost *host,
  * AppIndicator extension이 설치된 GNOME. Watcher 부재 시 install은
  * 실패하지 않고 no-op로 폴백한다(install_rc=0 반환).
  *
- * 메뉴 항목은 평탄한 배열로 전달된다(서브메뉴 미지원, v1 스코프).
+ * 메뉴 항목은 트리(flat + parent_id) 배열로 전달된다.
+ * parent_id=0이면 root의 직계 자식이며, 그 외 값은 해당 id의 자식이다.
  */
 
 typedef struct KSGtkTray KSGtkTray;
@@ -529,6 +577,8 @@ typedef struct KSGtkTray KSGtkTray;
 /** 트레이 메뉴 항목. command_id는 활성화 시 콜백에 전달되는
  *  비공개 식별자이며, 빈 문자열은 구분선을 의미한다. */
 typedef struct KSGtkTrayMenuItem {
+    int         id;          /* >0 고유 항목 id */
+    int         parent_id;   /* 0=root, 그 외 부모 id */
     const char *label;       /* UTF-8, 구분선이면 NULL/"" */
     const char *command_id;  /* UTF-8, 빈 문자열이면 inert */
     int         enabled;     /* 0 = 비활성, 1 = 활성 */

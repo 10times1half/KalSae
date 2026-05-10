@@ -8,7 +8,7 @@
 
     /// 데모 실행 파일에서 사용하는 윈도우 호스트.
     @MainActor
-    public final class KSWindowsDemoHost {
+    public final class KSWindowsDemoHost: KSDemoHost {
         public let registry: KSCommandRegistry
         // `let` + Win32Window의 HWND 필드는 `nonisolated(unsafe)`를 통해
         // 스레드 안전하므로, 백그라운드 스레드도 `postJob`를 호출할 수 있다.
@@ -366,6 +366,7 @@
             notificationScope: KSNotificationScope = .init(),
             fsScope: KSFSScope = .init(),
             httpScope: KSHTTPScope = .init(),
+            navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
             appDirectory: URL? = nil,
@@ -414,6 +415,7 @@
                 notificationScope: notificationScope,
                 fsScope: fsScope,
                 httpScope: httpScope,
+                navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory)

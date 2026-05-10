@@ -25,8 +25,15 @@ struct KSWindowMultiWindowCommandsTests {
         }
         let registry = KSCommandRegistry()
         let resolver = WindowResolver(windows: backend, mainWindow: { nil })
+        let appDir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let fsCtx = KSFSScope.ExpansionContext.current(appDirectory: appDir)
         await KSBuiltinCommands.registerWindowCommands(
-            into: registry, windows: backend, resolver: resolver)
+            into: registry,
+            windows: backend,
+            resolver: resolver,
+            fsScope: KSFSScope(),
+            fsCtx: fsCtx,
+            navigationScope: KSNavigationScope())
         return (registry, backend)
     }
 

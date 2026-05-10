@@ -1,4 +1,6 @@
 #if os(Linux)
+    internal import CKalsaeGtk
+    internal import Logging
     public import KalsaeCore
     public import Foundation
 
@@ -201,6 +203,82 @@
             }
         }
 
+        public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
+            let result: Result<[KSDisplayInfo], KSError> = await MainActor.run {
+                let count = Int(ks_gtk_host_get_display_count(nil))
+                guard count > 0 else {
+                    return .failure(
+                        KSError(
+                            code: .unsupportedPlatform,
+                            message: "No displays available on Linux backend"))
+                }
+                var displays: [KSDisplayInfo] = []
+                displays.reserveCapacity(count)
+                for i in 0..<count {
+                    if let info = Self.readDisplayInfo(hostPtr: nil, index: i) {
+                        displays.append(info)
+                    }
+                }
+                guard !displays.isEmpty else {
+                    return .failure(
+                        KSError(
+                            code: .unsupportedPlatform,
+                            message: "Failed to collect Linux display information"))
+                }
+                return .success(displays)
+            }
+            switch result {
+            case .success(let displays):
+                return displays
+            case .failure(let error):
+                throw error
+            }
+        }
+
+        public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
+            let entry = try await resolve(handle)
+            let result: Result<KSDisplayInfo, KSError> = await MainActor.run {
+                let index = entry.host.currentDisplayIndex()
+                guard index >= 0, let info = Self.readDisplayInfo(hostPtr: entry.host.hostPtr, index: index) else {
+                    return .failure(
+                        KSError(
+                            code: .unsupportedPlatform,
+                            message: "Could not resolve current display for '\(handle.label)'"))
+                }
+                return .success(info)
+            }
+            switch result {
+            case .success(let info):
+                return info
+            case .failure(let error):
+                throw error
+            }
+        }
+
+        public func startDrag(_ handle: KSWindowHandle) async throws(KSError) {
+            try await runMain(handle) { $0.host.startDrag() }
+        }
+
+        public func setTaskbarProgress(
+            _ handle: KSWindowHandle,
+            progress: KSTaskbarProgress
+        ) async throws(KSError) {
+            _ = handle
+            _ = progress
+            Self.warnTaskbarProgressUnsupportedOnce()
+        }
+
+        public func setOverlayIcon(
+            _ handle: KSWindowHandle,
+            iconPath: String?,
+            description: String?
+        ) async throws(KSError) {
+            _ = handle
+            _ = iconPath
+            _ = description
+            Self.warnOverlayUnsupportedOnce()
+        }
+
         private func runMain(
             _ handle: KSWindowHandle,
             _ body: @MainActor @Sendable (KSLinuxHandleRegistry.Entry) throws(KSError) -> Void
@@ -244,6 +322,78 @@
             case .failure(let error):
                 throw error
             }
+        }
+
+        @MainActor
+        private static func readDisplayInfo(hostPtr: OpaquePointer?, index: Int) -> KSDisplayInfo? {
+            var idBuf = [CChar](repeating: 0, count: 128)
+            var nameBuf = [CChar](repeating: 0, count: 256)
+            var x: Int32 = 0
+            var y: Int32 = 0
+            var width: Int32 = 0
+            var height: Int32 = 0
+            var workX: Int32 = 0
+            var workY: Int32 = 0
+            var workWidth: Int32 = 0
+            var workHeight: Int32 = 0
+            var scale: Double = 1.0
+            var refreshRate: Int32 = 0
+            var isPrimary: Int32 = 0
+
+            let ok = idBuf.withUnsafeMutableBufferPointer { idPtr in
+                nameBuf.withUnsafeMutableBufferPointer { namePtr in
+                    ks_gtk_host_get_display_info(
+                        hostPtr,
+                        Int32(index),
+                        idPtr.baseAddress,
+                        idBuf.count,
+                        namePtr.baseAddress,
+                        nameBuf.count,
+                        &x,
+                        &y,
+                        &width,
+                        &height,
+                        &workX,
+                        &workY,
+                        &workWidth,
+                        &workHeight,
+                        &scale,
+                        &refreshRate,
+                        &isPrimary)
+                }
+            }
+            guard ok != 0 else { return nil }
+            return KSDisplayInfo(
+                id: String(cString: idBuf),
+                name: String(cString: nameBuf),
+                bounds: KSRect(x: Int(x), y: Int(y), width: Int(width), height: Int(height)),
+                workArea: KSRect(
+                    x: Int(workX), y: Int(workY), width: Int(workWidth), height: Int(workHeight)),
+                scaleFactor: scale,
+                refreshRate: refreshRate > 0 ? Int(refreshRate) : nil,
+                isPrimary: isPrimary != 0)
+        }
+
+        nonisolated(unsafe) private static var didWarnTaskbarProgress = false
+        nonisolated(unsafe) private static var didWarnOverlay = false
+        nonisolated(unsafe) private static let warnLock = NSLock()
+
+        private static func warnTaskbarProgressUnsupportedOnce() {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnTaskbarProgress else { return }
+            didWarnTaskbarProgress = true
+            KSLog.logger("platform.linux.window").warning(
+                "setTaskbarProgress is a no-op on Linux (Wails/Tauri parity policy).")
+        }
+
+        private static func warnOverlayUnsupportedOnce() {
+            warnLock.lock()
+            defer { warnLock.unlock() }
+            guard !didWarnOverlay else { return }
+            didWarnOverlay = true
+            KSLog.logger("platform.linux.window").warning(
+                "setOverlayIcon is unsupported on Linux and remains a no-op (Wails/Tauri parity policy).")
         }
     }
 #endif

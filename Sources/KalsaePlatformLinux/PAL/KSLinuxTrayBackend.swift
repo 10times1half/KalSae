@@ -11,8 +11,7 @@
     /// extension이 활성화된 GNOME. Watcher 부재 시 install은 throw하지 않고
     /// 경고 로그만 남기고 no-op으로 폴백한다.
     ///
-    /// 메뉴 구조는 평탄(서브메뉴 미지원)이며, 서브메뉴 항목은 부모 라벨만
-    /// 포함되고 자식은 무시된다(v1 스코프).
+    /// 메뉴 구조는 트리 형태를 지원하며, DBusMenu 레이아웃으로 그대로 전달된다.
     @MainActor
     public final class KSLinuxTrayBackend: KSTrayBackend {
         private var trayPtr: OpaquePointer?
@@ -37,7 +36,6 @@
             let iconPath = Self.resolveIconPath(config.icon)
             let tooltip = config.tooltip ?? ""
 
-            // 메뉴 평탄화. 첫 깊이만 사용.
             let flat = Self.flattenMenu(config.menu ?? [])
 
             let box = KSLinuxTrayBox(onLeftClick: config.onLeftClick)
@@ -107,9 +105,10 @@
             return cwd + "/" + icon
         }
 
-        /// `KSMenuItem` 트리를 평탄 항목 리스트로 변환한다. 서브메뉴는
-        /// 라벨만 보존하고 자식은 무시(v1 스코프). 구분선은 그대로 통과.
+        /// `KSMenuItem` 트리를 parent_id 기반 flat 트리로 변환한다.
         fileprivate struct FlatItem {
+            let id: Int32
+            let parentID: Int32
             let label: String
             let commandID: String
             let enabled: Bool
@@ -117,31 +116,45 @@
         }
 
         private static func flattenMenu(_ items: [KSMenuItem]) -> [FlatItem] {
+            var nextID: Int32 = 1
             var out: [FlatItem] = []
-            for item in items {
-                switch item.kind {
-                case .separator:
-                    out.append(
-                        FlatItem(
-                            label: "", commandID: "",
-                            enabled: false, isSeparator: true))
-                case .action:
-                    out.append(
-                        FlatItem(
-                            label: item.label ?? "",
-                            commandID: item.command ?? item.id ?? "",
-                            enabled: item.enabled,
-                            isSeparator: false))
-                case .submenu:
-                    // 서브메뉴는 v1 스코프 외 — 라벨만 비활성 항목으로 보임.
-                    out.append(
-                        FlatItem(
-                            label: (item.label ?? "") + " ▸",
-                            commandID: "",
-                            enabled: false,
-                            isSeparator: false))
+            func visit(_ nodes: [KSMenuItem], parentID: Int32) {
+                for item in nodes {
+                    let id = nextID
+                    nextID += 1
+                    switch item.kind {
+                    case .separator:
+                        out.append(
+                            FlatItem(
+                                id: id,
+                                parentID: parentID,
+                                label: "",
+                                commandID: "",
+                                enabled: false,
+                                isSeparator: true))
+                    case .action:
+                        out.append(
+                            FlatItem(
+                                id: id,
+                                parentID: parentID,
+                                label: item.label ?? "",
+                                commandID: item.command ?? item.id ?? "",
+                                enabled: item.enabled,
+                                isSeparator: false))
+                    case .submenu:
+                        out.append(
+                            FlatItem(
+                                id: id,
+                                parentID: parentID,
+                                label: item.label ?? "",
+                                commandID: "",
+                                enabled: item.enabled,
+                                isSeparator: false))
+                        visit(item.children ?? [], parentID: id)
+                    }
                 }
             }
+            visit(items, parentID: 0)
             return out
         }
 
@@ -170,6 +183,8 @@
                 cmdStrs.append(c)
                 cItems.append(
                     KSGtkTrayMenuItem(
+                        id: item.id,
+                        parent_id: item.parentID,
                         label: UnsafePointer(l),
                         command_id: UnsafePointer(c),
                         enabled: item.enabled ? 1 : 0,

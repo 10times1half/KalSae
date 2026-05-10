@@ -17,7 +17,7 @@
     ///    `UIWindow` + `KSiOSWebViewController`를 생성하고 `onWindowReady`를 호출해
     ///    탐색을 트리거한다.
     @MainActor
-    public final class KSiOSDemoHost {
+    public final class KSiOSDemoHost: KSDemoHost {
         public let registry: KSCommandRegistry
 
         let windowConfig: KSWindowConfig  // 패키지 내부 — KSiOSAppDelegate가 읽음
@@ -186,6 +186,7 @@
             notificationScope: KSNotificationScope = .init(),
             fsScope: KSFSScope = .init(),
             httpScope: KSHTTPScope = .init(),
+            navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
             appDirectory: URL? = nil,
@@ -214,6 +215,7 @@
                 notificationScope: notificationScope,
                 fsScope: fsScope,
                 httpScope: httpScope,
+                navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))

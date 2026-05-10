@@ -133,6 +133,22 @@
                     == nil)
         }
 
+        @Test("global accelerator skeleton path returns unsupportedPlatform")
+        func globalAcceleratorSkeletonUnsupported() async {
+            let backend = await KSLinuxAcceleratorBackend()
+
+            do {
+                try await backend.register(id: "global:open", accelerator: "Ctrl+Shift+P") {}
+                Issue.record("Expected unsupportedPlatform for deferred global shortcut")
+            } catch let error {
+                #expect(error.code == .unsupportedPlatform)
+            }
+
+            #expect(KSLinuxAcceleratorBackend.isGlobalShortcutRequest(id: "global:test", accelerator: "Ctrl+K"))
+            #expect(KSLinuxAcceleratorBackend.isGlobalShortcutRequest(id: "accel", accelerator: "global:Ctrl+K"))
+            #expect(!KSLinuxAcceleratorBackend.isGlobalShortcutRequest(id: "accel", accelerator: "Ctrl+K"))
+        }
+
         @Test("clipboard no-host path returns nil/false or throws unsupportedPlatform")
         func clipboardNoHostContract() async {
             let backend = KSLinuxClipboardBackend()

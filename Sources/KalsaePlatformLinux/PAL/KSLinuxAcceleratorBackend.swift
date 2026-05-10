@@ -21,6 +21,14 @@
             accelerator: String,
             _ handler: @Sendable @escaping () -> Void
         ) async throws(KSError) {
+            if Self.isGlobalShortcutRequest(id: id, accelerator: accelerator) {
+                throw KSError(
+                    code: .unsupportedPlatform,
+                    message:
+                        "Global shortcuts are deferred on Linux/Wayland (Wails/Tauri parity). Use window-scoped accelerators or track portal-based support in a future RFC."
+                )
+            }
+
             guard let trigger = Self.toGtkTrigger(accelerator) else {
                 throw KSError(
                     code: .invalidArgument,
@@ -114,6 +122,16 @@
                 return key
             }()
             return modifiers.joined() + normalizedKey
+        }
+
+        /// 글로벌 단축키 스켈레톤 진입점.
+        ///
+        /// `KSAcceleratorBackend`는 아직 scope 인자가 없으므로, 명시적으로
+        /// `id` 또는 `accelerator`에 `global:` 프리픽스를 붙인 경우에만
+        /// 글로벌 요청으로 간주한다.
+        internal static func isGlobalShortcutRequest(id: String, accelerator: String) -> Bool {
+            id.lowercased().hasPrefix("global:")
+                || accelerator.lowercased().hasPrefix("global:")
         }
     }
 

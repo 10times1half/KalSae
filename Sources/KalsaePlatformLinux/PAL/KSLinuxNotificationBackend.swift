@@ -1,26 +1,35 @@
 #if os(Linux)
+    internal import CKalsaeGtk
     internal import Glibc
     public import KalsaeCore
     internal import Foundation
 
-    /// Linux implementation of `KSNotificationBackend` using `notify-send`.
+    /// Linux implementation of `KSNotificationBackend`.
     ///
-    /// `notify-send` is shipped with `libnotify-bin` (Debian/Ubuntu) and
-    /// equivalent packages on other distros. It sends a notification via
-    /// the org.freedesktop.Notifications DBus interface without requiring
-    /// a compiled C binding.
+    /// Preferred path: `GtkApplication` + `GNotification` (native, cancellable).
+    /// Fallback path: `notify-send` when no active GTK host exists.
     ///
-    /// Limitations:
-    /// - `cancel(id:)` is a no-op because `notify-send` does not expose a
-    ///   reliable cancel path across processes.
-    /// - `requestPermission()` always returns `true` (Linux does not gate
-    ///   notifications behind a user permission dialog).
+    /// `requestPermission()` always returns `true` (Linux does not gate
+    /// notifications behind a user permission dialog).
     public struct KSLinuxNotificationBackend: KSNotificationBackend, Sendable {
         public init() {}
 
         public func requestPermission() async -> Bool { true }
 
         public func post(_ notification: KSNotification) async throws(KSError) {
+            let nativePosted: Bool = await MainActor.run {
+                guard let hostPtr = primaryHostPtr() else { return false }
+                let urgent = (notification.sound?.lowercased() == "critical") ? 1 : 0
+                return ks_gtk_host_send_notification(
+                    hostPtr,
+                    notification.id,
+                    notification.title,
+                    notification.body,
+                    notification.iconPath,
+                    urgent) != 0
+            }
+            if nativePosted { return }
+
             var args: [String] = []
 
             // Urgency: map `sound` field to critical when "critical"; otherwise normal.
@@ -50,12 +59,23 @@
             if !ok {
                 throw KSError(
                     code: .ioFailed,
-                    message: "KSLinuxNotificationBackend: notify-send failed for \"\(notification.title)\"")
+                    message: "KSLinuxNotificationBackend: native + notify-send both failed for \"\(notification.title)\"")
             }
         }
 
         public func cancel(id: String) async {
-            // notify-send has no stable cancel API; no-op.
+            await MainActor.run {
+                guard !id.isEmpty, let hostPtr = primaryHostPtr() else { return }
+                ks_gtk_host_withdraw_notification(hostPtr, id)
+            }
+        }
+
+        @MainActor
+        private func primaryHostPtr() -> OpaquePointer? {
+            let reg = KSLinuxHandleRegistry.shared
+            return reg.allHandles().first
+                .flatMap { reg.entry(for: $0) }?
+                .host.hostPtr
         }
     }
 

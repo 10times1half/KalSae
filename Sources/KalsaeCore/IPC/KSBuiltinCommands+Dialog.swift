@@ -15,16 +15,36 @@ extension KSBuiltinCommands {
     /// `defaultDirectory`(입력)은 경로 문자열을 받는다. 반환되는 `path` 필드는
     /// POSIX 플랫폼에서는 POSIX 스타일, Windows에서는 네이티브 스타일
     /// (예: `C:\\Users\\…`)이다.
+    ///
+    /// `defaultDirectory` 는 RFC-002 §2.5(취약점 #5)에 따라 `fsScope` 로 검증한다 —
+    /// placeholder 확장 후 표준화된 절대 경로가 허용되어야만 PAL에 전달된다. 거부 시
+    /// `.fsScopeDenied` 를 던진다.
     static func registerDialogCommands(
         into registry: KSCommandRegistry,
         dialogs: any KSDialogBackend,
-        resolver: WindowResolver
+        resolver: WindowResolver,
+        fsScope: KSFSScope,
+        fsCtx: KSFSScope.ExpansionContext
     ) async {
+        @Sendable
+        func validatedDirURL(_ raw: String?) throws(KSError) -> URL? {
+            guard let raw, !raw.isEmpty else { return nil }
+            let expanded = KSFSScope.expand(raw, in: fsCtx)
+            let url = URL(fileURLWithPath: expanded, isDirectory: true).standardizedFileURL
+            guard fsScope.permits(absolutePath: url.path, in: fsCtx) else {
+                throw KSError(
+                    code: .fsScopeDenied,
+                    message: "security.fs denies dialog defaultDirectory",
+                    data: .string(url.path))
+            }
+            return url
+        }
+
         await register(registry, "__ks.dialog.openFile") { (args: OpenFileArg) throws(KSError) -> OpenFileResult in
             let parent = try? await resolver.resolve(window: args.window)
             let opts = KSOpenFileOptions(
                 title: args.title,
-                defaultDirectory: args.defaultDirectory.flatMap(Self.dirURL),
+                defaultDirectory: try validatedDirURL(args.defaultDirectory),
                 filters: args.filters ?? [],
                 allowsMultiple: args.allowsMultiple ?? false)
             let urls = try await dialogs.openFile(options: opts, parent: parent)
@@ -34,7 +54,7 @@ extension KSBuiltinCommands {
             let parent = try? await resolver.resolve(window: args.window)
             let opts = KSSaveFileOptions(
                 title: args.title,
-                defaultDirectory: args.defaultDirectory.flatMap(Self.dirURL),
+                defaultDirectory: try validatedDirURL(args.defaultDirectory),
                 defaultFileName: args.defaultFileName,
                 filters: args.filters ?? [])
             let url = try await dialogs.saveFile(options: opts, parent: parent)
@@ -45,7 +65,7 @@ extension KSBuiltinCommands {
             let parent = try? await resolver.resolve(window: args.window)
             let opts = KSSelectFolderOptions(
                 title: args.title,
-                defaultDirectory: args.defaultDirectory.flatMap(Self.dirURL))
+                defaultDirectory: try validatedDirURL(args.defaultDirectory))
             let url = try await dialogs.selectFolder(options: opts, parent: parent)
             return SaveFileResult(path: url?.path)
         }
@@ -60,11 +80,6 @@ extension KSBuiltinCommands {
             let r = try await dialogs.message(opts, parent: parent)
             return MessageResult(result: r)
         }
-    }
-
-    @inline(__always)
-    private static func dirURL(_ path: String) -> URL? {
-        path.isEmpty ? nil : URL(fileURLWithPath: path, isDirectory: true)
     }
 
     // MARK: - Wire types

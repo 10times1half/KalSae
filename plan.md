@@ -1,144 +1,206 @@
-# Plan: Minimize Kalsae Windows Package Output
+# Kalsae 아키텍처 구조 분석 보고서 (잔여 작업)
 
-Reduce `kalsae build` output from 6 files/dirs (`exe + exe.manifest + WebView2Loader.dll + Kalsae.json + Resources/ + kalsae.runtime.json`) toward a "near-single-file" deployment, in 3 incremental, low-risk phases. Skip the high-risk manifest-embedding step.
-
-## Target end states
-
-| Stage | Files in dist | Notes |
-|---|---|---|
-| **Today** | `App.exe` + `.manifest` + `WebView2Loader.dll` + `Kalsae.json` + `Resources/` + `kalsae.runtime.json` | 6 entries |
-| **After A** | drop `WebView2Loader.dll` | static-link the loader |
-| **After B** | drop `Resources/` | assets embedded via codegen |
-| **After C** | drop `Kalsae.json` + `kalsae.runtime.json` | configs embedded via codegen |
-| **Final** | `App.exe` + `App.exe.manifest` (+ optional icon, evergreen bootstrapper) | 2 essential files |
-
-> Manifest is NOT removed. SwiftPM has no `.rc` compiler integration; the file is 1.5 KB and Win10/11 SxS lookup requires it. Embedding it is technically possible but high-risk and disproportionate to the savings.
-
-> `webview2-runtime/` folder (fixed-runtime mode) is unchanged — Chromium binaries (200–500 MB) cannot be embedded.
+> 작성일: 2026-05-09
+> 분석자: Cline (Architecture Review)
+> 최종 업데이트: 2026-05-09 — 완료 항목 제거
 
 ---
 
-## Phase A — Static-link WebView2Loader (quick win)
+## 0. 진행 현황
 
-**Why first:** All three architectures (x64/arm64/x86) already ship `WebView2LoaderStatic.lib` in `Sources/CKalsaeWV2/Vendor/WebView2/build/native/`. The loader DLL is loaded dynamically only because [kswv2_loader.cpp](Sources/CKalsaeWV2/src/kswv2_loader.cpp) does so explicitly. Switching is a Package.swift + small C++ change.
+### ✅ 완료된 작업
 
-**Steps**
-1. **Add static link** — In [Package.swift](Package.swift) `CKalsaeWV2` target's `linkerSettings`, add `.linkedLibrary("WebView2LoaderStatic", .when(platforms: [.windows]))`. Also add `.unsafeFlags(["-L<path-to-arch>"])` per architecture (or use `#pragma comment(lib, ...)` in the C++ shim — preferred since it picks the right arch from `_M_*` macros).
-2. **Replace dynamic dispatch** — In [kswv2_env.cpp](Sources/CKalsaeWV2/src/kswv2_env.cpp): replace `KSWV2_Loader_CreateEnvironmentWithOptions(...)` and `GetAvailableBrowserVersionString` with direct calls to `CreateCoreWebView2EnvironmentWithOptions` and `GetAvailableCoreWebView2BrowserVersionString` (the static lib exports them with the same signatures).
-3. **Reduce the loader shim to a no-op** — Keep the file for ABI compatibility but make `KSWV2_Loader_SetDir` a no-op (return S_OK). Fixed-runtime is selected via `browserExecutableFolder` in the env options, NOT via SetDllDirectoryW; the SetDir was only used to find `WebView2Loader.dll` itself, which is no longer needed.
-4. **Drop the DLL copy from packagers** — Remove `copyLoaderDLL(...)` call in [Packager.swift](Sources/KalsaeCLI/Support/Packager.swift) line ~140 and its helper. Also remove the WebView2Loader.dll warning paths.
-5. **Tests** — Update [PackagerTests.swift](Tests/KalsaeCLITests/PackagerTests.swift) `loaderDLLIsStaged` and `loaderDLLMissingWarns` (now unused). Add a test asserting the packaged dir does NOT contain `WebView2Loader.dll`.
-6. **Verify fixed-runtime still works** — Manual test (or fixture-based packager test): `kalsae build --webview2 fixed` still produces a working bundle. Static link does not affect fixed runtime: it's the env-option `browserExecutableFolder` that points at the runtime folder.
+| # | 문제 | 산출물 |
+|---|------|--------|
+| 2 | DemoHost 인터페이스의 비공식 프로토콜 | [Sources/KalsaeCore/PAL/KSDemoHost.swift](Sources/KalsaeCore/PAL/KSDemoHost.swift) — 8개 프로토콜 정의 (기본 + 플랫폼별 확장) |
+| 4 | AnyPlatformHost의 조건부 컴파일 누수 | [Sources/Kalsae/KSDemoHostFactory.swift](Sources/Kalsae/KSDemoHostFactory.swift) — 호스트 생성 팩토리 |
+| 1 | 부팅 로직의 플랫폼별 중복 | [Sources/KalsaeCore/PAL/KSBootOrchestrator.swift](Sources/KalsaeCore/PAL/KSBootOrchestrator.swift) — 5플랫폼 공통 결정 로직 단일화 |
+| — | **Phase 1.3** — DemoHost 프로토콜 채택 + `AnyPlatformHost` 제거 | 5 호스트 모두 `: KSDemoHost` 채택, `KSApp.host`를 `any KSDemoHost`로 단순화, `AnyPlatformHost.swift` 삭제 |
 
-**Relevant files**
-- [Package.swift](Package.swift) — add linker settings under platform gate
-- [Sources/CKalsaeWV2/src/kswv2_loader.cpp](Sources/CKalsaeWV2/src/kswv2_loader.cpp) — gut the dynamic dispatch (or `#if 0` guard)
-- [Sources/CKalsaeWV2/src/kswv2_env.cpp](Sources/CKalsaeWV2/src/kswv2_env.cpp) — call static symbols directly
-- [Sources/KalsaeCLI/Support/Packager.swift](Sources/KalsaeCLI/Support/Packager.swift) — remove DLL copy
-- [Tests/KalsaeCLITests/PackagerTests.swift](Tests/KalsaeCLITests/PackagerTests.swift) — adjust loader tests
+> ✅ Phase 1.3 완료: `KSApp.init` 의 5-case switch 제거, `quit()` 단일화, `KSDemoHostFactory` 가 `any KSDemoHost` 반환.
 
-**Verification**
-1. `swift build` succeeds on Windows.
-2. `swift test --filter "Packager"` passes.
-3. Manual: `kalsae build` on the demo or test project produces a `dist/` without `WebView2Loader.dll`. The exe runs and the WebView loads.
-4. Manual: `kalsae build --webview2 fixed` still ships `webview2-runtime/` and runs.
-5. Confirm exe size grew by ~150–200 KB (the loader code is now inside).
+### ❌ 미완료 작업 — 본 문서의 대상
 
-**Decisions / scope**
-- Keep `WebView2Loader.dll` artifact in `Vendor/` (Phase A doesn't delete vendor files).
-- `KSWV2_Loader_SetDir` API is preserved as a no-op for ABI safety.
+| # | 문제 | 심각도 | 영향 범위 |
+|---|------|--------|-----------|
+| 1 | **부팅 로직의 플랫폼별 중복** (Massive Duplication) | 🔴 High | 5개 플랫폼 × 300+라인 |
+| 3 | **KSPlatform의 Store-Through Property 중복** (Boilerplate) | 🟡 Medium | 5개 플랫폼 × 10개 백엔드 |
+| 5 | **IPC 브리지 생성 패턴의 플랫폼별 분산** (Scattered Construction) | 🟢 Low | 각 플랫폼의 Bridge/WKWebViewHost/GtkBridge 등 |
 
 ---
 
-## Phase B — Embed frontend assets (biggest visual win)
+## 1. 상세 분석
 
-**Why second:** Removes the entire `Resources/` folder, which is what makes the package look "messy" to users. `KSAssetResolver` is a struct with a single duck-typed `resolve(path:)` method — adding a parallel in-memory implementation is purely additive.
+### 🔴 문제 1: 부팅 로직의 플랫폼별 중복 (Critical)
 
-**Steps**
-1. **Create `KSAssetResolver` protocol abstraction** — Convert today's struct to conform to a new `protocol KSAssetSource` (or similar). Existing struct becomes `KSDiskAssetResolver`. Keep the type alias / public name so call sites compile unchanged.
-2. **Add `KSEmbeddedAssetResolver`** — In [Sources/KalsaeCore/Assets/](Sources/KalsaeCore/Assets/), new file. Backed by `[String: (Data, String /*MIME*/)]`. `resolve` does dictionary lookup.
-3. **Add asset codegen** — New helper `KSAssetCodegen.run(distURL:, targetSwiftFile:)` in `Sources/KalsaeCLI/Support/`. Walks `dist/`, base64-encodes (or hex-encodes) each file, emits one Swift file with a `KSEmbeddedAssets.manifest: [String: [UInt8]]` constant + MIME map. Writes to `Sources/<UserTarget>/Generated/KSEmbeddedAssets.swift`.
-4. **Wire codegen into `kalsae build`** — Add `--embed-assets` flag (default ON for release, OFF for `--debug`). When ON, run codegen BEFORE `swift build`; the user's target picks it up automatically since SwiftPM compiles every `.swift` under the target's path.
-5. **Boot-time selection** — In `KSApp.boot`, if a generated `KSEmbeddedAssets` symbol is reachable (via a tiny conditional accessor / weak-import-style flag the codegen emits), prefer the embedded resolver; otherwise fall back to disk-based resolver. **Cleaner alternative:** the codegen also writes a tiny `_KSAssetsBootstrap.register()` call that the user's `App.swift` invokes — explicit but reliable.
-6. **Skip Resources copy in packager** — When `--embed-assets` is in effect, packager skips the `Resources/` step.
-7. **Tests** — New unit test for `KSEmbeddedAssetResolver.resolve` (round-trip a small fixture). Update Packager test fixture: when assets embedded, no `Resources/` directory in output.
+**현황:**
+`KSApp.boot()` (686라인)와 각 플랫폼의 `runOnMain()` (`KSMacPlatform` 533라인, `KSLinuxPlatform` 646라인, `KSiOSPlatform` 279라인, `KSWindowsPlatform`의 `runOnMain`도 유사) 사이에 **대규모 중복**이 존재함.
 
-**Considerations**
-- **Source bloat**: A 5 MB SPA literal-encoded as Swift bytes can compile in seconds, but is awkward in `git` if committed. Recommendation: write to `.build/generated/` (untracked) and let `kalsae build` regenerate every release build. Tradeoff: re-builds every release. For dev, file-based resolver remains.
-- **Compression**: Future enhancement — store gzip'd bytes, decompress on resolve. Skip in v1.
-- **Hash invalidation**: Codegen should write a content hash header; if dist hasn't changed, skip rewrite to keep incremental SwiftPM builds fast.
+**중복되는 로직:**
+- `selectWindow(from:)` — 모든 플랫폼에 동일한 구현
+- `decideServingMode(...)` — 모든 플랫폼에 동일한 구현
+- `resolveStartURL(...)` — 모든 플랫폼에 동일한 구현
+- `cspInjectionScript(_:)` — 모든 플랫폼에 동일한 구현
+- `isDirectory(_:)` / `isRemoteURL(_:)` — 모든 플랫폼에 동일한 구현
+- `commandRegistry.setAllowlist()` / `setRateLimit()` — 모든 플랫폼에 동일
+- `stateStore` 생성 및 `saveSink` 등록 패턴 — 3개 플랫폼에서 유사
+- `autostartBackend` / `deepLinkBackend` 생성 — 모든 플랫폼에 유사
+- `registerBuiltinCommands(...)` 호출 — 모든 플랫폼에 유사
 
-**Relevant files**
-- [Sources/KalsaeCore/Assets/KSAssetResolver.swift](Sources/KalsaeCore/Assets/KSAssetResolver.swift) — refactor to protocol
-- New: `Sources/KalsaeCore/Assets/KSEmbeddedAssetResolver.swift`
-- New: `Sources/KalsaeCLI/Support/AssetCodegen.swift`
-- [Sources/KalsaeCLI/Commands/BuildCommand.swift](Sources/KalsaeCLI/Commands/BuildCommand.swift) — add `--embed-assets` flag, wire codegen
-- [Sources/KalsaeCLI/Support/Packager.swift](Sources/KalsaeCLI/Support/Packager.swift) — skip Resources/ when embedded
-- All 6 `KSAssetResolver(root:)` call sites — should be untouched if protocol abstraction is API-compatible
-- New: `Tests/KalsaeCoreTests/KSEmbeddedAssetResolverTests.swift`
+**영향:**
+- 신규 플랫폼 추가 시 500~600라인의 보일러플레이트 필요
+- 버그 수정 시 5개 파일을 동시에 수정해야 함 (실제로 `resolveExternalConfigOverride`는 `KSApp.swift`에만 있고 플랫폼 `runOnMain`에는 없음 — 불일치)
+- `KSApp.boot()`와 `KSMacPlatform.runOnMain()`은 **동일한 부팅을 수행하는 두 개의 진입점**으로, 어느 쪽이 사용되는지 혼란스러움
 
-**Verification**
-1. `swift test --filter "Asset"` covers both resolvers.
-2. `kalsae build --embed-assets` on demo: output dir has no `Resources/` folder; exe runs; WebView shows index.html.
-3. `kalsae build` (no flag, debug) still produces `Resources/` for back-compat dev path.
-4. Codegen idempotency: running twice produces identical Swift output.
-
-**Decisions / scope**
-- Default: `--embed-assets` ON for release (`-c release` or `kalsae build` without `--debug`), OFF for debug.
-- v1 stores raw bytes; gzip is deferred.
-- Generated file path: `.build/generated/KSEmbeddedAssets.swift`, picked up via SwiftPM target source path or a sibling-target trick. (Sub-decision in implementation.)
-
----
-
-## Phase C — Embed config files (cleanup)
-
-**Why third:** Smallest savings (~5 KB total) but completes the "no JSON sidecars" picture. Easy after Phases A/B established codegen plumbing.
-
-**Steps**
-1. **Add `KSApp.boot(config: KSConfig, …)` overload** — Already nearly possible; [KSApp.swift](Sources/Kalsae/KSApp.swift) already has internal paths that take a parsed `KSConfig`. Just expose them publicly.
-2. **Codegen `Kalsae.json` → `KSEmbeddedConfig.config: KSConfig`** — Same codegen pipeline; emit a Swift literal struct (or base64 of JSON, decoded once at startup; literal struct is faster but harder to keep in sync with `KSConfig` schema changes — JSON-then-decode is the safer choice).
-3. **Codegen `kalsae.runtime.json` → embedded constant** — Same approach. Consumer at [KSWebView2Runtime.swift](Sources/KalsaePlatformWindows/WebView2/KSWebView2Runtime.swift); add an overload that accepts the policy struct directly instead of reading from disk.
-4. **Update template `App.swift`** — When `--embed-assets` (extended to `--embed-all` or new `--embed-config`), call `KSApp.boot(config: KSEmbeddedConfig.config, ...)` and skip filesystem lookup.
-5. **Skip JSON copy in packagers** — Both [Packager.swift](Sources/KalsaeCLI/Support/Packager.swift) and [PackagerMac.swift](Sources/KalsaeCLI/Support/PackagerMac.swift) skip `Kalsae.json` + `kalsae.runtime.json` when embedded.
-6. **Tests** — Round-trip test: generated `KSEmbeddedConfig` decodes to the same `KSConfig` as the source JSON.
-
-**Relevant files**
-- [Sources/Kalsae/KSApp.swift](Sources/Kalsae/KSApp.swift) — public boot overload (mostly already exists)
-- New: `Sources/KalsaeCLI/Support/ConfigCodegen.swift`
-- [Sources/KalsaeCLI/Support/Templates/App.swift.tmpl](Sources/KalsaeCLI/Support/Templates/App.swift.tmpl) — branch on embed mode
-- [Sources/KalsaePlatformWindows/WebView2/KSWebView2Runtime.swift](Sources/KalsaePlatformWindows/WebView2/KSWebView2Runtime.swift) — accept policy struct
-- [Sources/KalsaeCLI/Support/Packager.swift](Sources/KalsaeCLI/Support/Packager.swift) + [PackagerMac.swift](Sources/KalsaeCLI/Support/PackagerMac.swift) — skip JSON copy when embedded
-
-**Verification**
-1. `swift test` passes including new config round-trip test.
-2. `kalsae build --embed-all` on demo produces a dist with `App.exe + App.exe.manifest` only (plus icon if present).
-3. The exe runs end-to-end.
-
----
-
-## Out of scope (deliberate)
-
-- **Manifest `.rc` embedding** — large effort, tiny payoff (1.5 KB). Defer indefinitely or treat as a separate RFC.
-- **`webview2-runtime/` embedding** — physically impossible (Chromium binaries 200–500 MB; cannot be a valid Swift literal).
-- **macOS / Linux equivalents** — Phase A is Windows-specific. Phases B/C generalize cleanly to those platforms (the resolver abstraction is cross-platform). Add to the same flags but verify on each PAL.
-- **Compression** of embedded assets — Phase B+1 follow-up if exe size becomes a concern.
-
----
-
-## Sequencing & dependencies
-
+**권장 리팩터:**
 ```
-Phase A (static link)        ← independent, can ship first
-       ↓
-Phase B (embed assets)       ← independent of A, but bigger change. Establishes codegen pipeline.
-       ↓
-Phase C (embed config)       ← reuses Phase B's codegen pipeline. Trivial after B.
+KalsaeCore/
+  KSBootOrchestrator.swift  ← 공통 부팅 로직을 여기로 추출
+    - selectWindow()
+    - decideServingMode()
+    - resolveStartURL()
+    - cspInjectionScript()
+    - isDirectory() / isRemoteURL()
+    - createAutostartBackend()
+    - createDeepLinkBackend()
+    - setupStateStore()
+    - registerBuiltinCommands()
 ```
 
-A and B can be done in parallel by separate developers if desired; C must follow B.
+---
 
-## Risks / decisions to confirm before implementation
+### 🟡 문제 3: KSPlatform의 Store-Through Property 중복 (Boilerplate)
 
-1. **Static-link fixed-runtime sanity check** — Confirm by code-reading `WebView2LoaderStatic.lib` interface (pdb / dumpbin) that `browserExecutableFolder` env-option is honored when statically linked. (Microsoft docs say yes; verify before merging Phase A.)
-2. **`--embed-assets` default in release builds** — User feedback: should this be ON by default or opt-in? Recommend ON for release, OFF for debug. Confirm with user.
-3. **Source vs. file-system codegen output location** — `.build/generated/` is invisible to user but requires SwiftPM target coercion to compile it. `Sources/<Target>/Generated/` is conventional but pollutes user repo. Recommend `.build/generated/` with a tiny SwiftPM sibling target.
+**현황:**
+5개 플랫폼 모두 `KSPlatform` 프로토콜을 채택하면서 다음과 같은 패턴이 반복됨:
+
+```swift
+// KSMacPlatform.swift
+public var windows: any KSWindowBackend { _windows }
+public var dialogs: any KSDialogBackend { _dialogs }
+public var tray: (any KSTrayBackend)? { _tray }
+public var menus: any KSMenuBackend { _menus }
+// ... 10개 백엔드 × 5개 플랫폼 = 50줄의 순수 보일러플레이트
+
+private let _windows: KSMacWindowBackend
+private let _dialogs: KSMacDialogBackend
+// ... 또 10줄
+
+// init()에서 또 10줄 할당
+```
+
+**영향:**
+- 신규 플랫폼 추가 시 30~40라인의 단순 반복 코드 작성 필요
+- 백엔드 타입이 변경되면 5개 파일 수정 필요
+- `nonisolated(unsafe) var _autostart` / `_deepLink` 패턴이 플랫폼마다 제각각
+
+**권장 리팩터:**
+```swift
+// KalsaeCore/PAL/ KSPlatformComponents.swift
+public struct KSPlatformComponents: Sendable {
+    public var windows: any KSWindowBackend
+    public var dialogs: any KSDialogBackend
+    public var tray: (any KSTrayBackend)?
+    public var menus: any KSMenuBackend
+    public var notifications: any KSNotificationBackend
+    public var shell: (any KSShellBackend)?
+    public var clipboard: (any KSClipboardBackend)?
+    public var accelerators: (any KSAcceleratorBackend)?
+    public var autostart: (any KSAutostartBackend)?
+    public var deepLink: (any KSDeepLinkBackend)?
+
+    public init(
+        windows: any KSWindowBackend,
+        dialogs: any KSDialogBackend,
+        tray: (any KSTrayBackend)? = nil,
+        // ...
+    ) { ... }
+}
+
+// 플랫폼 구현:
+public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
+    public let components: KSPlatformComponents
+    public var windows: any KSWindowBackend { components.windows }
+    // ... 자동 생성 가능 (Sourcery / macro)
+}
+```
+
+---
+
+### 🟢 문제 5: IPC 브리지 생성 패턴의 플랫폼별 분산
+
+**현황:**
+각 플랫폼의 DemoHost가 IPC 브리지를 생성하는 방식이 제각각:
+- `WebView2Bridge` (Windows) — C++ shim + Swift 콜백
+- `WKBridge` (macOS/iOS) — WKUserContentController message handler
+- `GtkBridge` (Linux) — JavaScriptCore evaluation
+- `KSAndroidBridge` (Android) — JNI bridge
+
+**영향:**
+- 브리지 생성 로직이 DemoHost init에 하드코딩됨
+- 브리지 타입이 `associatedtype`으로 추상화되지 않음
+- `AnyPlatformHost`가 브리지에 접근할 방법이 없음
+
+---
+
+## 2. 아키텍처 다이어그램 (현재 vs 제안)
+
+### 현재 구조 (남은 중복 영역)
+```
+KSApp.boot() [686 lines, #if os() hell]
+  ├── selectWindow() [중복 ×5]
+  ├── decideServingMode() [중복 ×5]
+  ├── resolveStartURL() [중복 ×5]
+  ├── cspInjectionScript() [중복 ×5]
+  ├── createHost() [✅ KSDemoHostFactory로 1곳 집중]
+  ├── setupSecurity() [중복 ×3~5]
+  ├── registerBuiltinCommands() [중복 ×5]
+  └── createBackends() [중복 ×5]
+
+KSMacPlatform.runOnMain() [533 lines, 동일 로직 중복]
+KSLinuxPlatform.runOnMain() [646 lines, 동일 로직 중복]
+KSiOSPlatform.runOnMain() [279 lines, 동일 로직 중복]
+KSWindowsPlatform.runOnMain() [유사, 내부에 runOnMain 존재]
+```
+
+### 제안 구조
+```
+KSApp.boot() [~150 lines, thin coordinator]
+  └── KSBootOrchestrator.bootstrap() [~300 lines, single source of truth]
+        ├── selectWindow() [1 place]
+        ├── decideServingMode() [1 place]
+        ├── resolveStartURL() [1 place]
+        ├── cspInjectionScript() [1 place]
+        ├── KSDemoHostFactory.makeHost() [✅ 완료]
+        ├── setupSecurity() [1 place]
+        ├── registerBuiltinCommands() [1 place]
+        └── createBackends() [1 place]
+
+KSMacPlatform.runOnMain() [~50 lines, platform-specific only]
+KSLinuxPlatform.runOnMain() [~50 lines, platform-specific only]
+KSiOSPlatform.runOnMain() [~50 lines, platform-specific only]
+```
+
+---
+
+## 3. 우선순위 및 권장 작업 순서
+
+| 순위 | 작업 | 예상 공수 | 리스크 |
+|------|------|-----------|--------|
+| 1 | **KSBootOrchestrator 추출** (문제 1) | 3-5일 | 높음 — `KSApp.boot()`와 플랫폼 `runOnMain()`의 로직 통합 |
+| 2 | **KSPlatformComponents 도입** (문제 3) | 1-2일 | 낮음 — Store-through property 제거 |
+| 3 | **IPC 브리지 프로토콜 추상화** (문제 5) | 2-3일 | 중간 — `KSBridge` 프로토콜 정의 |
+
+> **참고:** Phase 1.3 (DemoHost 프로토콜 채택 선언) 는 Swift 6 actor 격리 호환성 재검토 후 KSBootOrchestrator 진행 시 재시도 권장.
+
+---
+
+## 4. 결론
+
+Kalsae는 **레이어드 아키텍처 원칙**을 잘 지키고 있으며, 모듈 간 의존성 방향도 올바르다. 1차 리팩터링(KSDemoHostFactory + KSDemoHost 프로토콜)으로 **신규 플랫폼 온보딩의 인터페이스 모호성과 호스트 생성 분산 문제**는 해결되었다.
+
+**남은 시급한 개선:**
+1. **KSBootOrchestrator 추출** — 부팅 로직의 단일 진실 공급원 확보 (가장 큰 효과)
+2. **KSPlatformComponents 도입** — 백엔드 보일러플레이트 감소
+
+이 두 가지가 완료되면 신규 플랫폼 추가 비용은 **~600라인 → ~50라인**으로 줄어들며, 버그 수정 시 **5개 파일이 아닌 1개 파일**만 수정하면 된다.

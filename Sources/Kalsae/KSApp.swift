@@ -44,17 +44,8 @@ public final class KSApp {
     /// 백그라운드 디스패치 핸들러에서 접근할 수 있다.
     nonisolated public let platform: any KSPlatform
 
-    #if os(Windows)
-        private let host: KSWindowsDemoHost
-    #elseif os(macOS)
-        private let host: KSMacDemoHost
-    #elseif os(Linux)
-        private let host: KSLinuxDemoHost
-    #elseif os(iOS)
-        private let host: KSiOSDemoHost
-    #elseif os(Android)
-        private let host: KSAndroidDemoHost
-    #endif
+    /// 플랫폼별 데모 호스트. `KSDemoHost` 프로토콜을 통해 균일하게 접근.
+    private let host: any KSDemoHost
 
     /// `config.deepLink`가 선언되었을 때 설치되는 선택적 딥링크 백엔드.
     /// `dispatchDeepLinkURLs`에서 들어오는 인자를 필터링하고
@@ -67,7 +58,7 @@ public final class KSApp {
     /// 의도적으로 "저장만" 한다 — 다른 코드에서 읽지 않으나, 이 배열을
     /// 잡고 있지 않으면 보조 창의 `Win32Window`/`KSMacWindow`와
     /// 동반된 IPC 브리지가 deinit되어 창이 즉시 사라진다. 삭제 금지.
-    private let secondaryHosts: [AnyPlatformHost]
+    private let secondaryHosts: [any KSDemoHost]
 
     /// `install(_:)`로 등록된 플러그인 목록. `shutdown()` 시 역순 teardown에 사용된다.
     var _pluginsStorage: [any KSPlugin] = []
@@ -80,8 +71,8 @@ public final class KSApp {
         config: KSConfig,
         registry: KSCommandRegistry,
         platform: any KSPlatform,
-        host: AnyPlatformHost,
-        secondaryHosts: [AnyPlatformHost] = [],
+        host: any KSDemoHost,
+        secondaryHosts: [any KSDemoHost] = [],
         deepLinkBackend: (Any)? = nil
     ) {
         self.config = config
@@ -89,21 +80,7 @@ public final class KSApp {
         self.platform = platform
         self.deepLinkBackend = deepLinkBackend as? any KSDeepLinkBackend
         self.secondaryHosts = secondaryHosts
-        // 컴파일 타임에 한 case만 활성화되므로 망라적 switch가
-        // 강제 언래핑 없이 정확히 하나의 호스트를 추출한다.
-        switch host {
-        #if os(Windows)
-            case .windows(let h): self.host = h
-        #elseif os(macOS)
-            case .mac(let h): self.host = h
-        #elseif os(Linux)
-            case .linux(let h): self.host = h
-        #elseif os(iOS)
-            case .ios(let h): self.host = h
-        #elseif os(Android)
-            case .android(let h): self.host = h
-        #endif
-        }
+        self.host = host
     }
 
     // MARK: - 단일 인스턴스
@@ -149,23 +126,34 @@ public final class KSApp {
     ///   `Kalsae.json` 또는 `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
     /// - 패키징 모드에서 임베디드/생성된 설정보다 사용자가 배치한 외부 설정이
     ///   우선되도록 하여 운영 환경 조정 가능성을 보장한다.
+    ///
+    /// **RFC-002 §2.3 (취약점 #3) — 릴리스 빌드에서 비활성화.**
+    /// 릴리스 빌드(`#if !DEBUG`)에서는 외부 파일이 임베디드 설정을 덮어쓰지 못하도록
+    /// 항상 원본 `configURL`을 그대로 반환한다. 이를 통해 공격자가 앱 번들 디렉터리에
+    /// 변조된 `Kalsae.json`(예: `commandAllowlist: null`, `fs.allow: ["**"]`)을 배치해
+    /// 모든 보안 제한을 우회하는 시나리오를 차단한다. 디버그 빌드에서만 외부 파일
+    /// 우선이 유지되어 개발 워크플로(설정 핫스왑)를 깨지 않는다.
     private static func resolveExternalConfigOverride(_ configURL: URL) -> URL {
-        let fm = FileManager.default
-        let dir = configURL.deletingLastPathComponent()
-        let candidates = [
-            dir.appendingPathComponent("Kalsae.json"),
-            dir.appendingPathComponent("kalsae.json"),
-        ]
+        #if !DEBUG
+            return configURL
+        #else
+            let fm = FileManager.default
+            let dir = configURL.deletingLastPathComponent()
+            let candidates = [
+                dir.appendingPathComponent("Kalsae.json"),
+                dir.appendingPathComponent("kalsae.json"),
+            ]
 
-        for candidate in candidates {
-            if candidate.standardizedFileURL == configURL.standardizedFileURL {
-                return configURL
+            for candidate in candidates {
+                if candidate.standardizedFileURL == configURL.standardizedFileURL {
+                    return configURL
+                }
+                if fm.fileExists(atPath: candidate.path) {
+                    return candidate
+                }
             }
-            if fm.fileExists(atPath: candidate.path) {
-                return candidate
-            }
-        }
-        return configURL
+            return configURL
+        #endif
     }
 
     /// 메모리 내 `KSConfig`에서 애플리케이션을 부팅한다. 테스트와
@@ -213,7 +201,7 @@ public final class KSApp {
             let concrete = try KSWindowsDemoHost(
                 windowConfig: window, registry: registry,
                 restoredState: restoredState)
-            let wrapper = AnyPlatformHost.windows(concrete)
+            let wrapper: any KSDemoHost = concrete
 
             // 저장 sink 설치 — WM_MOVE/SIZE/CLOSE에서 호출되며 디스크 쓰기는
             // `KSWindowStateStore.save`가 atomic + 비-atomic 폴백으로 처리한다.
@@ -230,7 +218,7 @@ public final class KSApp {
                 : nil
             let concrete = try KSMacDemoHost(
                 windowConfig: window, registry: registry)
-            let wrapper = AnyPlatformHost.mac(concrete)
+            let wrapper: any KSDemoHost = concrete
 
             if let store = stateStore {
                 let label = window.label
@@ -241,15 +229,15 @@ public final class KSApp {
         #elseif os(Linux)
             let concrete = try KSLinuxDemoHost(
                 windowConfig: window, registry: registry)
-            let wrapper = AnyPlatformHost.linux(concrete)
+            let wrapper: any KSDemoHost = concrete
         #elseif os(iOS)
             let concrete = try KSiOSDemoHost(
                 windowConfig: window, registry: registry)
-            let wrapper = AnyPlatformHost.ios(concrete)
+            let wrapper: any KSDemoHost = concrete
         #elseif os(Android)
             let concrete = try KSAndroidDemoHost(
                 windowConfig: window, registry: registry)
-            let wrapper = AnyPlatformHost.android(concrete)
+            let wrapper: any KSDemoHost = concrete
         #else
             throw KSError.unsupportedPlatform(
                 "KSApp requires macOS, Windows, Linux, iOS, or Android")
@@ -343,7 +331,7 @@ public final class KSApp {
 
         // 7. 두 번째 이후 윈도우 부팅 — Windows/macOS 전용 (v0.3).
         // Linux/iOS/Android 는 single-window 유지.
-        var secondaryWrappers: [AnyPlatformHost] = []
+        var secondaryWrappers: [any KSDemoHost] = []
         #if os(Windows)
             for secondaryConfig in config.windows where secondaryConfig.label != window.label {
                 let secStateStore: KSWindowStateStore? =
@@ -388,7 +376,7 @@ public final class KSApp {
                     urlOverride: nil, windowURL: secondaryConfig.url,
                     devServerURL: config.build.devServerURL, servingMode: secMode)
                 try sec.startPrepared(url: secURL, devtools: config.security.devtools)
-                secondaryWrappers.append(.windows(sec))
+                secondaryWrappers.append(sec)
             }
         #elseif os(macOS)
             for secondaryConfig in config.windows where secondaryConfig.label != window.label {
@@ -412,7 +400,7 @@ public final class KSApp {
                     urlOverride: nil, windowURL: secondaryConfig.url,
                     devServerURL: config.build.devServerURL, servingMode: secMode)
                 try sec.start(url: secURL, devtools: config.security.devtools)
-                secondaryWrappers.append(.mac(sec))
+                secondaryWrappers.append(sec)
             }
         #elseif os(Linux) || os(iOS) || os(Android)
             // 단일 창만 지원하는 플랫폼: `config.windows`에 두 개 이상 선언되어 있으면
@@ -511,6 +499,7 @@ public final class KSApp {
             notificationScope: config.security.notifications,
             fsScope: config.security.fs,
             httpScope: config.security.http,
+            navigationScope: config.security.navigation,
             autostart: autostartBackend,
             deepLink: deepLinkPair,
             appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
@@ -641,17 +630,7 @@ public final class KSApp {
     /// `WM_CLOSE`를 게시하고, macOS에서는 `NSApplication`을 종료하며,
     /// Linux에서는 `GtkApplication` 종료를 요청한다.
     nonisolated public func quit() {
-        #if os(Windows)
-            host.requestQuit()
-        #elseif os(macOS)
-            host.requestQuit()
-        #elseif os(Linux)
-            host.requestQuit()
-        #elseif os(iOS)
-            host.requestQuit()
-        #elseif os(Android)
-            host.requestQuit()
-        #endif
+        host.requestQuit()
     }
 
     // MARK: - 네이티브 라이프사이클 콜백

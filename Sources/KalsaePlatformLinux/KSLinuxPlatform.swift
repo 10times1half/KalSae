@@ -62,7 +62,7 @@
             config: KSConfig,
             configure: @Sendable (any KSPlatform) async throws(KSError) -> Void
         ) async throws(KSError) -> Int32 {
-            let window = try Self.selectWindow(from: config)
+            let window = try KSBootOrchestrator.selectWindow(from: config)
 
             await commandRegistry.setAllowlist(config.security.commandAllowlist)
             await commandRegistry.setRateLimit(config.security.commandRateLimit)
@@ -91,7 +91,7 @@
 
             let resourceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
                 .appendingPathComponent(config.build.frontendDist)
-            let servingMode = Self.decideServingMode(
+            let servingMode = KSBootOrchestrator.decideServingMode(
                 windowURL: window.url,
                 devServerURL: config.build.devServerURL,
                 resourceRoot: resourceRoot)
@@ -113,13 +113,14 @@
                 return config.security.csp
             }()
             if let injectedCSP {
-                try host.addDocumentCreatedScript(Self.cspInjectionScript(injectedCSP))
+                try host.addDocumentCreatedScript(KSBootOrchestrator.cspInjectionScript(injectedCSP))
             }
 
-            let url = Self.resolveStartURL(
+            let url = KSBootOrchestrator.resolveStartURL(
                 windowURL: window.url,
                 devServerURL: config.build.devServerURL,
-                servingMode: servingMode)
+                servingMode: servingMode,
+                virtualHostURL: "ks://app/index.html")
             // 보안: 릴리스 빌드에서는 설정값에 무관하게 개발자 도구가 강제 비활성화된다.
             // AGENTS §5 + 감사 결과 #8 참조.
             #if DEBUG
@@ -203,6 +204,7 @@
                 notificationScope: config.security.notifications,
                 fsScope: config.security.fs,
                 httpScope: config.security.http,
+                navigationScope: config.security.navigation,
                 autostart: autostartBackend,
                 deepLink: deepLinkPair,
                 appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
@@ -216,98 +218,7 @@
     }
 
     extension KSLinuxPlatform {
-        fileprivate enum ServingMode: Sendable {
-            case virtualHost(URL)
-            case devServer
-            case fallback
-        }
-
-        fileprivate static func selectWindow(from config: KSConfig) throws(KSError) -> KSWindowConfig {
-            guard let first = config.windows.first else {
-                throw KSError.configInvalid("config.windows is empty")
-            }
-            return first
-        }
-
-        fileprivate static func decideServingMode(
-            windowURL: String?,
-            devServerURL: String,
-            resourceRoot: URL
-        ) -> ServingMode {
-            let devIsRemote = isRemoteURL(devServerURL)
-            if windowURL == nil, devIsRemote {
-                return .devServer
-            }
-            if isDirectory(resourceRoot) {
-                return .virtualHost(resourceRoot)
-            }
-            return .fallback
-        }
-
-        fileprivate static func resolveStartURL(
-            windowURL: String?,
-            devServerURL: String,
-            servingMode: ServingMode
-        ) -> String {
-            if let windowURL { return windowURL }
-            switch servingMode {
-            case .virtualHost:
-                return "ks://app/index.html"
-            case .devServer, .fallback:
-                return devServerURL
-            }
-        }
-
-        fileprivate static func isDirectory(_ url: URL) -> Bool {
-            var isDir: ObjCBool = false
-            let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-            return exists && isDir.boolValue
-        }
-
-        fileprivate static func isRemoteURL(_ s: String) -> Bool {
-            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty { return false }
-            if trimmed.lowercased() == "about:blank" { return false }
-            let lower = trimmed.lowercased()
-            return lower.hasPrefix("http://") || lower.hasPrefix("https://")
-        }
-
-        fileprivate static func cspInjectionScript(_ csp: String) -> String {
-            var escaped = ""
-            escaped.reserveCapacity(csp.count + 8)
-            for ch in csp {
-                switch ch {
-                case "\\": escaped += "\\\\"
-                case "\"": escaped += "\\\""
-                case "\n": escaped += "\\n"
-                case "\r": escaped += "\\r"
-                default: escaped.append(ch)
-                }
-            }
-            return """
-                (function(){
-                                var csp = "\(escaped)";
-                                function install() {
-                                    if (!document.head && document.documentElement) {
-                                        var h = document.createElement('head');
-                                        document.documentElement.insertBefore(h, document.documentElement.firstChild);
-                                    }
-                                    if (!document.head) { return false; }
-                                    var meta = document.createElement('meta');
-                                    meta.httpEquiv = 'Content-Security-Policy';
-                                    meta.content = csp;
-                                    document.head.insertBefore(meta, document.head.firstChild);
-                                    return true;
-                                }
-                                if (!install()) {
-                                    var obs = new MutationObserver(function(_, o){
-                                        if (install()) { o.disconnect(); }
-                                    });
-                                    obs.observe(document, {childList:true, subtree:true});
-                                }
-                                })();
-                """
-        }
+        // 부팅 헬퍼는 `KSBootOrchestrator` (KalsaeCore)로 통합됨.
     }
 
     // MARK: - Phase 3 데모 호스트
@@ -316,7 +227,7 @@
     /// `KSWindowsDemoHost` / `KSMacDemoHost`와 동일하게 설계되어
     /// `KalsaeDemo`이 명령 등록 로직을 공유할 수 있다.
     @MainActor
-    public final class KSLinuxDemoHost {
+    public final class KSLinuxDemoHost: KSDemoHost {
         public let registry: KSCommandRegistry
         nonisolated private let webview: GtkWebViewHost
         public let bridge: GtkBridge
@@ -519,6 +430,7 @@
             notificationScope: KSNotificationScope = .init(),
             fsScope: KSFSScope = .init(),
             httpScope: KSHTTPScope = .init(),
+            navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
             appDirectory: URL? = nil,
@@ -552,6 +464,7 @@
                 notificationScope: notificationScope,
                 fsScope: fsScope,
                 httpScope: httpScope,
+                navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
