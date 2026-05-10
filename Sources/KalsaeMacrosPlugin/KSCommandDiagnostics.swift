@@ -1,10 +1,9 @@
 import SwiftDiagnostics
+import SwiftSyntax
+
 /// `@KSCommand`이 발행하는 진단 카테고리. 정구조화된 ID로
 /// 컴파일러 오류로 표면되어 필요시 개별적으로 억제할 수 있고
 /// IDE가 특정 빠른 수정 제공자로 라우팅할 수 있다.
-import SwiftSyntax
-
-/// `@KSCommand`이 발행하는 Fix-it.
 enum KSCommandDiagnostic: String, DiagnosticMessage {
     case notAFunction = "ksmacro.not_a_function"
     case emptyName = "ksmacro.empty_name"

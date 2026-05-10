@@ -220,7 +220,9 @@ let package = Package(
             name: "KalsaeMacrosTests",
             dependencies: [
                 "KalsaeMacrosPlugin",
-                .product(name: "SwiftSyntaxMacrosTestSupport",
+                .product(name: "SwiftSyntaxMacroExpansion",
+                         package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport",
                          package: "swift-syntax"),
             ],
             path: "Tests/KalsaeMacrosTests"

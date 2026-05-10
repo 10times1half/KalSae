@@ -81,6 +81,9 @@
 
     // MARK: - Process helper (reuse the pattern from KSLinuxShellBackend)
 
+    /// 비동기 프로세스 실행. 동기 `waitUntilExit()`은 호출 스레드를 블로킹하므로
+    /// `terminationHandler` + `withCheckedContinuation`으로 변환해 await가
+    /// 협력적으로 동작하도록 한다.
     private func runProcess(_ executable: String, args: [String]) async -> Bool {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -88,12 +91,18 @@
         // Suppress stdout/stderr so the notification doesn't leak to the console.
         task.standardOutput = FileHandle.nullDevice
         task.standardError = FileHandle.nullDevice
-        do {
-            try task.run()
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            task.terminationHandler = { proc in
+                cont.resume(returning: proc.terminationStatus == 0)
+            }
+            do {
+                try task.run()
+            } catch {
+                // run()이 실패하면 terminationHandler가 호출되지 않으므로
+                // 직접 false 로 재개해 continuation 누수를 막는다.
+                task.terminationHandler = nil
+                cont.resume(returning: false)
+            }
         }
     }
 #endif

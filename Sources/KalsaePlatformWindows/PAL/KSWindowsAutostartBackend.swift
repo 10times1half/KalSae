@@ -31,7 +31,7 @@
         /// to launch on user login. Overwrites any existing value with the
         /// same identifier.
         public func enable() throws(KSError) {
-            let exe = try Self.resolveModulePath()
+            let exe = try KSWindowsModule.resolvePath()
             // 인자 결합: 실행 파일 경로는 항상 큰따옴표로 감싸 공백을 보호.
             var command = "\"\(exe)\""
             for a in args {
@@ -76,34 +76,6 @@
         }
 
         // MARK: - Internals
-
-        /// Resolves the absolute path of the running EXE via
-        /// `GetModuleFileNameW`. Returns the long-path form (no MAX_PATH
-        /// truncation — the buffer is grown until the call succeeds).
-        private static func resolveModulePath() throws(KSError) -> String {
-            var capacity = 1024
-            while capacity <= 32768 {
-                var buf = [UInt16](repeating: 0, count: capacity)
-                let rc = GetModuleFileNameW(nil, &buf, DWORD(capacity))
-                if rc == 0 {
-                    let err = Int(GetLastError())
-                    throw KSError(
-                        code: .ioFailed,
-                        message: "GetModuleFileNameW failed (\(err))",
-                        data: .int(err))
-                }
-                // 버퍼가 충분치 않으면 ERROR_INSUFFICIENT_BUFFER가 설정되며
-                // rc == capacity가 된다. 두 배로 늘려 재시도.
-                if Int(rc) == capacity {
-                    capacity *= 2
-                    continue
-                }
-                return String(decoding: buf.prefix(Int(rc)), as: UTF16.self)
-            }
-            throw KSError(
-                code: .ioFailed,
-                message: "GetModuleFileNameW: path > 32K characters")
-        }
 
         private static func writeStringValue(
             keyPath: String, valueName: String, value: String

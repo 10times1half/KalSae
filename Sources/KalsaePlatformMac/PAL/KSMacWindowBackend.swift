@@ -3,19 +3,6 @@
     public import KalsaeCore
     public import Foundation
 
-    extension Result where Failure == KSError {
-        /// Typed-throws unwrap. `Result.get()` rethrows untyped, which loses
-        /// the `throws(KSError)` contract of our PAL functions; this helper
-        /// preserves it.
-        @inline(__always)
-        fileprivate func unwrap() throws(KSError) -> Success {
-            switch self {
-            case .success(let v): return v
-            case .failure(let e): throw e
-            }
-        }
-    }
-
     /// macOS implementation of `KSWindowBackend`.
     ///
     /// Operates on `KSMacWindow` instances tracked by `KSMacHandleRegistry`.

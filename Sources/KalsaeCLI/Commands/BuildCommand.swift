@@ -1,9 +1,9 @@
 import ArgumentParser
 import Foundation
 import KalsaeCLICore
-/// `kalsae build` — 릴리스 (또는 `--debug`일 때는 디버그) 옵션으로 프로젝트를 빌드한다.
 import KalsaeCore
 
+/// `kalsae build` — 릴리스 (또는 `--debug`일 때는 디버그) 옵션으로 프로젝트를 빌드한다.
 struct BuildCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "build",
@@ -590,7 +590,6 @@ struct BuildCommand: ParsableCommand {
         let appName: String
         let version: String
         let identifier: String
-        let frontendDist: String
         let executableName: String
     }
 
@@ -733,7 +732,6 @@ struct BuildCommand: ParsableCommand {
             appName: config.app.name,
             version: config.app.version,
             identifier: config.app.identifier,
-            frontendDist: config.build.frontendDist,
             executableName: exec)
     }
 }

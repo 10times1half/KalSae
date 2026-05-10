@@ -1,6 +1,6 @@
 import SwiftSyntax
 import SwiftSyntaxMacros
-import SwiftSyntaxMacrosTestSupport
+import SwiftSyntaxMacrosGenericTestSupport
 import Testing
 
 @testable import KalsaeMacrosPlugin
@@ -13,7 +13,7 @@ struct KSCommandMacroDiagnosticsTests {
 
     @Test("Non-function declaration emits notAFunction diagnostic")
     func notAFunction() {
-        assertMacroExpansion(
+        expectMacroExpansion(
             """
             @KSCommand
             struct Greet {}
@@ -31,7 +31,7 @@ struct KSCommandMacroDiagnosticsTests {
 
     @Test("Empty literal name emits emptyName diagnostic with fix-it")
     func emptyName() {
-        assertMacroExpansion(
+        expectMacroExpansion(
             #"""
             @KSCommand("")
             func go() {}
@@ -52,7 +52,7 @@ struct KSCommandMacroDiagnosticsTests {
 
     @Test("Non-literal name emits nonLiteralName diagnostic")
     func nonLiteralName() {
-        assertMacroExpansion(
+        expectMacroExpansion(
             """
             @KSCommand(123)
             func go() {}
@@ -73,7 +73,7 @@ struct KSCommandMacroDiagnosticsTests {
 
     @Test("Variadic parameter emits diagnostic with fix-it")
     func variadicParameter() {
-        assertMacroExpansion(
+        expectMacroExpansion(
             """
             @KSCommand
             func tagged(items: String...) {}

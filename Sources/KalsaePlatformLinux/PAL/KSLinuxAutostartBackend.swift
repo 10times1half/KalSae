@@ -27,7 +27,7 @@
                     at: dir, withIntermediateDirectories: true)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxAutostartBackend: cannot create autostart dir: \(error)")
             }
 
@@ -47,7 +47,7 @@
                 try content.write(to: desktopFileURL(), atomically: true, encoding: .utf8)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxAutostartBackend: cannot write desktop file: \(error)")
             }
         }
@@ -59,7 +59,7 @@
                 try FileManager.default.removeItem(at: url)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxAutostartBackend: cannot remove desktop file: \(error)")
             }
         }

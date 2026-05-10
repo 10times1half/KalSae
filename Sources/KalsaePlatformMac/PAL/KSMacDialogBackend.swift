@@ -41,11 +41,12 @@
                 panel.nameFieldStringValue = options.defaultFileName ?? ""
                 if !options.filters.isEmpty { applyFilters(options.filters, to: panel) }
                 let nsParent = resolveParent(parent)
-                let response =
-                    nsParent != nil
-                    ? panel.runModal().rawValue == NSApplication.ModalResponse.OK.rawValue
-                        ? NSApplication.ModalResponse.OK : .cancel
-                    : panel.runModal()
+                let response: NSApplication.ModalResponse
+                if let nsParent {
+                    response = await panel.beginSheetModal(for: nsParent)
+                } else {
+                    response = panel.runModal()
+                }
                 return response == .OK ? panel.url : nil
             }
         }

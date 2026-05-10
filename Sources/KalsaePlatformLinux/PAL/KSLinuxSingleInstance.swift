@@ -147,8 +147,23 @@
             onSecondInstance: @escaping @MainActor ([String]) -> Void
         ) async {
             while true {
+                // Cooperative cancellation point — accept(2)는 블로킹이지만
+                // Task가 취소되면 다음 루프 진입에서 빠져나간다.
+                if Task.isCancelled {
+                    close(listenFd)
+                    return
+                }
                 let clientFd = accept(listenFd, nil, nil)
-                guard clientFd >= 0 else { continue }
+                if clientFd < 0 {
+                    // EINTR (시그널로 인한 인터럽트): 단순 재시도.
+                    // EAGAIN/EWOULDBLOCK: non-blocking 모드일 때만 발생, 무시.
+                    // 그 외 영구 오류는 listen 소켓이 닫힌 경우이므로 종료.
+                    if errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK {
+                        continue
+                    }
+                    close(listenFd)
+                    return
+                }
 
                 Task.detached {
                     let args = readArgs(from: clientFd)
@@ -165,7 +180,12 @@
             var chunk = [UInt8](repeating: 0, count: 4096)
             while true {
                 let n = read(fd, &chunk, chunk.count)
-                if n <= 0 { break }
+                if n < 0 {
+                    // EINTR: read(2)가 시그널로 인터럽트된 경우 재시도해야 한다.
+                    if errno == EINTR { continue }
+                    break
+                }
+                if n == 0 { break }
                 buffer.append(contentsOf: chunk[..<n])
                 // Stop at NUL terminator.
                 if chunk[..<n].contains(0) { break }

@@ -259,9 +259,20 @@ public enum KSResourceSyncManager {
 
     // MARK: - Helpers
 
-    private static func relativize(_ path: String, base: String) -> String {
-        return path.replacingOccurrences(of: base, with: "")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\\/"))
-            .replacingOccurrences(of: "\\", with: "/")
+    /// `path`에서 `base` 접두를 제거해 상대 경로를 만든다. `replacingOccurrences`
+    /// 는 `base`가 path 내부에서 다시 등장할 때 잘못된 위치를 지우므로
+    /// **prefix 매칭**으로만 한 번 제거한다. 일치하지 않으면 path를 그대로
+    /// 반환한다 (방어적). 결과는 항상 `/` 구분자로 정규화된다.
+    internal static func relativize(_ path: String, base: String) -> String {
+        let normalize: (String) -> String = { $0.replacingOccurrences(of: "\\", with: "/") }
+        let p = normalize(path)
+        let b = normalize(base)
+        let stripped: String
+        if p.hasPrefix(b) {
+            stripped = String(p.dropFirst(b.count))
+        } else {
+            stripped = p
+        }
+        return stripped.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }
 }

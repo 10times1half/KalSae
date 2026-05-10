@@ -1,19 +1,19 @@
 import SwiftDiagnostics
 import SwiftSyntax
+import SwiftSyntaxMacros
+
 /// `@KSCommand` 매크로 구현체. 함수 선언을 분석해 JSON 인자를
 /// 디코딩하고 변환한 뒤, `KSCommandRegistry`에
 /// 등록하는 피어 함수를 생성한다.
-import SwiftSyntaxMacros
-
-// `KSMacroError`는 SwiftDiagnostics 도입 전에도 throw를 사용할 수
-// 있도록 별도 경로가 존재하지만, 매크로 내부의 API 변환을
-// 위해 현재도 남아 있다.
+///
+/// 사용처에서는 등록 함수가 `JSONDecoder` / `Foundation.Data` 등을 참조하므로
+/// `import Foundation`이 필요하다.
 public struct KSCommandMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
         providingPeersOf declaration: some DeclSyntaxProtocol,
         in context: some MacroExpansionContext
-    ) throws -> [DeclSyntax] {
+    ) -> [DeclSyntax] {
         guard let fn = declaration.as(FunctionDeclSyntax.self) else {
             // 선언이 함수가 아니면 진단을 위해 throw하는 대신
             // diagnose를 사용. 이렇게 하면 여러 오류가
@@ -332,15 +332,5 @@ public struct KSCommandMacro: PeerMacro {
             return false
         }
         return true
-    }
-}
-enum KSMacroError: Error, CustomStringConvertible {
-    case notAFunction
-
-    var description: String {
-        switch self {
-        case .notAFunction:
-            return "@KSCommand can only be applied to function declarations."
-        }
     }
 }

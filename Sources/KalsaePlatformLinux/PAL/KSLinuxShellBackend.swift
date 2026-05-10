@@ -31,7 +31,7 @@
                 let result2 = await runProcess("gio", args: ["trash", url.path])
                 if !result2 {
                     throw KSError(
-                        code: .io,
+                        code: .ioFailed,
                         message: "moveToTrash: gio trash failed for \(url.path)")
                 }
             }
@@ -44,7 +44,7 @@
         let success = await runProcess("xdg-open", args: [arg])
         if !success {
             throw KSError(
-                code: .io,
+                code: .ioFailed,
                 message: "openExternal: xdg-open failed for \(arg)")
         }
     }

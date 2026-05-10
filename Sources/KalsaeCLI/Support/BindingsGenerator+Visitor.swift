@@ -4,7 +4,7 @@ extension KSBindingsGenerator {
     /// Swift 파일을 파싱하여 `@KSCommand` 함수와
     /// Codable struct/enum 선언을 수집한다.
     ///
-    /// 이 방문자는 의도적으로 너그럽rd하게 설계되어 있다:
+    /// 이 방문자는 의도적으로 너그럽게 설계되어 있다:
     /// `kalsae generate`는 와치 루프에서 실행되므로
     /// (e.g. 볼 수 없는 타입 참조 등) 컴파일이 안 되는 소스도 허용한다.
     final class Visitor: SyntaxVisitor {

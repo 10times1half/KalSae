@@ -44,17 +44,4 @@
         let value: Value
         init(_ v: Value) { self.value = v }
     }
-
-    extension Result where Failure == KSError {
-        /// Typed-throws unwrap. `Result.get()` rethrows untyped, which loses
-        /// the `throws(KSError)` contract of our PAL functions; this helper
-        /// preserves it.
-        @inline(__always)
-        func unwrap() throws(KSError) -> Success {
-            switch self {
-            case .success(let v): return v
-            case .failure(let e): throw e
-            }
-        }
-    }
 #endif

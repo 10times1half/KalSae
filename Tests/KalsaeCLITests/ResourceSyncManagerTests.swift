@@ -105,4 +105,36 @@ struct ResourceSyncManagerTests {
         #expect(report.skippedReason != nil)
         #expect(report.didMutate == false)
     }
+
+    // MARK: - relativize
+
+    @Test("relativize strips base prefix only")
+    func relativizeStripsPrefixOnce() {
+        let base = "/tmp/proj/dist"
+        let path = "/tmp/proj/dist/assets/index.js"
+        #expect(KSResourceSyncManager.relativize(path, base: base) == "assets/index.js")
+    }
+
+    /// 회귀: base가 path 내에서 두 번 등장할 때 (예: 사용자가 dist 폴더 안에
+    /// 또 다른 dist 디렉터리를 둔 경우) 단순 `replacingOccurrences`는 안쪽
+    /// 매치까지 같이 지워서 잘못된 상대 경로를 만든다 — prefix 한 번만 제거해야 한다.
+    @Test("relativize handles base substring re-appearing in path")
+    func relativizeDoesNotEatNestedBase() {
+        let base = "/tmp/dist"
+        let path = "/tmp/dist/dist/index.html"
+        #expect(KSResourceSyncManager.relativize(path, base: base) == "dist/index.html")
+    }
+
+    @Test("relativize normalizes Windows backslashes")
+    func relativizeNormalizesBackslashes() {
+        let base = #"C:\proj\dist"#
+        let path = #"C:\proj\dist\assets\app.js"#
+        #expect(KSResourceSyncManager.relativize(path, base: base) == "assets/app.js")
+    }
+
+    @Test("relativize returns path unchanged when base is not a prefix")
+    func relativizeNoPrefixPassthrough() {
+        let result = KSResourceSyncManager.relativize("/foo/bar", base: "/baz")
+        #expect(result == "foo/bar")
+    }
 }

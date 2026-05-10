@@ -36,7 +36,7 @@
                     at: applicationsDir(), withIntermediateDirectories: true)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxDeepLinkBackend: cannot create applications dir: \(error)")
             }
 
@@ -54,7 +54,7 @@
                 try content.write(to: desktopFile, atomically: true, encoding: .utf8)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxDeepLinkBackend: cannot write desktop file: \(error)")
             }
 
@@ -73,7 +73,7 @@
                 try FileManager.default.removeItem(at: desktopFile)
             } catch {
                 throw KSError(
-                    code: .io,
+                    code: .ioFailed,
                     message: "KSLinuxDeepLinkBackend: cannot remove desktop file: \(error)")
             }
             _ = shell("update-desktop-database", args: [applicationsDir().path])

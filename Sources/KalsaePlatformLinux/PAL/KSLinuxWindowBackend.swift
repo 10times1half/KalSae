@@ -28,12 +28,7 @@
                     height: config.height)
                 return .success(KSLinuxHandleRegistry.shared.register(label: config.label, host: host))
             }
-            switch result {
-            case .success(let handle):
-                return handle
-            case .failure(let error):
-                throw error
-            }
+            return try result.unwrap()
         }
 
         public func close(_ handle: KSWindowHandle) async throws(KSError) {
@@ -227,12 +222,7 @@
                 }
                 return .success(displays)
             }
-            switch result {
-            case .success(let displays):
-                return displays
-            case .failure(let error):
-                throw error
-            }
+            return try result.unwrap()
         }
 
         public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
@@ -247,12 +237,7 @@
                 }
                 return .success(info)
             }
-            switch result {
-            case .success(let info):
-                return info
-            case .failure(let error):
-                throw error
-            }
+            return try result.unwrap()
         }
 
         public func startDrag(_ handle: KSWindowHandle) async throws(KSError) {
@@ -298,12 +283,7 @@
                             ?? KSError(code: .internal, message: "\(error)"))
                 }
             }
-            switch result {
-            case .success:
-                return
-            case .failure(let error):
-                throw error
-            }
+            try result.unwrap()
         }
 
         private func resolve(_ handle: KSWindowHandle) async throws(KSError) -> KSLinuxHandleRegistry.Entry {
@@ -316,12 +296,7 @@
                 }
                 return .success(entry)
             }
-            switch result {
-            case .success(let entry):
-                return entry
-            case .failure(let error):
-                throw error
-            }
+            return try result.unwrap()
         }
 
         @MainActor

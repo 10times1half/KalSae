@@ -30,7 +30,7 @@
 
         public func register(scheme: String) throws(KSError) {
             let s = try Self.normalizeScheme(scheme)
-            let exe = try Self.resolveModulePath()
+            let exe = try KSWindowsModule.resolvePath()
             let command = "\"\(exe)\" \"%1\""
 
             let base = "Software\\Classes\\\(s)"
@@ -59,7 +59,7 @@
 
         public func isRegistered(scheme: String) -> Bool {
             guard let s = try? Self.normalizeScheme(scheme),
-                let exe = try? Self.resolveModulePath()
+                let exe = try? KSWindowsModule.resolvePath()
             else { return false }
             let path = "Software\\Classes\\\(s)\\shell\\open\\command"
             guard let value = Self.readStringValue(keyPath: path, valueName: "")
@@ -109,29 +109,6 @@
                 }
             }
             return s
-        }
-
-        private static func resolveModulePath() throws(KSError) -> String {
-            var capacity = 1024
-            while capacity <= 32768 {
-                var buf = [UInt16](repeating: 0, count: capacity)
-                let rc = GetModuleFileNameW(nil, &buf, DWORD(capacity))
-                if rc == 0 {
-                    let err = Int(GetLastError())
-                    throw KSError(
-                        code: .ioFailed,
-                        message: "GetModuleFileNameW failed (\(err))",
-                        data: .int(err))
-                }
-                if Int(rc) == capacity {
-                    capacity *= 2
-                    continue
-                }
-                return String(decoding: buf.prefix(Int(rc)), as: UTF16.self)
-            }
-            throw KSError(
-                code: .ioFailed,
-                message: "GetModuleFileNameW: path > 32K characters")
         }
 
         private static func writeStringValue(

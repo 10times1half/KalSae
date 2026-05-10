@@ -1,21 +1,6 @@
-// MARK: - 오류
-
 public import Foundation
 
-// MARK: - PATH 조회
-
-/// 시스템 PATH에서 `name`의 전체 URL을 반환하거나, 없으면 `nil`을 반환한다.
-
-// MARK: - 실행기
-
-/// `command`를 `arguments`와 함께 실행하며 stdio를 상속받는다. 종료를 기다린다.
-/// 실행파일이 없거나 리턴 코드가 0이 아닐 때 `ShellError`를 던진다.
-
-/// `command`를 `arguments`와 함께 백그라운드 실행하고 `Process` 핸들을 반환한다.
-
-/// 셸에서 단일 커맨드 라인을 실행하고 종료를 기다린다.
-
-/// 셸에서 단일 커맨드 라인을 백그라운드 실행하고 `Process` 핸들을 반환한다.
+// MARK: - 오류
 
 public enum ShellError: Error, CustomStringConvertible {
     case commandNotFound(String)
@@ -30,6 +15,12 @@ public enum ShellError: Error, CustomStringConvertible {
         }
     }
 }
+
+// MARK: - PATH 조회
+
+/// 시스템 PATH에서 `name`의 전체 URL을 반환하거나, 없으면 `nil`을 반환한다.
+/// Windows에서는 `.exe`/`.cmd`/`.bat`/`.com` 확장자를 가진 매치만 반환한다 —
+/// 확장자 없는 Node bash 셰어가 `.cmd`보다 먼저 매치되는 것을 방지한다.
 public func findExecutable(named name: String) -> URL? {
     let env = ProcessInfo.processInfo.environment
     // Windows는 `Path`, 그 외 플랫폼은 `PATH`를 사용한다.
@@ -56,6 +47,11 @@ public func findExecutable(named name: String) -> URL? {
     }
     return nil
 }
+
+// MARK: - 실행기
+
+/// `command`를 `arguments`와 함께 실행하며 stdio를 상속받는다. 종료를 기다린다.
+/// 실행파일이 없거나 리턴 코드가 0이 아닐 때 `ShellError`를 던진다.
 @discardableResult
 public func shell(
     command: String,
@@ -72,6 +68,8 @@ public func shell(
     if status != 0 { throw ShellError.nonZeroExit(status) }
     return status
 }
+
+/// `command`를 `arguments`와 함께 백그라운드 실행하고 `Process` 핸들을 반환한다.
 public func spawn(
     command: String,
     arguments: [String] = [],
@@ -143,6 +141,8 @@ private func makeProcess(
     }
     return process
 }
+
+/// 셸에서 단일 커맨드 라인을 실행하고 종료를 기다린다.
 @discardableResult
 public func shell(commandLine: String, in directory: String? = nil) throws -> Int32 {
     let process = try makeShellProcess(commandLine: commandLine, in: directory)
@@ -152,6 +152,8 @@ public func shell(commandLine: String, in directory: String? = nil) throws -> In
     if status != 0 { throw ShellError.nonZeroExit(status) }
     return status
 }
+
+/// 셸에서 단일 커맨드 라인을 백그라운드 실행하고 `Process` 핸들을 반환한다.
 public func spawn(commandLine: String, in directory: String? = nil) throws -> Process {
     let process = try makeShellProcess(commandLine: commandLine, in: directory)
     try process.run()

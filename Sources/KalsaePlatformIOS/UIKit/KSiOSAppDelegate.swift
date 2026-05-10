@@ -24,6 +24,9 @@
             win.rootViewController = vc
             win.makeKeyAndVisible()
             self.window = win
+            // 핸들 레이블에 실제 UIWindow을 등록해 KSiOSWindowBackend가
+            // show/hide/focus/setTitle을 실 윈도우에 적용할 수 있게 한다.
+            KSiOSHandleRegistry.shared.registerWindow(win, for: host.windowConfig.label)
 
             host.onWindowReady(viewController: vc)
             return true

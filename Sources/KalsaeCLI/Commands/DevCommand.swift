@@ -1,12 +1,13 @@
 import ArgumentParser
 import Foundation
 import KalsaeCLICore
-/// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
 import KalsaeCore
 
 #if canImport(FoundationNetworking)
     import FoundationNetworking
 #endif
+
+/// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
 struct DevCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "dev",
