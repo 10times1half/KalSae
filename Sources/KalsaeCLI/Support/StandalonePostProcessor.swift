@@ -27,6 +27,9 @@ internal enum KSStandalonePostProcessor {
         let manifestPath: URL?
         let iconPath: URL?
         let assetsZipPath: URL?
+        /// PATH 에 ResourceHacker 가 없더라도 명시적 경로를 주면 그 경로를
+        /// 우선 사용한다 (KSResourceHackerProvisioner 결과).
+        let resourceHackerOverride: URL?
     }
 
     /// Standalone PE 후처리 단계를 실행한다.
@@ -64,7 +67,9 @@ internal enum KSStandalonePostProcessor {
         }
 
         #if os(Windows)
-            let resourceHacker = findExecutable(named: "ResourceHacker")
+            let resourceHacker =
+                options.resourceHackerOverride
+                ?? findExecutable(named: "ResourceHacker")
             let rcedit = findExecutable(named: "rcedit")
 
             if resourceHacker == nil, rcedit == nil {

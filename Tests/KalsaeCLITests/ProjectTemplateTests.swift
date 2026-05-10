@@ -215,7 +215,9 @@ struct ProjectTemplateTests {
             .appendingPathComponent("Sources/MyApp/Resources/kalsae.json")
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
-        #expect(json.contains("\"frontendDist\": \"dist\""), "react preset should set frontendDist to dist")
+        #expect(
+            json.contains("\"frontendDist\": \"../../../dist\""),
+            "react preset should set frontendDist to project-root dist")
         #expect(json.contains("localhost:5173"), "react preset should set devServerURL")
         #expect(json.contains("\"devCommand\": \"pnpm run dev\""), "react preset should include pnpm dev command")
         #expect(json.contains("\"buildCommand\": \"pnpm run build\""), "react preset should include pnpm build command")
@@ -268,7 +270,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }
 
-    @Test("React vite.config outputs into Sources/<NAME>/Resources/dist")
+    @Test("React vite.config outputs into project-root dist")
     func reactViteOutDir() throws {
         let root = try scaffold(name: "CoolApp", frontend: "react")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -276,8 +278,8 @@ struct ProjectTemplateTests {
         let viteConfig = try String(
             contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
         #expect(
-            viteConfig.contains("Sources/CoolApp/Resources/dist"),
-            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+            viteConfig.contains("outDir: 'dist'"),
+            "vite outDir must point at project-root dist, got: \(viteConfig)")
     }
 
     @Test("React package.json uses lowercase project name")
@@ -311,7 +313,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }
 
-    @Test("Vue vite.config outputs into Sources/<NAME>/Resources/dist")
+    @Test("Vue vite.config outputs into project-root dist")
     func vueViteOutDir() throws {
         let root = try scaffold(name: "CoolApp", frontend: "vue")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -319,8 +321,8 @@ struct ProjectTemplateTests {
         let viteConfig = try String(
             contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
         #expect(
-            viteConfig.contains("Sources/CoolApp/Resources/dist"),
-            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+            viteConfig.contains("outDir: 'dist'"),
+            "vite outDir must point at project-root dist, got: \(viteConfig)")
     }
 
     @Test("Vue App.vue uses window.__KS_ bridge")
@@ -354,7 +356,7 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
     }
 
-    @Test("Svelte vite.config outputs into Sources/<NAME>/Resources/dist")
+    @Test("Svelte vite.config outputs into project-root dist")
     func svelteViteOutDir() throws {
         let root = try scaffold(name: "CoolApp", frontend: "svelte")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -362,8 +364,8 @@ struct ProjectTemplateTests {
         let viteConfig = try String(
             contentsOf: root.appendingPathComponent("vite.config.ts"), encoding: .utf8)
         #expect(
-            viteConfig.contains("Sources/CoolApp/Resources/dist"),
-            "vite outDir must point at Sources/<NAME>/Resources/dist, got: \(viteConfig)")
+            viteConfig.contains("outDir: 'dist'"),
+            "vite outDir must point at project-root dist, got: \(viteConfig)")
     }
 
     @Test("Svelte App.svelte uses window.__KS_ bridge")

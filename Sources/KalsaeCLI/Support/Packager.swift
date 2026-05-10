@@ -76,6 +76,9 @@ public enum KSPackager {
         public var stripSourceMaps: Bool
         /// 패키징 시 추가로 제거할 파일 확장자 목록.
         public var stripExtensions: [String]
+        /// `--standalone` 일 때 PE embed 에 사용할 ResourceHacker.exe 경로
+        /// (KSResourceHackerProvisioner 결과). nil 이면 PATH 만 사용.
+        public var resourceHackerPath: URL?
 
         public init(
             projectRoot: URL,
@@ -96,7 +99,8 @@ public enum KSPackager {
             bootstrapperPath: URL? = nil,
             zip: Bool = false,
             stripSourceMaps: Bool = true,
-            stripExtensions: [String] = []
+            stripExtensions: [String] = [],
+            resourceHackerPath: URL? = nil
         ) {
             self.projectRoot = projectRoot
             self.executablePath = executablePath
@@ -117,6 +121,7 @@ public enum KSPackager {
             self.zip = zip
             self.stripSourceMaps = stripSourceMaps
             self.stripExtensions = stripExtensions
+            self.resourceHackerPath = resourceHackerPath
         }
     }
 
@@ -336,7 +341,8 @@ public enum KSPackager {
                     loaderDLL: opts.output.appendingPathComponent("WebView2Loader.dll"),
                     manifestPath: manifestURL,
                     iconPath: opts.iconPath,
-                    assetsZipPath: embeddedAssetsZipURL))
+                    assetsZipPath: embeddedAssetsZipURL,
+                    resourceHackerOverride: opts.resourceHackerPath))
             warnings.append(contentsOf: standaloneReport.warnings)
 
             // PE 편집기가 아예 없고 fallback 도 허용되지 않으면 즉시 실패.

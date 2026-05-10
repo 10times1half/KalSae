@@ -1,22 +1,27 @@
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 
-// Kalsae: vite 출력은 SwiftPM `.copy("Resources")` 가 패키징하도록
-// `Sources/{{NAME}}/Resources/dist` 로 보낸다.
+// Kalsae: vite 출력은 프로젝트 루트의 `dist/` 에 만들고,
+// `kalsae build` 가 SwiftPM 리소스 디렉터리로 증분 sync 한다.
 export default defineConfig({
   plugins: [svelte()],
   base: './',
   build: {
-    outDir: 'Sources/{{NAME}}/Resources/dist',
+    outDir: 'dist',
     emptyOutDir: true,
   },
   server: {
     port: 5173,
     strictPort: true,
     watch: {
-      // SwiftPM 빌드 산출물은 vite HMR 대상이 아니다.
+      // SwiftPM 빌드 산출물 / 동기화된 리소스는 vite HMR 대상이 아니다.
       // 무시하지 않으면 swift build 중 EBUSY/scandir 오류로 dev 서버가 종료된다.
-      ignored: ['**/.build/**', '**/.swiftpm/**', '**/Sources/**/Resources/dist/**'],
+      ignored: [
+        '**/.build/**',
+        '**/.swiftpm/**',
+        '**/Sources/**/Resources/dist/**',
+        '**/dist/**',
+      ],
     },
   },
 })

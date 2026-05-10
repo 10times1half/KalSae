@@ -97,6 +97,13 @@ struct BuildCommand: ParsableCommand {
     @Option(name: .long, help: "WebView2 SDK version to fetch when auto-fetching (default: latest).")
     var webview2SdkVersion: String = "latest"
 
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Automatically run Scripts/fetch-resourcehacker.ps1 when --standalone is on and ResourceHacker is missing (Windows only)."
+    )
+    var autoFetchResourceHacker: Bool = true
+
     @Flag(name: .long, help: "Remove .build/ and the package output directory before building.")
     var clean: Bool = false
 
@@ -444,6 +451,20 @@ struct BuildCommand: ParsableCommand {
                     "dist/\(info.appName)-\(info.version)-\(archEnum.rawValue)\(suffix)")
             }()
 
+            // standalone 빌드면 ResourceHacker 가용성을 보장 (없으면 자동 fetch).
+            // PATH 또는 사용자 캐시(`%LOCALAPPDATA%\Kalsae\Tools\ResourceHacker\`) 에서
+            // 찾고, 없으면 Scripts/fetch-resourcehacker.ps1 을 실행한다.
+            let resourceHackerPath: URL? = {
+                guard standalone else { return nil }
+                do {
+                    return try KSResourceHackerProvisioner.ensure(
+                        cwd: cwd, autoFetch: autoFetchResourceHacker)
+                } catch {
+                    print("⚠️   ResourceHacker auto-fetch failed: \(error)")
+                    return KSResourceHackerProvisioner.locate()
+                }
+            }()
+
             let opts = KSPackager.Options(
                 projectRoot: cwd,
                 executablePath: exeURL,
@@ -463,7 +484,8 @@ struct BuildCommand: ParsableCommand {
                 bootstrapperPath: bootstrapper.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
                 zip: zip,
                 stripSourceMaps: config.build.stripSourceMaps,
-                stripExtensions: config.build.stripExtensions)
+                stripExtensions: config.build.stripExtensions,
+                resourceHackerPath: resourceHackerPath)
 
             let modeLabel = installMode?.rawValue ?? "(legacy policy: \(policy.rawValue))"
             print(

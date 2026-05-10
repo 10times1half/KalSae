@@ -36,8 +36,13 @@ public struct ProjectTemplate {
         switch frontend.lowercased() {
         case "react", "vue", "svelte":
             let pm = packageManager.lowercased()
+            // kalsae.json 은 `Sources/<NAME>/Resources/` 에 있고, vite outDir 은
+            // 프로젝트 루트의 `dist/` 다. frontendDist 는 kalsae.json 기준 상대 경로
+            // 이므로 세 단계 위 `../../../dist` 로 프로젝트 루트의 `dist/` 를 가리킨다.
+            // (ResourceSyncManager 가 dist→Resources/ 로 sync 하므로 SwiftPM 번들도
+            // 동일한 자산을 갖게 된다.)
             return BuildDefaults(
-                frontendDist: "dist",
+                frontendDist: "../../../dist",
                 devServerURL: "http://localhost:5173",
                 devCommand: "\(pm) run dev",
                 buildCommand: "\(pm) run build"
