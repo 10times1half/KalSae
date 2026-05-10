@@ -147,7 +147,13 @@ public enum KSPackager {
         let currentFP = Fingerprint.from(opts)
         let previousFP = Fingerprint.load(at: fingerprintURL)
         if fm.fileExists(atPath: opts.output.path), previousFP != currentFP {
-            try fm.removeItem(at: opts.output)
+            // Windows CI: Defender / Search Indexer 가 직전 빌드 산출물(특히
+            // `webview2-runtime/` 의 EXE/DLL) 핸들을 잠시 잡고 있을 때
+            // ERROR_SHARING_VIOLATION (Win32 32) 으로 실패한다. 짧은 retry 로
+            // 폴백 (AGENTS.md §6).
+            try retryingTransient {
+                try fm.removeItem(at: opts.output)
+            }
         }
         try fm.createDirectory(at: opts.output, withIntermediateDirectories: true)
 
