@@ -431,7 +431,12 @@ public enum KSPackager {
         let out = try JSONSerialization.data(
             withJSONObject: root,
             options: [.prettyPrinted, .sortedKeys])
-        try out.write(to: url, options: [.atomic])
+        // Windows: Defender / Search Indexer가 방금 copy 된 Kalsae.json 핸들을
+        // 잠시 들고 있을 수 있어 atomic write가 ERROR_SHARING_VIOLATION (Win32 32)
+        // 으로 실패할 수 있다. 짧은 retry 로 대응한다 (AGENTS.md §6).
+        try retryingTransient {
+            try out.write(to: url, options: [.atomic])
+        }
     }
 
     // MARK: - Manifest
@@ -632,7 +637,7 @@ public enum KSPackager {
     /// Windows 의 Defender / Search Indexer 가 방금 만든 exe/DLL 핸들을 잠시
     /// 들고 있을 때 `removeItem` 또는 `copyItem` 이 `ERROR_SHARING_VIOLATION`
     /// (Win32 32) 로 실패할 수 있다. 짧은 retry 로 대응한다 (RFC-002 follow-up).
-    private static func safeCopy(from src: URL, to dst: URL, fm: FileManager = .default) throws {
+    internal static func safeCopy(from src: URL, to dst: URL, fm: FileManager = .default) throws {
         try retryingTransient {
             if fm.fileExists(atPath: dst.path) {
                 try fm.removeItem(at: dst)
@@ -643,7 +648,7 @@ public enum KSPackager {
 
     /// Windows 파일 잠금/공유 위반에 대한 짧은 backoff retry.
     /// 비-Windows 에서는 한 번만 시도한다.
-    private static func retryingTransient(
+    internal static func retryingTransient(
         attempts: Int = 3,
         delay: TimeInterval = 0.05,
         _ work: () throws -> Void

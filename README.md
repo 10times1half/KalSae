@@ -2,7 +2,7 @@
 
 > A Swift-native, cross-platform desktop framework for shipping web UIs as small, secure native apps.
 
-![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.3.0-blue.svg)
+![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.3.4-blue.svg)
 
 Kalsae lets you build desktop (and mobile) applications by combining a **native OS shell written in Swift** with a **web frontend** of your choice (Vite, Next.js, plain HTML — anything that produces static assets). It is in the same family as Tauri and Electron, but the host process is pure Swift 6 and the runtime stays small by reusing the OS web engine: **WebView2** on Windows, **WKWebView** on macOS/iOS, **WebKitGTK 6.0** on Linux, and **Android WebView** on Android.
 
@@ -445,10 +445,23 @@ Available out of the box under the `__ks.` prefix — no registration needed.
 
 Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are gated by the `security` config — anything not allowed by `commandAllowlist`, `shell.*`, `notifications.*`, `fs`, `http`, `downloads`, or `navigation` returns `commandNotAllowed`.
 
+### Optional plugins
+
+Add the `KalsaePluginProcess` library to your target to expose `kalsae.process.*` commands (`spawn`, `write`, `kill`, `wait`) plus `stdout` / `stderr` / `exit` events for managed child processes. Spawning is gated by an explicit allowlist — the default config (`KSProcessPluginConfig()`) rejects every executable. Source: [Sources/KalsaePluginProcess/](Sources/KalsaePluginProcess/).
+
+```swift
+let cfg = KSProcessPluginConfig(allowlist: ["/usr/bin/echo"])
+try await app.install([KSProcessPlugin(config: cfg)])
+```
+
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
 
 별도 등록 없이 `__ks.` 접두사로 즉시 사용 가능한 명령 목록입니다. 모든 내장 명령은 `security` 설정의 영향을 받으며, `commandAllowlist`/`shell.*`/`notifications.*`/`fs`/`http`/`downloads`/`navigation`에서 허용되지 않은 명령은 `commandNotAllowed` 에러를 반환합니다. 소스는 [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/)에 있습니다.
+
+### 선택 플러그인
+
+타깃에 `KalsaePluginProcess` 라이브러리를 추가하면 자식 프로세스 관리용 `kalsae.process.*` 명령(`spawn`/`write`/`kill`/`wait`)과 `stdout`/`stderr`/`exit` 이벤트가 노출됩니다. spawn은 명시적 allowlist로 게이트되며, 기본 설정(`KSProcessPluginConfig()`)은 모든 실행 파일을 거부합니다. 소스: [Sources/KalsaePluginProcess/](Sources/KalsaePluginProcess/).
 
 </details>
 
@@ -508,7 +521,7 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 | 테마 (라이트/다크/시스템) | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 줌, 화면 캡처, 프린트 UI | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 닫기 인터셉터 (이벤트 기반 닫기) | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 다중 윈도우 | 🔶 | 🔶 | 🔶 | 🔶 | 🔶 |
+| 다중 윈도우 | ✅⁵ | ✅⁵ | 🔶⁵ | 🔶⁵ | 🔶⁵ |
 | 네이티브 다이얼로그 (메시지/열기/저장/폴더) | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | 애플리케이션 메뉴 / 컨텍스트 메뉴 | ✅ | ✅ | ✅ | ✅ | 🔶 |
 | 키보드 단축키 (글로벌) | ✅ | ✅ | 🔶² | ❌ | ❌ |
@@ -529,6 +542,11 @@ Source: [Sources/KalsaeCore/IPC/](Sources/KalsaeCore/IPC/). All built-ins are ga
 ² Linux는 `GtkShortcutController`(LOCAL scope) 기반 윈도우 스코프 단축키만 지원. 시스템 전역 단축키는 Wayland 표준 부재로 v1 범위 외.
 ³ Linux는 크기/최대화/전체화면은 항상 복원하며, 위치는 X11에서만 복원 — Wayland는 컴포지터가 위치를 제어한다.
 ⁴ Linux는 D-Bus StatusNotifierItem + DBusMenu 직접 구현(AppIndicator3/libayatana 도입 없음). KDE Plasma, Cinnamon, XFCE, Pantheon 및 AppIndicator extension이 활성화된 GNOME에서 동작. 순수 GNOME은 SNI 다이젝트 지원이 없어 install이 경고 로그만 남기고 no-op으로 폴백. 서브메뉴는 v1에서 미지원(평탄 메뉴만).
+
+⁵ 다중 윈도우 (v0.3+):
+- ✅ Windows / macOS — `config.windows`에 선언된 모든 윈도우가 부트 시점에 전체 보안 스택(CSP 헤더, 가상 호스트, `persistState`, 딥링크, 컨텍스트 메뉴 정책, 드롭 정책)과 함께 생성.
+- 🔶 Linux / iOS / Android — 단일 윈도우만 지원. 추가 `config.windows` 항목은 부트 시 무시되며 경고 로그를 남긴다.
+- 런타임 `__ks.window.create` IPC로 만든 윈도우는 구조적 윈도우일 뿐 앨 설정에서 CSP/가상 호스트/`persistState`를 상속하지 **않으며**, 호출자가 목적 URL을 명시적으로 전달해야 한다. 완전한 보안이 필요하면 `config.windows`에 미리 선언하라. 자세한 내용은 [Docs/IPC.md](Docs/IPC.md) 참고.
 
 </details>
 
@@ -756,7 +774,7 @@ try app.emit("custom:event", payload: ["key": "value"])
 ## Roadmap
 
 - Linux global accelerator backend improvements (Wayland ecosystem dependent)
-- **Transparent / layered windows** (Windows first — Mica/Acrylic integration; macOS/Linux not yet planned)
+- **Window effects** beyond basic transparency (Windows: Mica / Acrylic; macOS / Linux not yet planned). Basic per-pixel transparent windows (`WS_EX_LAYERED` on Windows) already ship.
 - Auto-updater
 - Mobile host ergonomics (iOS integration polish, Android host-side tooling)
 
@@ -764,7 +782,7 @@ try app.emit("custom:event", payload: ["key": "value"])
 <summary>🇰🇷 한국어로 보기</summary>
 
 - Linux 글로벌 단축키 개선 (Wayland 생태계 의존)
-- **투명/레이어드 윈도우** (Windows 우선 — Mica/Acrylic 통합; macOS/Linux는 추후)
+- **윈도우 이펙트** (Windows: Mica / Acrylic; macOS / Linux는 추후). 기본 일반 투명 윈도우(Windows `WS_EX_LAYERED`)는 이미 제공됨.
 - 자동 업데이트
 - 모바일 호스트 경험 개선 (iOS 통합 완성도, Android 호스트 측 툴링)
 

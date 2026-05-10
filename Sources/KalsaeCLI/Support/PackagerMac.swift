@@ -107,8 +107,10 @@ extension KSPackager {
             to: plistURL, atomically: true, encoding: .utf8)
 
         // 3) Kalsae.json
+        // Windows CI에서 Defender 가 방금 만든 파일을 스캔하느라 발생하는
+        // ERROR_SHARING_VIOLATION (Win32 32) 회피용 retry copy.
         let dstConfig = resources.appendingPathComponent("Kalsae.json")
-        try fm.copyItem(at: opts.configPath, to: dstConfig)
+        try KSPackager.safeCopy(from: opts.configPath, to: dstConfig, fm: fm)
 
         // 3.1 macOS 는 dist 내용을 Contents/Resources/ 에 인라인 복사한다.
         // 따라서 런타임 frontendDist 는 configDir 자체(".")가 옳다.
