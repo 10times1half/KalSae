@@ -57,6 +57,17 @@
                 return self.handle(event)
             }
 
+            // RFC-008 P3: MAS 샌드박스에서는 글로벌 키 이벤트 모니터가 차단된다
+            // (Accessibility 권한 필요). 로컬 모니터(앱 활성 시 윈도우 스코프)만
+            // 유지하고 글로벌은 건너뛴다 — 사용자 앱은 키 단축키가 앱 내부에서만
+            // 동작한다고 가정해야 한다.
+            if KSMacAppPackageContext.isSandboxed() {
+                print(
+                    "⚠  KSMacAcceleratorBackend: skipping global key monitor under MAS sandbox "
+                    + "(accessibility permission required). Accelerators are window-scoped only.")
+                return
+            }
+
             globalMonitor = NSEvent.addGlobalMonitorForEvents(
                 matching: .keyDown
             ) { [weak self] event in

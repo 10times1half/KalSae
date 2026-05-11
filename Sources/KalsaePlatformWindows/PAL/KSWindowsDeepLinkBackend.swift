@@ -29,6 +29,15 @@
         }
 
         public func register(scheme: String) throws(KSError) {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                // RFC-008 P2: MSIX 메니페스트 `windows.protocol` 선언이 이미
+                // 스견하므로 HKCU\Software\Classes 쓰기는 안전하게 생략.
+                // 수신 경로는 그대로 (CommandLine.arguments) 동작.
+                print(
+                    "⚠  KSWindowsDeepLinkBackend.register(\"\(scheme)\"): no-op under MSIX "
+                    + "(scheme is declared in AppxManifest `windows.protocol`).")
+                return
+            }
             let s = try Self.normalizeScheme(scheme)
             let exe = try KSWindowsModule.resolvePath()
             let command = "\"\(exe)\" \"%1\""
@@ -44,6 +53,11 @@
         }
 
         public func unregister(scheme: String) throws(KSError) {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                print(
+                    "⚠  KSWindowsDeepLinkBackend.unregister(\"\(scheme)\"): no-op under MSIX.")
+                return
+            }
             let s = try Self.normalizeScheme(scheme)
             let path = "Software\\Classes\\\(s)"
             let hr = path.withUTF16Pointer { sub in
@@ -58,6 +72,12 @@
         }
 
         public func isRegistered(scheme: String) -> Bool {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                // MSIX 에서는 OS 가 manifest 선언을 자동 등록한다. PAL 에서는
+                // 시스템 상태 확인이 불가능하지는 않지만 일관성을 위해 true 를
+                // 반환해 JS 레이어가 “등록됨” 으로 가정하도록 한다.
+                return true
+            }
             guard let s = try? Self.normalizeScheme(scheme),
                 let exe = try? KSWindowsModule.resolvePath()
             else { return false }

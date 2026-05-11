@@ -21,9 +21,27 @@ struct DoctorCommand: ParsableCommand {
     @Flag(name: .long, help: "Print machine-readable JSON output.")
     var json: Bool = false
 
+    @Option(
+        name: .long,
+        help: "Check tooling for a distribution target: dev | devid | mas | win-store | ios-appstore.")
+    var store: String? = nil
+
     func run() throws {
         let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        let report = KSDoctor.run(.init(projectRoot: cwd, configPath: config))
+        let resolvedStore: KSDistributionTarget? = {
+            guard let raw = store, !raw.isEmpty else { return nil }
+            return KSDistributionTarget.parse(raw)
+        }()
+        if let raw = store, !raw.isEmpty, resolvedStore == nil {
+            throw ValidationError(
+                "--store must be one of: dev | devid | mas | win-store | ios-appstore "
+                + "(got '\(raw)').")
+        }
+        let report = KSDoctor.run(
+            .init(
+                projectRoot: cwd,
+                configPath: config,
+                distributionTarget: resolvedStore))
 
         if json {
             let payload = DoctorJSONOutput(

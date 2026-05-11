@@ -31,6 +31,16 @@
         /// to launch on user login. Overwrites any existing value with the
         /// same identifier.
         public func enable() throws(KSError) {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                // RFC-008 P2: MSIX 메니페스트 `windows.startupTask` 선언이
+                // 대신 처리하고, 사용자가 Settings > Apps > Startup 에서
+                // 토글하도록 안내. PAL 에서는 no-op + 성공 반환.
+                print(
+                    "⚠  KSWindowsAutostartBackend.enable(): no-op under MSIX "
+                    + "(autostart is managed by AppxManifest `windows.startupTask`). "
+                    + "User must enable via Settings > Apps > Startup.")
+                return
+            }
             let exe = try KSWindowsModule.resolvePath()
             // 인자 결합: 실행 파일 경로는 항상 큰따옴표로 감싸 공백을 보호.
             var command = "\"\(exe)\""
@@ -54,12 +64,25 @@
         /// Removes the registry value. Succeeds silently if the value does
         /// not exist.
         public func disable() throws(KSError) {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                print(
+                    "⚠  KSWindowsAutostartBackend.disable(): no-op under MSIX "
+                    + "(managed by AppxManifest).")
+                return
+            }
             try Self.deleteValue(keyPath: Self.runKey, valueName: identifier)
         }
 
         /// Returns `true` when the registry value exists, regardless of its
         /// data (an empty value still counts).
         public func isEnabled() -> Bool {
+            if KSWindowsAppPackageContext.isMSIXPackaged() {
+                // MSIX 에서는 상태 조회 API 가 다르다 (StartupTask.GetStatus,
+                // WinRT). 어쩌다 false 를 반환해 JS 레이어가 “껌짐” 으로
+                // 착각하는 것도 스토어 정책상 필요 시 사용자가 Settings 에서
+                // 토글하도록 하는 흐름이므로 안전하다.
+                return false
+            }
             var hKey: HKEY? = nil
             // KEY_READ
             let openHr = Self.runKey.withUTF16Pointer { sub in

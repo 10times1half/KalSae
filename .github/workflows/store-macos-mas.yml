@@ -1,0 +1,95 @@
+name: Store · Mac App Store
+
+# RFC-008 P5 — Mac App Store (.pkg) 배포 워크플로 스켈레톤.
+#
+# 필요한 Repo Secrets:
+#   APPLE_MAS_APP_CERT_P12_BASE64       : "3rd Party Mac Developer Application" 인증서 (.p12 base64)
+#   APPLE_MAS_APP_CERT_PASSWORD         : .p12 비밀번호
+#   APPLE_MAS_INSTALLER_CERT_P12_BASE64 : "3rd Party Mac Developer Installer"   인증서 (.p12 base64)
+#   APPLE_MAS_INSTALLER_CERT_PASSWORD   : .p12 비밀번호
+#   APPLE_MAS_PROVISIONING_PROFILE_BASE64 : embedded.provisionprofile (base64)
+#   APPLE_MAS_APP_IDENTITY              : codesign identity (예: "3rd Party Mac Developer Application: Acme (TEAM)")
+#   APPLE_MAS_INSTALLER_IDENTITY        : productbuild identity (예: "3rd Party Mac Developer Installer: Acme (TEAM)")
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Plan only — do not codesign/productbuild"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  mas:
+    name: Build & Package (Mac App Store)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.3.1-release
+          swift-build: 6.3.1-RELEASE
+
+      - name: Build kalsae CLI
+        run: swift build -c release --product kalsae
+
+      - name: Import MAS certificates
+        if: ${{ !inputs.dry-run }}
+        env:
+          APP_CERT_B64: ${{ secrets.APPLE_MAS_APP_CERT_P12_BASE64 }}
+          APP_CERT_PWD: ${{ secrets.APPLE_MAS_APP_CERT_PASSWORD }}
+          INSTALLER_CERT_B64: ${{ secrets.APPLE_MAS_INSTALLER_CERT_P12_BASE64 }}
+          INSTALLER_CERT_PWD: ${{ secrets.APPLE_MAS_INSTALLER_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="build.keychain"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "$APP_CERT_B64" | base64 --decode > /tmp/app.p12
+          echo "$INSTALLER_CERT_B64" | base64 --decode > /tmp/installer.p12
+          security import /tmp/app.p12       -k "$KEYCHAIN" -P "$APP_CERT_PWD"       -T /usr/bin/codesign
+          security import /tmp/installer.p12 -k "$KEYCHAIN" -P "$INSTALLER_CERT_PWD" -T /usr/bin/productbuild
+          security set-key-partition-list -S apple-tool:,apple:,codesign:,productbuild: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          rm -f /tmp/app.p12 /tmp/installer.p12
+
+      - name: Stage provisioning profile
+        if: ${{ !inputs.dry-run }}
+        env:
+          PROFILE_B64: ${{ secrets.APPLE_MAS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p .build/mas
+          echo "$PROFILE_B64" | base64 --decode > .build/mas/embedded.provisionprofile
+
+      - name: Build & package for MAS
+        env:
+          APP_IDENTITY: ${{ secrets.APPLE_MAS_APP_IDENTITY }}
+          INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
+        run: |
+          set -euo pipefail
+          DRY_FLAG=""
+          if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
+          .build/release/kalsae build \
+            --store mas \
+            --codesign-identity "${APP_IDENTITY:-}" \
+            --installer-identity "${INSTALLER_IDENTITY:-}" \
+            --provision-profile .build/mas/embedded.provisionprofile \
+            $DRY_FLAG
+
+      - name: Upload .pkg artifact
+        if: ${{ !inputs.dry-run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalsae-demo-macos-mas
+          path: dist/**/*.pkg
+          if-no-files-found: warn

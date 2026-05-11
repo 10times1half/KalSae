@@ -1,0 +1,97 @@
+name: Store · macOS Developer ID
+
+# RFC-008 P5 — macOS Developer ID (notarized) 배포 워크플로 스켈레톤.
+#
+# 사용 방법:
+#   1. Repo Secrets 등록:
+#        APPLE_DEVELOPER_ID_CERT_P12_BASE64   : .p12 인증서 (base64)
+#        APPLE_DEVELOPER_ID_CERT_PASSWORD     : .p12 비밀번호
+#        APPLE_NOTARYTOOL_PROFILE             : `xcrun notarytool store-credentials` 프로필명
+#        APPLE_NOTARYTOOL_APPLE_ID            : Apple ID
+#        APPLE_NOTARYTOOL_APP_PASSWORD        : App-specific password
+#        APPLE_NOTARYTOOL_TEAM_ID             : Team ID
+#   2. workflow_dispatch 로 수동 실행.
+#
+# 이 워크플로는 .app 을 codesign → ditto → notarytool → staple 한 뒤
+# dist/ 에 zip 산출물을 업로드한다. 자세한 단계는 PackagerMacSigning 참고.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Skip actual signing/notarization (planning only)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  devid:
+    name: Build & Notarize (Developer ID)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.3.1-release
+          swift-build: 6.3.1-RELEASE
+
+      - name: Build kalsae CLI
+        run: swift build -c release --product kalsae
+
+      - name: Import Developer ID certificate
+        if: ${{ !inputs.dry-run }}
+        env:
+          CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="build.keychain"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "$CERT_BASE64" | base64 --decode > /tmp/cert.p12
+          security import /tmp/cert.p12 -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          rm -f /tmp/cert.p12
+
+      - name: Store notarytool credentials
+        if: ${{ !inputs.dry-run }}
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARYTOOL_APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_NOTARYTOOL_APP_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_NOTARYTOOL_TEAM_ID }}
+          PROFILE: ${{ secrets.APPLE_NOTARYTOOL_PROFILE }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool store-credentials "$PROFILE" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$TEAM_ID" \
+            --password "$APP_PASSWORD"
+
+      - name: Build & sign demo app
+        env:
+          PROFILE: ${{ secrets.APPLE_NOTARYTOOL_PROFILE }}
+        run: |
+          set -euo pipefail
+          DRY_FLAG=""
+          if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
+          .build/release/kalsae build \
+            --store devid \
+            --notarytool-profile "${PROFILE:-kalsae-notarytool}" \
+            $DRY_FLAG
+
+      - name: Upload signed artifact
+        if: ${{ !inputs.dry-run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalsae-demo-macos-devid
+          path: dist/**/*.zip
+          if-no-files-found: warn

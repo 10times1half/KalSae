@@ -132,5 +132,18 @@
   "notifications": {
     "appUserModelID": "dev.kalsae.demo",
     "defaultIcon": "assets/icon.png"
+  },
+  "distribution": {
+    "target": "developer",
+    "appleTeamID": "ABCDE12345",
+    "windowsPublisher": "CN=Acme Corp, O=Acme Corp, C=KR",
+    "bundleIdentifier": "dev.kalsae.demo"
+  },
+  "permissions": {
+    "camera": { "enabled": false, "reason": "Scan QR codes during onboarding." },
+    "microphone": false,
+    "photoLibrary": false,
+    "location": false,
+    "networkServer": false
   }
 }

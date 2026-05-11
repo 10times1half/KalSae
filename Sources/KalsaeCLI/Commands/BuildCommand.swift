@@ -159,6 +159,97 @@ struct BuildCommand: ParsableCommand {
     )
     var parallelBuild: Bool = true
 
+    @Option(
+        name: .long,
+        help:
+            "Distribution target (RFC-008): dev | devid | mas | win-store | ios-appstore. Overrides Kalsae.json distribution.target. Default: value from Kalsae.json, or 'dev' if absent."
+    )
+    var store: String? = nil
+
+    @Option(
+        name: .long,
+        help: "macOS: codesign identity (e.g. 'Developer ID Application: Name (TEAMID)'). Required with --store devid."
+    )
+    var codesignIdentity: String? = nil
+
+    @Option(
+        name: .long,
+        help: "macOS: notarytool keychain profile name (set up via `xcrun notarytool store-credentials`). When provided with --store devid, the bundle is notarized + stapled."
+    )
+    var notarytoolProfile: String? = nil
+
+    @Option(
+        name: .long,
+        help: "macOS: path to a custom entitlements.plist. Default: Hardened Runtime preset (cs.allow-jit=true)."
+    )
+    var entitlements: String? = nil
+
+    @Option(
+        name: .long,
+        help: "macOS MAS: installer signing identity (e.g. '3rd Party Mac Developer Installer: Name (TEAMID)'). Required with --store mas."
+    )
+    var installerIdentity: String? = nil
+
+    @Option(
+        name: .long,
+        help: "macOS MAS: path to embedded.provisionprofile. Required with --store mas."
+    )
+    var provisionProfile: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: path to .xcodeproj or .xcworkspace. Required with --store ios-appstore."
+    )
+    var iosProject: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: xcodebuild scheme name. Required with --store ios-appstore."
+    )
+    var iosScheme: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: export method (app-store-connect | ad-hoc | development). Default: app-store-connect."
+    )
+    var iosExportMethod: String = "app-store-connect"
+
+    @Option(
+        name: .long,
+        help: "iOS: App Store Connect API key ID. Combined with --asc-issuer enables altool upload."
+    )
+    var ascKey: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: App Store Connect API issuer UUID. Combined with --asc-key enables altool upload."
+    )
+    var ascIssuer: String? = nil
+
+    @Option(
+        name: .long,
+        help: "MSIX: AppxManifest Publisher DN (e.g. 'CN=Acme Inc, O=Acme Inc, C=US'). Required with --store win-store. Must match Partner Center registration."
+    )
+    var publisher: String? = nil
+
+    @Option(
+        name: .long,
+        help: "MSIX: AppxManifest <PublisherDisplayName>. Default: --publisher CN value or app name."
+    )
+    var publisherDisplayName: String? = nil
+
+    @Option(
+        name: .long,
+        help: "MSIX: directory containing manifest Assets (Square150x150Logo.png, Square44x44Logo.png, Wide310x150Logo.png, StoreLogo.png, SplashScreen.png). If absent, placeholders are generated."
+    )
+    var msixAssets: String? = nil
+
+    @Option(
+        name: .long,
+        help: "MSIX: signtool template (shell-evaluated, e.g. 'signtool.exe sign /a /fd sha256 {file}'). Omit to skip signing."
+    )
+    var msixSigntoolCmd: String? = nil
+
     func validate() throws {
         if let jobs, jobs < 1 {
             throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
@@ -169,6 +260,12 @@ struct BuildCommand: ParsableCommand {
             throw ValidationError(
                 "--webview2-install-mode must be one of: download | embedBootstrapper | offlineInstaller | fixedVersion | skip"
             )
+        }
+        if let raw = store, KSDistributionTarget.parse(raw) == nil {
+            throw ValidationError(
+                "--store must be one of: dev | devid | mas | win-store | ios-appstore "
+                + "(or full names: developer | developer-id | mac-app-store | "
+                + "microsoft-store | ios-app-store). Got '\(raw)'.")
         }
     }
 
@@ -391,11 +488,47 @@ struct BuildCommand: ParsableCommand {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
         let info = parseAppInfo(config: config)
+        let target = resolveDistributionTarget(config: config)
+        if target != .developer {
+            print("📦  Distribution target: \(target.rawValue) (\(target.shortName))")
+        }
+
+        // Store-specific packagers (RFC-008 P1~P4) hook here once implemented.
+        // For now, all non-`developer` targets fall back to the existing packager
+        // with a banner; per-target packaging is a follow-up phase and any user
+        // who explicitly passes --store gets a warning that codesign / manifest
+        // automation is not wired yet.
+        switch target {
+        case .developer:
+            break
+        case .developerID:
+            // P1: wired inside runMac via MacOptions.
+            break
+        case .microsoftStore:
+            // P2: wired below after the base Windows package.
+            break
+        case .macAppStore:
+            // P3: wired inside runMac via MacOptions.
+            break
+        case .iosAppStore:
+            #if os(macOS)
+                try runPackageIOS(config: config, info: info, cwd: cwd, fm: fm)
+                return
+            #else
+                print(
+                    "⚠  --store \(target.shortName): iOS packaging requires macOS host with Xcode. "
+                    + "Skipping (the pipeline is otherwise wired and will run on macOS).")
+            #endif
+        }
 
         #if os(Windows)
             try runPackageWindows(
                 configuration: configuration, configURL: configURL,
                 config: config, info: info, cwd: cwd, fm: fm)
+            if target == .microsoftStore {
+                try runPackageMSIX(
+                    config: config, info: info, cwd: cwd, fm: fm)
+            }
         #elseif os(macOS)
             try runPackageMacOS(
                 configuration: configuration, configURL: configURL,
@@ -403,6 +536,15 @@ struct BuildCommand: ParsableCommand {
         #else
             print("⚠  Packaging is not supported on this host OS yet. Skipping (use --no-package to silence).")
         #endif
+    }
+
+    /// `--store` CLI 플래그가 `Kalsae.json distribution.target` 보다 우선한다.
+    /// 양쪽 미지정이면 `.developer`.
+    private func resolveDistributionTarget(config: KSConfig) -> KSDistributionTarget {
+        if let raw = store, let parsed = KSDistributionTarget.parse(raw) {
+            return parsed
+        }
+        return config.distribution.target
     }
 
     #if os(Windows)
@@ -548,6 +690,161 @@ struct BuildCommand: ParsableCommand {
                 print("⚠  --nsis-signtool-cmd has no effect without --nsis; skipping.")
             }
         }
+
+        /// Microsoft Store MSIX 패키저 (RFC-008 Phase 2).
+        ///
+        /// 호출 시점: `runPackageWindows` 가 끝난 직후. 기존 산출물 폴더
+        /// (`dist/<App>-<ver>-<arch>/`) 를 **staging 디렉터리로 그대로 사용**한다.
+        /// MSIX 매니페스트와 Assets/ 만 추가 작성하고 MakeAppx 를 호출한다.
+        private func runPackageMSIX(
+            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
+        ) throws {
+            guard let publisher = publisher, !publisher.isEmpty else {
+                throw ValidationError(
+                    "--store win-store requires --publisher (e.g. "
+                    + "'CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR'). The CN must "
+                    + "match your Microsoft Partner Center registration.")
+            }
+            guard let archEnum = KSPackager.MSIXArchitecture(rawValue: arch.lowercased())
+                ?? msixArchFallback(arch.lowercased())
+            else {
+                throw ValidationError(
+                    "MSIX --arch must be one of: x64 | x86 | arm64 (got '\(arch)')")
+            }
+
+            // staging dir 는 일반 Windows 산출물과 동일 경로.
+            let stagingURL: URL = {
+                if let o = output {
+                    return URL(fileURLWithPath: o, relativeTo: cwd)
+                }
+                let suffix = standalone ? "-standalone" : ""
+                return cwd.appendingPathComponent(
+                    "dist/\(info.appName)-\(info.version)-\(arch.lowercased())\(suffix)")
+            }()
+            guard fm.fileExists(atPath: stagingURL.path) else {
+                throw ValidationError(
+                    "MSIX staging directory not found: \(stagingURL.path) "
+                    + "(expected the base Windows package to exist).")
+            }
+
+            // Assets/ 디렉터리 보장 (사용자 제공 우선, 없으면 placeholder 1x1 PNG).
+            let assetsDst = stagingURL.appendingPathComponent("Assets")
+            try fm.createDirectory(at: assetsDst, withIntermediateDirectories: true)
+            try installMSIXAssets(
+                userAssets: msixAssets.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
+                destination: assetsDst, fm: fm)
+
+            // AppxManifest.xml 작성.
+            let deepLinkSchemes = config.deepLink?.schemes ?? []
+            let startupID: String? =
+                config.autostart != nil
+                ? "\(info.identifier).Autostart"
+                : nil
+            let msixInput = KSPackager.MSIXInput(
+                appName: info.appName,
+                version: info.version,
+                identifier: info.identifier,
+                publisher: publisher,
+                displayName: info.appName,
+                publisherDisplayName: publisherDisplayName ?? deriveCN(from: publisher) ?? info.appName,
+                description: nil,
+                architecture: archEnum,
+                includesWebView2RuntimeDependency: webview2.lowercased() == "evergreen",
+                deepLinkSchemes: deepLinkSchemes,
+                startupTaskID: startupID,
+                startupTaskDisplayName: startupID.map { _ in "\(info.appName) (auto-start)" })
+            let manifestURL = stagingURL.appendingPathComponent("AppxManifest.xml")
+            let xml = KSPackager.renderAppxManifest(msixInput)
+            try xml.write(to: manifestURL, atomically: true, encoding: .utf8)
+            print("📝  AppxManifest.xml written (\(xml.count) bytes)")
+
+            // MakeAppx + signtool.
+            let msixOut = stagingURL.deletingLastPathComponent()
+                .appendingPathComponent("\(info.appName)-\(info.version)-\(arch.lowercased()).msix")
+            let plan = KSPackager.planMSIXPipeline(
+                .init(
+                    stagingDir: stagingURL,
+                    outputMSIX: msixOut,
+                    signtoolTemplate: msixSigntoolCmd))
+            print("📦  MSIX pipeline (\(plan.count) step(s))")
+            var warnings: [String] = []
+            try KSPackager.executeMSIXSteps(plan, dryRun: dryrun, warnings: &warnings)
+            for w in warnings { print("⚠  \(w)") }
+            if !dryrun && fm.fileExists(atPath: msixOut.path) {
+                print("✅  \(msixOut.path)")
+            }
+        }
+
+        /// `x86_64` / `x64` 등 별칭을 MSIX arch 로 매핑.
+        private func msixArchFallback(_ raw: String) -> KSPackager.MSIXArchitecture? {
+            switch raw {
+            case "x86_64", "x86-64", "amd64": return .x64
+            case "i386", "i686": return .x86
+            default: return nil
+            }
+        }
+
+        /// `"CN=Acme Inc, O=..., C=KR"` → `"Acme Inc"`. 실패 시 nil.
+        private func deriveCN(from dn: String) -> String? {
+            for raw in dn.split(separator: ",") {
+                let part = raw.trimmingCharacters(in: .whitespaces)
+                if part.lowercased().hasPrefix("cn=") {
+                    return String(part.dropFirst(3))
+                }
+            }
+            return nil
+        }
+
+        /// 사용자 Assets 디렉터리가 있으면 복사, 없으면 placeholder PNG 5종 생성.
+        private func installMSIXAssets(
+            userAssets: URL?, destination: URL, fm: FileManager
+        ) throws {
+            let required = [
+                "Square150x150Logo.png",
+                "Square44x44Logo.png",
+                "Wide310x150Logo.png",
+                "StoreLogo.png",
+                "SplashScreen.png",
+            ]
+            if let src = userAssets, fm.fileExists(atPath: src.path) {
+                for name in required {
+                    let s = src.appendingPathComponent(name)
+                    let d = destination.appendingPathComponent(name)
+                    if fm.fileExists(atPath: s.path) {
+                        if fm.fileExists(atPath: d.path) { try fm.removeItem(at: d) }
+                        try fm.copyItem(at: s, to: d)
+                    } else {
+                        if !fm.fileExists(atPath: d.path) {
+                            try Self.placeholderPNG.write(to: d)
+                        }
+                        print("⚠  Missing MSIX asset \(name); using placeholder.")
+                    }
+                }
+            } else {
+                for name in required {
+                    let d = destination.appendingPathComponent(name)
+                    if !fm.fileExists(atPath: d.path) {
+                        try Self.placeholderPNG.write(to: d)
+                    }
+                }
+                print("⚠  --msix-assets not provided; using placeholder PNGs for all 5 MSIX images. "
+                    + "Replace before Partner Center submission.")
+            }
+        }
+
+        /// 1x1 투명 PNG (transparent), 67 bytes. WACK 는 사이즈를 엄밀히 보지 않지만
+        /// Partner Center 제출 전에는 반드시 실제 사이즈로 교체해야 한다.
+        private static let placeholderPNG: Data = Data([
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
+            0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
+            0x42, 0x60, 0x82,
+        ])
     #endif
 
     private func parseInstallMode(_ raw: String) -> KSPackager.WebView2InstallMode? {
@@ -617,13 +914,92 @@ struct BuildCommand: ParsableCommand {
                 identifier: info.identifier,
                 architecture: archEnum,
                 iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
+                codesignIdentity: codesignIdentity,
                 zip: zip,
                 stripSourceMaps: config.build.stripSourceMaps,
-                stripExtensions: config.build.stripExtensions)
+                stripExtensions: config.build.stripExtensions,
+                distributionTarget: resolveDistributionTarget(config: config),
+                notarytoolProfile: notarytoolProfile,
+                entitlementsPath: entitlements.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
+                signDryRun: dryrun,
+                installerSigningIdentity: installerIdentity,
+                provisionProfilePath: provisionProfile.map {
+                    URL(fileURLWithPath: $0, relativeTo: cwd)
+                },
+                masEntitlementsInput: resolveDistributionTarget(config: config) == .macAppStore
+                    ? makeEntitlementsInput(config: config, target: .macAppStore)
+                    : nil)
 
             print("📦  Packaging \(info.appName).app v\(info.version) (\(archEnum.rawValue))")
             let report = try KSPackager.runMac(opts)
             print(report.description)
+        }
+
+        /// iOS App Store IPA 패키징 (RFC-008 P4). macOS + Xcode 필수.
+        private func runPackageIOS(
+            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
+        ) throws {
+            guard let projectArg = iosProject else {
+                throw ValidationError(
+                    "--store ios-appstore requires --ios-project <path to .xcodeproj or .xcworkspace>.")
+            }
+            guard let scheme = iosScheme, !scheme.isEmpty else {
+                throw ValidationError(
+                    "--store ios-appstore requires --ios-scheme <Xcode scheme name>.")
+            }
+            guard let teamID = config.distribution.appleTeamID, !teamID.isEmpty else {
+                throw ValidationError(
+                    "--store ios-appstore requires distribution.appleTeamID in Kalsae.json.")
+            }
+            guard let method = KSPackager.IOSExportMethod(rawValue: iosExportMethod) else {
+                throw ValidationError(
+                    "--ios-export-method must be one of: "
+                    + "app-store-connect | app-store | ad-hoc | enterprise | development.")
+            }
+
+            let projectURL = URL(fileURLWithPath: projectArg, relativeTo: cwd)
+            let kind: KSPackager.IOSProjectKind =
+                projectArg.hasSuffix(".xcworkspace")
+                ? .xcworkspace(projectURL) : .xcodeproj(projectURL)
+
+            let buildBase = cwd.appendingPathComponent(
+                "dist/ios-\(info.appName)-\(info.version)")
+            try fm.createDirectory(at: buildBase, withIntermediateDirectories: true)
+            let archivePath = buildBase.appendingPathComponent("\(info.appName).xcarchive")
+            let exportPath = buildBase.appendingPathComponent("export")
+            let exportOptionsURL = buildBase.appendingPathComponent("ExportOptions.plist")
+            let ipaURL = exportPath.appendingPathComponent("\(info.appName).ipa")
+
+            // exportOptions.plist 생성.
+            let plistXML = KSPackager.renderIOSExportOptionsPlist(
+                method: method,
+                teamID: teamID,
+                bundleIdentifier: info.identifier,
+                signingStyle: codesignIdentity == nil ? "automatic" : "manual")
+            try plistXML.write(to: exportOptionsURL, atomically: true, encoding: .utf8)
+
+            let input = KSPackager.IOSPackagingInput(
+                project: kind,
+                scheme: scheme,
+                archivePath: archivePath,
+                exportPath: exportPath,
+                exportOptionsPlist: exportOptionsURL,
+                ipaOutput: ipaURL,
+                teamID: teamID,
+                bundleIdentifier: info.identifier,
+                exportMethod: method,
+                appStoreConnectAPIKeyID: ascKey,
+                appStoreConnectAPIIssuerID: ascIssuer,
+                codeSignIdentity: codesignIdentity,
+                provisioningProfileSpecifier: provisionProfile)
+
+            let steps = KSPackager.planIOSPackagingPipeline(input)
+            print(
+                "🍎  iOS App Store pipeline (\(steps.count) step(s)) → "
+                + ipaURL.path)
+            var warnings: [String] = []
+            try KSPackager.executeIOSSteps(steps, dryRun: dryrun, warnings: &warnings)
+            for w in warnings { print("⚠  \(w)") }
         }
     #endif
 

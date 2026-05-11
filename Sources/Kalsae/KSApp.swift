@@ -44,6 +44,13 @@ public final class KSApp {
     /// 백그라운드 디스패치 핸들러에서 접근할 수 있다.
     nonisolated public let platform: any KSPlatform
 
+    /// 현재 빌드의 배포 대상(예: `.developer`, `.developerID`, `.microsoftStore`).
+    /// `config.distribution.target`의 단축 접근자로, JS/네이티브 코드가
+    /// 런타임 분기(예: MSIX 환경에서 자동시작 토글 UI 숨김)에 사용한다.
+    nonisolated public var distributionTarget: KSDistributionTarget {
+        config.distribution.target
+    }
+
     /// 플랫폼별 데모 호스트. `KSDemoHost` 프로토콜을 통해 균일하게 접근.
     private let host: any KSDemoHost
 

@@ -1,0 +1,133 @@
+name: Store · iOS App Store
+
+# RFC-008 P5 — iOS App Store (.ipa) 배포 워크플로 스켈레톤.
+#
+# 필요한 Repo Secrets:
+#   APPLE_IOS_DIST_CERT_P12_BASE64     : "Apple Distribution" 인증서 (.p12 base64)
+#   APPLE_IOS_DIST_CERT_PASSWORD       : .p12 비밀번호
+#   APPLE_IOS_PROVISIONING_PROFILE_B64 : App Store 배포 프로비저닝 프로파일 (.mobileprovision base64, 선택)
+#   APPLE_ASC_API_KEY_ID               : App Store Connect API Key ID
+#   APPLE_ASC_API_ISSUER_ID            : App Store Connect API Issuer UUID
+#   APPLE_ASC_API_KEY_P8_BASE64        : .p8 API key (base64) — altool 용
+#
+# Xcode 프로젝트 경로 / 스킴은 workflow_dispatch 입력으로 받는다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: "Path to .xcodeproj or .xcworkspace"
+        required: true
+      scheme:
+        description: "Xcode scheme name"
+        required: true
+      export-method:
+        description: "Export method (app-store-connect|app-store|ad-hoc|enterprise|development)"
+        default: "app-store-connect"
+      dry-run:
+        description: "Plan only — do not archive/upload"
+        type: boolean
+        default: false
+      upload:
+        description: "Upload via altool after export (requires ASC API key)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  ios-appstore:
+    name: Archive & Upload (iOS App Store)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app || true
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Setup Swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.3.1-release
+          swift-build: 6.3.1-RELEASE
+
+      - name: Build kalsae CLI
+        run: swift build -c release --product kalsae
+
+      - name: Import iOS distribution certificate
+        if: ${{ !inputs.dry-run }}
+        env:
+          CERT_BASE64: ${{ secrets.APPLE_IOS_DIST_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_IOS_DIST_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="build.keychain"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          echo "$CERT_BASE64" | base64 --decode > /tmp/dist.p12
+          security import /tmp/dist.p12 -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          rm -f /tmp/dist.p12
+
+      - name: Install provisioning profile
+        if: ${{ !inputs.dry-run }}
+        env:
+          PROFILE_B64: ${{ secrets.APPLE_IOS_PROVISIONING_PROFILE_B64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PROFILE_B64:-}" ]; then
+            echo "No provisioning profile secret provided — relying on automatic signing."
+            exit 0
+          fi
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          echo "$PROFILE_B64" | base64 --decode > "$PROFILE_DIR/dist.mobileprovision"
+
+      - name: Stage App Store Connect API key
+        if: ${{ inputs.upload && !inputs.dry-run }}
+        env:
+          KEY_B64: ${{ secrets.APPLE_ASC_API_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.APPLE_ASC_API_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$KEY_B64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${KEY_ID}.p8
+
+      - name: Archive & export IPA
+        env:
+          ASC_KEY: ${{ secrets.APPLE_ASC_API_KEY_ID }}
+          ASC_ISSUER: ${{ secrets.APPLE_ASC_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          DRY_FLAG=""
+          if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
+
+          ASC_ARGS=""
+          if [ "${{ inputs.upload }}" = "true" ]; then
+            ASC_ARGS="--asc-key $ASC_KEY --asc-issuer $ASC_ISSUER"
+          fi
+
+          .build/release/kalsae build \
+            --store ios-appstore \
+            --ios-project "${{ inputs.project }}" \
+            --ios-scheme  "${{ inputs.scheme }}" \
+            --ios-export-method "${{ inputs.export-method }}" \
+            $ASC_ARGS \
+            $DRY_FLAG
+
+      - name: Upload .ipa artifact
+        if: ${{ !inputs.dry-run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalsae-demo-ios-appstore
+          path: dist/**/*.ipa
+          if-no-files-found: warn

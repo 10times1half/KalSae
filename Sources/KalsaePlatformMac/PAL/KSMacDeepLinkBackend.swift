@@ -29,6 +29,16 @@
         }
 
         public func register(scheme: String) throws(KSError) {
+            if KSMacAppPackageContext.isSandboxed() {
+                // RFC-008 P3: MAS 샌드박스 컨텍스트에서는 Info.plist `CFBundleURLTypes`
+                // 에 선언된 스키마를 Launch Services 가 자동 등록하므로
+                // PAL 의 LSSetDefaultHandlerForURLScheme 호출은 불필요하고,
+                // 샌드박스 제한으로 실패 가능성이 높다. No-op.
+                print(
+                    "⚠  KSMacDeepLinkBackend.register(\"\(scheme)\"): no-op under MAS sandbox "
+                    + "(scheme registration handled by Info.plist CFBundleURLTypes).")
+                return
+            }
             guard #available(macOS 12.0, *) else {
                 throw KSError(
                     code: .unsupportedPlatform,
@@ -39,6 +49,11 @@
         }
 
         public func unregister(scheme: String) throws(KSError) {
+            if KSMacAppPackageContext.isSandboxed() {
+                print(
+                    "⚠  KSMacDeepLinkBackend.unregister(\"\(scheme)\"): no-op under MAS sandbox.")
+                return
+            }
             guard #available(macOS 12.0, *) else {
                 throw KSError(
                     code: .unsupportedPlatform,
@@ -50,6 +65,11 @@
         }
 
         public func isRegistered(scheme: String) -> Bool {
+            if KSMacAppPackageContext.isSandboxed() {
+                // MAS 에서는 Info.plist 선언이 곳 OS 등록 소스. 일관성을
+                // 위해 true 반환 (JS 레이어가 “등록됨” 으로 간주).
+                return true
+            }
             guard #available(macOS 12.0, *) else { return false }
             guard let s = try? normalizeSchema(scheme),
                 let handler = LSCopyDefaultHandlerForURLScheme(s as CFString)?.takeRetainedValue() as String?

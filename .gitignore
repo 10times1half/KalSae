@@ -53,3 +53,5 @@ ehthumbs.db
 
 # --- Node (for kalsae generate bindings consumers) ---
 node_modules/
+
+plan.md

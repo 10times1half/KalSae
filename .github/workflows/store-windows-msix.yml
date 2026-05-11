@@ -1,0 +1,96 @@
+name: Store · Windows MSIX
+
+# RFC-008 P5 — Microsoft Store (.msix) 배포 워크플로 스켈레톤.
+#
+# 필요한 Repo Secrets (Partner Center 등록 후):
+#   WINDOWS_CODESIGN_PFX_BASE64  : .pfx 코드서명 인증서 (base64) — Publisher 일치
+#   WINDOWS_CODESIGN_PFX_PASSWORD: .pfx 비밀번호
+#
+# Microsoft Store 자동 제출은 MS Store submission API 또는 StoreBroker 를
+# 별도로 구성해야 한다. 본 워크플로는 .msix 생성 + 서명까지만 자동화한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Plan only — do not MakeAppx/signtool"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  msix:
+    name: Build & Package (MSIX)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.3.1-release
+          swift-build: 6.3.1-RELEASE
+
+      - name: Fetch WebView2 SDK
+        shell: pwsh
+        run: ./Scripts/fetch-webview2.ps1
+
+      - name: Build kalsae CLI
+        shell: pwsh
+        run: swift build -c release --product kalsae
+
+      - name: Setup Windows SDK (MakeAppx / signtool)
+        shell: pwsh
+        run: |
+          # MakeAppx.exe / signtool.exe 는 Windows 10 SDK 에 포함. windows-latest 이미지에 사전 설치되어 있음.
+          $sdkRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          if (-not (Test-Path $sdkRoot)) {
+            Write-Error "Windows 10 SDK not found at $sdkRoot"
+            exit 1
+          }
+          $sdkBin = Get-ChildItem $sdkRoot -Directory |
+            Where-Object { $_.Name -match '^10\.' } |
+            Sort-Object Name -Descending |
+            Select-Object -First 1
+          $arch = Join-Path $sdkBin.FullName 'x64'
+          "MakeAppx: $(Test-Path (Join-Path $arch 'MakeAppx.exe'))"
+          "signtool: $(Test-Path (Join-Path $arch 'signtool.exe'))"
+          echo "$arch" >> $env:GITHUB_PATH
+
+      - name: Decode signing certificate
+        if: ${{ !inputs.dry-run }}
+        shell: pwsh
+        env:
+          PFX_BASE64: ${{ secrets.WINDOWS_CODESIGN_PFX_BASE64 }}
+        run: |
+          $bytes = [Convert]::FromBase64String($env:PFX_BASE64)
+          New-Item -ItemType Directory -Force -Path .build\msix | Out-Null
+          [IO.File]::WriteAllBytes(".build\msix\cert.pfx", $bytes)
+
+      - name: Build & package MSIX
+        shell: pwsh
+        env:
+          PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+        run: |
+          $isDry = "${{ inputs.dry-run }}" -eq "true"
+          $extraArgs = @()
+          if (-not $isDry) {
+            # signtool template: {file} 는 KSSigntoolHook 가 .msix 산출물 경로로 치환.
+            $template = 'signtool.exe sign /fd SHA256 /f ".build\msix\cert.pfx" /p "' + $env:PFX_PASSWORD + '" {file}'
+            $extraArgs += @("--msix-signtool-cmd", $template)
+          }
+          if ($isDry) { $extraArgs += "--dryrun" }
+          & .build\release\kalsae.exe build --store win-store @extraArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Upload .msix artifact
+        if: ${{ !inputs.dry-run }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalsae-demo-windows-msix
+          path: dist/**/*.msix
+          if-no-files-found: warn

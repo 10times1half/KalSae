@@ -13,6 +13,7 @@
 /// 후속 hook 으로 별도 처리). 인터페이스만 노출하고 실제 sign 호출은
 /// 사용자 환경에 위임한다.
 public import Foundation
+public import KalsaeCore
 
 extension KSPackager {
     public enum MacArchitecture: String, Sendable, CaseIterable {
@@ -34,12 +35,30 @@ extension KSPackager {
         public var minimumSystemVersion: String
         public var category: String  // LSApplicationCategoryType
         public var copyright: String?
-        public var codesignIdentity: String?  // 인터페이스만 — 실제 호출은 후속 hook
+        public var codesignIdentity: String?  // codesign -s <identity>
         public var zip: Bool
         /// 패키징 시 소스맵(.map) 파일을 자동 제거한다.
         public var stripSourceMaps: Bool
         /// 패키징 시 추가로 제거할 파일 확장자 목록.
         public var stripExtensions: [String]
+        /// 배포 타깃 (RFC-008). `.developerID` 이면 codesign+notarize+staple 파이프라인을
+        /// 자동 실행한다. `.developer` 이면 기존 동작 유지 (codesign hook 만).
+        public var distributionTarget: KSDistributionTarget
+        /// `xcrun notarytool store-credentials` 로 저장한 프로파일 이름.
+        /// `nil` 이면 공증·스테이플 단계를 생략하고 codesign 까지만 수행한다.
+        public var notarytoolProfile: String?
+        /// 사용자 지정 entitlements.plist. 미지정 시 Hardened Runtime 기본값을 생성.
+        public var entitlementsPath: URL?
+        /// `true` 이면 codesign/notarize/staple 명령을 실행하지 않고 stdout 에 출력만.
+        public var signDryRun: Bool
+        /// MAS: `3rd Party Mac Developer Installer: …` 인증서. productbuild 서명용.
+        /// `--store mas` 에서만 사용. `--codesign-identity` 는 앱 서명용.
+        public var installerSigningIdentity: String?
+        /// MAS: `embedded.provisionprofile` 경로. `--store mas` 에서 필수.
+        public var provisionProfilePath: URL?
+        /// MAS: 자동 생성된 entitlements 의 EntitlementsInput. `nil` 이면 호출자가
+        /// `entitlementsPath` 를 직접 지정한 것으로 본다.
+        public var masEntitlementsInput: EntitlementsInput?
 
         public init(
             executablePath: URL,
@@ -57,7 +76,14 @@ extension KSPackager {
             codesignIdentity: String? = nil,
             zip: Bool = false,
             stripSourceMaps: Bool = true,
-            stripExtensions: [String] = []
+            stripExtensions: [String] = [],
+            distributionTarget: KSDistributionTarget = .developer,
+            notarytoolProfile: String? = nil,
+            entitlementsPath: URL? = nil,
+            signDryRun: Bool = false,
+            installerSigningIdentity: String? = nil,
+            provisionProfilePath: URL? = nil,
+            masEntitlementsInput: EntitlementsInput? = nil
         ) {
             self.executablePath = executablePath
             self.configPath = configPath
@@ -75,6 +101,13 @@ extension KSPackager {
             self.zip = zip
             self.stripSourceMaps = stripSourceMaps
             self.stripExtensions = stripExtensions
+            self.distributionTarget = distributionTarget
+            self.notarytoolProfile = notarytoolProfile
+            self.entitlementsPath = entitlementsPath
+            self.signDryRun = signDryRun
+            self.installerSigningIdentity = installerSigningIdentity
+            self.provisionProfilePath = provisionProfilePath
+            self.masEntitlementsInput = masEntitlementsInput
         }
     }
 
@@ -149,10 +182,22 @@ extension KSPackager {
             try fm.copyItem(at: icon, to: dst)
         }
 
-        // 6) 코드사이닝 hook (인터페이스만)
-        if let identity = opts.codesignIdentity, !identity.isEmpty {
+        // 6) 코드사이닝 / 공증 / 스테이플 (RFC-008 Phase 1 + Phase 3)
+        if opts.distributionTarget == .developerID {
+            try runDeveloperIDPipeline(
+                opts: opts,
+                bundleURL: bundleURL,
+                contents: contents,
+                warnings: &warnings)
+        } else if opts.distributionTarget == .macAppStore {
+            try runMacAppStorePipeline(
+                opts: opts,
+                bundleURL: bundleURL,
+                warnings: &warnings)
+        } else if let identity = opts.codesignIdentity, !identity.isEmpty {
             warnings.append(
-                "Code signing identity '\(identity)' supplied but Kalsae does not invoke 'codesign' yet. Run it manually after packaging."
+                "Code signing identity '\(identity)' supplied but --store devid/mas not set. "
+                + "Pass --store devid or --store mas to invoke the signing pipeline automatically."
             )
         }
 
@@ -178,6 +223,118 @@ extension KSPackager {
             policy: "macos-app",
             warnings: warnings,
             standalone: nil)
+    }
+
+    /// Developer ID 사이닝 파이프라인을 실행한다. 호출자 책임:
+    ///   - `opts.codesignIdentity` 가 비어있지 않을 것
+    ///   - (공증을 원할 때) `opts.notarytoolProfile` 이 비어있지 않을 것
+    private static func runDeveloperIDPipeline(
+        opts: MacOptions,
+        bundleURL: URL,
+        contents: URL,
+        warnings: inout [String]
+    ) throws {
+        guard let identity = opts.codesignIdentity, !identity.isEmpty else {
+            warnings.append(
+                "--store devid requires --codesign-identity (e.g. 'Developer ID Application: …'). "
+                + "Skipping codesign + notarize.")
+            return
+        }
+
+        // 기본 entitlements.plist 위치 (.app 외부, 빌드 산출물 옆).
+        let defaultEnt = opts.output
+            .appendingPathComponent("\(opts.appName).entitlements")
+        if opts.entitlementsPath == nil {
+            let xml = renderDefaultHardenedRuntimeEntitlements()
+            try xml.write(to: defaultEnt, atomically: true, encoding: .utf8)
+        }
+
+        let zipForNotarize = opts.output
+            .appendingPathComponent("\(opts.appName)-\(opts.version)-notarize.zip")
+
+        let input = MacSignInput(
+            bundle: bundleURL,
+            zipOutput: zipForNotarize,
+            identity: identity,
+            notarytoolProfile: opts.notarytoolProfile,
+            entitlementsPath: opts.entitlementsPath,
+            defaultEntitlementsPath: defaultEnt,
+            target: .developerID)
+
+        let steps = planDeveloperIDSigning(input)
+        print("🔐  Developer ID pipeline (\(steps.count) step(s))")
+        try executeMacSignSteps(steps, dryRun: opts.signDryRun, warnings: &warnings)
+
+        if opts.notarytoolProfile == nil {
+            warnings.append(
+                "--notarytool-profile not provided; codesign was performed but the bundle "
+                + "is NOT notarized/stapled. Gatekeeper will warn on first launch.")
+        }
+    }
+
+    /// Mac App Store 파이프라인 (RFC-008 Phase 3).
+    /// 필수 입력: `codesignIdentity`(앱 인증서), `installerSigningIdentity`,
+    /// `provisionProfilePath`, `masEntitlementsInput` 또는 `entitlementsPath`.
+    private static func runMacAppStorePipeline(
+        opts: MacOptions,
+        bundleURL: URL,
+        warnings: inout [String]
+    ) throws {
+        // 필수 입력 검증.
+        guard let appIdentity = opts.codesignIdentity, !appIdentity.isEmpty else {
+            warnings.append(
+                "--store mas requires --codesign-identity "
+                + "(e.g. '3rd Party Mac Developer Application: …'). Skipping MAS pipeline.")
+            return
+        }
+        guard let installerIdentity = opts.installerSigningIdentity,
+            !installerIdentity.isEmpty
+        else {
+            warnings.append(
+                "--store mas requires --installer-identity "
+                + "(e.g. '3rd Party Mac Developer Installer: …'). Skipping MAS pipeline.")
+            return
+        }
+        guard let profile = opts.provisionProfilePath else {
+            warnings.append(
+                "--store mas requires --provision-profile <embedded.provisionprofile>. "
+                + "Skipping MAS pipeline.")
+            return
+        }
+
+        // entitlements.plist 결정: 사용자가 --entitlements 지정했으면 그대로,
+        // 아니면 EntitlementsInput 로 자동 생성.
+        let entitlementsURL: URL
+        if let userPath = opts.entitlementsPath {
+            entitlementsURL = userPath
+        } else if let entInput = opts.masEntitlementsInput {
+            entitlementsURL = opts.output
+                .appendingPathComponent("\(opts.appName).mas.entitlements")
+            let xml = renderEntitlementsPlist(entInput)
+            try xml.write(to: entitlementsURL, atomically: true, encoding: .utf8)
+        } else {
+            warnings.append(
+                "--store mas needs either --entitlements <path> or a Kalsae.json "
+                + "with distribution.target=\"mac-app-store\". Skipping MAS pipeline.")
+            return
+        }
+
+        // 산출 .pkg 경로.
+        let pkgOutput = opts.output
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(opts.appName)-\(opts.version)-\(opts.architecture.rawValue).pkg")
+
+        let input = MacAppStoreInput(
+            bundle: bundleURL,
+            pkgOutput: pkgOutput,
+            appSigningIdentity: appIdentity,
+            installerSigningIdentity: installerIdentity,
+            provisionProfilePath: profile,
+            entitlementsPath: entitlementsURL)
+
+        let steps = planMacAppStorePipeline(input)
+        print("🍎  Mac App Store pipeline (\(steps.count) step(s)) → \(pkgOutput.lastPathComponent)")
+        try executeMacAppStoreSteps(steps, dryRun: opts.signDryRun, warnings: &warnings)
     }
 
     private static func renderMacInfoPlist(opts: MacOptions) -> String {

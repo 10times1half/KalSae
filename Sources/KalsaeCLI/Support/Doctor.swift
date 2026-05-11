@@ -1,5 +1,5 @@
 public import Foundation
-import KalsaeCore
+public import KalsaeCore
 
 public struct KSDoctorOptions: Sendable {
     public var projectRoot: URL
@@ -7,11 +7,21 @@ public struct KSDoctorOptions: Sendable {
     /// `true`이면 PATH 조회와 외부 프로세스 실행(node/npm 버전 캡처)을 건너뛴다.
     /// 단위 테스트가 호스트 환경에 의존하지 않도록 결정성을 보장하기 위한 옵션.
     public var skipExternalChecks: Bool
+    /// 스토어 배포 모드용 도구 점검 대상(RFC-008).
+    /// 지정 시 해당 타깃에 필요한 외부 도구(codesign, MakeAppx 등)를 PATH 에서 찾고,
+    /// 누락된 항목은 경고로 보고한다. `nil` 이면 점검을 건너뛴다.
+    public var distributionTarget: KSDistributionTarget?
 
-    public init(projectRoot: URL, configPath: String? = nil, skipExternalChecks: Bool = false) {
+    public init(
+        projectRoot: URL,
+        configPath: String? = nil,
+        skipExternalChecks: Bool = false,
+        distributionTarget: KSDistributionTarget? = nil
+    ) {
         self.projectRoot = projectRoot
         self.configPath = configPath
         self.skipExternalChecks = skipExternalChecks
+        self.distributionTarget = distributionTarget
     }
 }
 public struct KSDoctorReport: Sendable {
@@ -87,6 +97,9 @@ public enum KSDoctor {
             projectRoot: options.projectRoot,
             report: &report,
             fm: fm)
+        if let target = options.distributionTarget, !options.skipExternalChecks {
+            checkStoreTooling(target: target, report: &report)
+        }
 
         return report
     }
@@ -420,5 +433,63 @@ public enum KSDoctor {
                 report.warnings.append("swift-syntax cache remote looks invalid: \(dir.lastPathComponent)")
             }
         }
+    }
+
+    // MARK: - Store distribution tooling (RFC-008)
+
+    /// 지정된 배포 타깃에 필요한 외부 도구가 PATH 에 있는지 확인하고,
+    /// 누락 시 경고를 추가한다. 인증서/프로비저닝 프로파일/시크릿은 사용자
+    /// 환경에 의존하므로 점검 대상이 아니다(파일 존재만 hint 로 안내).
+    private static func checkStoreTooling(
+        target: KSDistributionTarget,
+        report: inout KSDoctorReport
+    ) {
+        report.infos.append("Distribution target: \(target.rawValue) (\(target.shortName))")
+        switch target {
+        case .developer:
+            return
+        case .developerID:
+            requireTool("codesign", target: target, report: &report)
+            requireTool("xcrun", target: target, report: &report,
+                hint: "xcrun is required to invoke notarytool and stapler.")
+            report.infos.append(
+                "macOS Developer ID: store a notarytool profile with "
+                + "`xcrun notarytool store-credentials <name>` and pass it via "
+                + "--notarytool-profile when building.")
+        case .macAppStore:
+            requireTool("codesign", target: target, report: &report)
+            requireTool("productbuild", target: target, report: &report)
+            report.infos.append(
+                "Mac App Store: provide --provisioning-profile pointing to "
+                + "the embedded.provisionprofile downloaded from developer.apple.com.")
+        case .microsoftStore:
+            requireTool("MakeAppx.exe", target: target, report: &report,
+                hint: "MakeAppx.exe ships with the Windows 10/11 SDK.")
+            requireTool("signtool.exe", target: target, report: &report,
+                hint: "signtool.exe ships with the Windows 10/11 SDK.")
+            report.infos.append(
+                "Microsoft Store: set --publisher to match the Publisher CN "
+                + "registered on Microsoft Partner Center.")
+        case .iosAppStore:
+            requireTool("xcodebuild", target: target, report: &report,
+                hint: "Requires a macOS host with Xcode 15+ installed.")
+            requireTool("xcrun", target: target, report: &report)
+        }
+    }
+
+    /// `findExecutable` 로 PATH 조회 후 누락 시 경고만 추가한다(hard-fail X).
+    private static func requireTool(
+        _ name: String,
+        target: KSDistributionTarget,
+        report: inout KSDoctorReport,
+        hint: String? = nil
+    ) {
+        if let url = findExecutable(named: name) {
+            report.infos.append("\(name) found at \(url.path).")
+            return
+        }
+        var msg = "\(name) not found in PATH — required for --store \(target.shortName)."
+        if let hint { msg += " \(hint)" }
+        report.warnings.append(msg)
     }
 }
