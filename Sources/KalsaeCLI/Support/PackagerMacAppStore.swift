@@ -15,7 +15,7 @@
 /// 모든 단계가 **순수 명령 시퀀스** 로 표현되어 단위 테스트 가능하며,
 /// 실행기는 macOS 외 호스트에서 stdout 출력만 수행한다.
 public import Foundation
-public import KalsaeCore
+internal import KalsaeCore
 
 extension KSPackager {
 

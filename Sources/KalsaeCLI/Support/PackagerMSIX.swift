@@ -18,7 +18,7 @@
 ///   - WebView2 Evergreen       → `<PackageDependency Microsoft.WebView2RuntimeAnyVersion>`
 ///   - 기본                     → `<rescap:Capability Name="runFullTrust"/>` (Desktop Bridge)
 public import Foundation
-public import KalsaeCore
+internal import KalsaeCore
 
 extension KSPackager {
 
