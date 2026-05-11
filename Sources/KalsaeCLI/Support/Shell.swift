@@ -6,12 +6,17 @@ public enum ShellError: Error, CustomStringConvertible {
     case commandNotFound(String)
     case nonZeroExit(Int32)
     case shellUnavailable
+    /// 임의의 진단 메시지를 그대로 노출하고 싶을 때 사용. PATH 결함이
+    /// 아닌 설정/프로비저닝 오류에 `commandNotFound` 를 재사용하면
+    /// "'...' not found in PATH." 로 잘못 표시되므로 해당 경우에 쓰일 채널.
+    case message(String)
 
     public var description: String {
         switch self {
         case .commandNotFound(let cmd): return "'\(cmd)' not found in PATH."
         case .nonZeroExit(let code): return "Process exited with code \(code)."
         case .shellUnavailable: return "No supported shell executable found."
+        case .message(let m): return m
         }
     }
 }

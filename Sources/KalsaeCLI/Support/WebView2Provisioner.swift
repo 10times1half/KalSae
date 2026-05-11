@@ -147,7 +147,65 @@ public enum KSWebView2Provisioner {
                 roots.append(child)
             }
         }
+
+        // 로컬 경로 의존성 (`.package(path: ...)`) 은 `.build/checkouts/` 에
+        // 들어오지 않고 사용자가 지정한 디스크 위치에 머무른다.
+        // SwiftPM 이 resolve 후 작성하는 `.build/workspace-state.json` 에
+        // 의존성 별 on-disk 경로가 들어 있으므로 그 경로들도 marker 검사 대상에
+        // 추가한다. 파일이 없거나 스키마가 달라도 best-effort 로 무시한다.
+        for candidate in workspaceStateLocalPaths(cwd: cwd, fm: fm) {
+            if hasMarker(candidate), !roots.contains(candidate) {
+                roots.append(candidate)
+            }
+        }
         return roots
+    }
+
+    /// `.build/workspace-state.json` 을 파싱해 로컬 경로 의존성의 on-disk
+    /// 위치를 추출한다. 스키마는 SwiftPM 버전에 따라 변하므로 알려진
+    /// 필드 이름들을 best-effort 로 모두 시도한다.
+    private static func workspaceStateLocalPaths(cwd: URL, fm: FileManager) -> [URL] {
+        let stateURL =
+            cwd
+            .appendingPathComponent(".build")
+            .appendingPathComponent("workspace-state.json")
+        guard let data = try? Data(contentsOf: stateURL),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return []
+        }
+        guard let object = json["object"] as? [String: Any],
+            let deps = object["dependencies"] as? [[String: Any]]
+        else {
+            return []
+        }
+        var paths: [URL] = []
+        for dep in deps {
+            // 후보 키 — SwiftPM 6.x 까지 관찰된 이름들:
+            //   state.path                              (fileSystem / edited)
+            //   packageRef.location                     (fileSystem)
+            //   packageRef.kind == "fileSystem"
+            var candidate: String? = nil
+            if let state = dep["state"] as? [String: Any],
+                let p = state["path"] as? String
+            {
+                candidate = p
+            }
+            if candidate == nil,
+                let ref = dep["packageRef"] as? [String: Any]
+            {
+                let kind = ref["kind"] as? String ?? ""
+                if kind == "fileSystem" || kind == "localSourceControl",
+                    let loc = ref["location"] as? String
+                {
+                    candidate = loc
+                }
+            }
+            if let raw = candidate, !raw.isEmpty {
+                paths.append(URL(fileURLWithPath: raw))
+            }
+        }
+        return paths
     }
 
     /// SDK 헤더 (`WebView2.h`) 의 정규 경로. `CKalsaeWV2` 가
@@ -257,12 +315,12 @@ public enum KSWebView2Provisioner {
             }.first
 
             guard let source = candidate else {
-                throw ShellError.commandNotFound(
-                    "WebView2Loader.dll source under any Kalsae checkout"
-                        + " (looked in .build/checkouts/*/Sources/CKalsaeWV2/Vendor/WebView2/runtimes/\(architecture)/native)."
+                throw ShellError.message(
+                    "WebView2Loader.dll source not found under any Kalsae checkout."
+                        + " Looked in .build/checkouts/*/Sources/CKalsaeWV2/Vendor/WebView2/runtimes/\(architecture)/native"
+                        + " and in local path dependencies recorded in .build/workspace-state.json."
                         + " Re-run `kalsae dev` / `kalsae build` with auto-fetch enabled,"
-                        + " or run Scripts/fetch-webview2.ps1 against the missing checkout."
-                )
+                        + " or run Scripts/fetch-webview2.ps1 against the missing checkout.")
             }
 
             // 후보 출력 디렉터리:
