@@ -66,7 +66,7 @@ struct WebView2ProvisionerStageTests {
             try fm.createDirectory(at: knownTriple, withIntermediateDirectories: true)
             try fm.createDirectory(at: bogus, withIntermediateDirectories: true)
 
-            KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+            try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
 
             #expect(
                 fm.fileExists(
@@ -80,11 +80,15 @@ struct WebView2ProvisionerStageTests {
     #endif
 
     /// 함수가 다른 플랫폼에서 no-op 임을 적어도 호출 가능한지 확인하는
-    /// smoke test (Windows 외에서 컴파일/실행 시 빈 통과).
-    @Test("stageLoaderDLL is a no-op on non-Windows hosts")
-    func noOpOnNonWindows() {
-        let cwd = uniqueDir("noop")
-        // 비-Windows 에서 호출해도 throw 하지 않아야 함.
-        KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: "debug")
-    }
+    /// smoke test (Windows 외에서 컴파일/실행 시 빈 통과). Windows 에서는
+    /// 소스 DLL 이 없으면 throw 하도록 강화됐으므로 이 테스트는 Windows
+    /// 외 플랫폼에서만 의미가 있다.
+    #if !os(Windows)
+        @Test("stageLoaderDLL is a no-op on non-Windows hosts")
+        func noOpOnNonWindows() throws {
+            let cwd = uniqueDir("noop")
+            // 비-Windows 에서 호출해도 throw 하지 않아야 함.
+            try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: "debug")
+        }
+    #endif
 }

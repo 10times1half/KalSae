@@ -326,7 +326,7 @@ struct BuildCommand: ParsableCommand {
                 try timer.measure("post-build") {
                     try renameOutputBinaryIfNeeded(
                         config: config, configuration: configuration, cwd: cwd, fm: fm)
-                    KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+                    try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
                 }
             }
         } else {
@@ -405,7 +405,7 @@ struct BuildCommand: ParsableCommand {
             try timer.measure("post-build") {
                 try renameOutputBinaryIfNeeded(
                     config: config, configuration: configuration, cwd: cwd, fm: fm)
-                KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+                try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
             }
         }
 

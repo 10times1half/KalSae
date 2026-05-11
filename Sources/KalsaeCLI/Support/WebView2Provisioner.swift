@@ -44,10 +44,19 @@ public enum KSWebView2Provisioner {
             // 에도 안전하다: 본 저장소 루트(cwd)에는 이미 헤더가 있고,
             // 새로 들어올 KalSae 체크아웃은 swift build 가 자체적으로 fetch 한 뒤
             // CKalsaeWV2 컴파일에서 헤더 부재로 실패해 사용자에게 명확히 알린다.
+            //
+            // 헤더만 있고 런타임 DLL 이 없는 부분 설치 상태에서도 fast-path 가
+            // 통과하면 `stageLoaderDLL` 이 EXE 옆에 DLL 을 staging 하지 못해
+            // 런타임에 `0x8007007E (ERROR_MOD_NOT_FOUND)` 로 환경 생성이
+            // 조용히 실패한다. fast-path 는 헤더와 런타임 DLL 이 둘 다 존재할
+            // 때만 통과시킨다.
             let preExistingRoots = discoverKalsaeRoots(cwd: cwd, fm: fm)
             let allProvisioned =
                 !preExistingRoots.isEmpty
-                && preExistingRoots.allSatisfy { fm.fileExists(atPath: loaderURL(in: $0).path) }
+                && preExistingRoots.allSatisfy { root in
+                    fm.fileExists(atPath: headerURL(in: root).path)
+                        && fm.fileExists(atPath: runtimeDLLURL(in: root).path)
+                }
             if allProvisioned {
                 return
             }
@@ -71,12 +80,16 @@ public enum KSWebView2Provisioner {
             }
 
             for root in roots {
-                let loader = loaderURL(in: root)
-                if fm.fileExists(atPath: loader.path) { continue }
+                let header = headerURL(in: root)
+                let runtime = runtimeDLLURL(in: root)
+                let headerOK = fm.fileExists(atPath: header.path)
+                let runtimeOK = fm.fileExists(atPath: runtime.path)
+                if headerOK && runtimeOK { continue }
 
                 guard autoFetch else {
+                    let missing = headerOK ? runtime.path : header.path
                     throw ShellError.commandNotFound(
-                        "WebView2 SDK at \(loader.path)"
+                        "WebView2 SDK at \(missing)"
                             + " — re-run with auto-fetch enabled, or run"
                             + " Scripts/fetch-webview2.ps1 -ProjectRoot \(root.path).")
                 }
@@ -92,7 +105,9 @@ public enum KSWebView2Provisioner {
                     sdkVersion: sdkVersion,
                     fm: fm)
 
-                guard fm.fileExists(atPath: loader.path) else {
+                guard fm.fileExists(atPath: header.path),
+                    fm.fileExists(atPath: runtime.path)
+                else {
                     throw ShellError.nonZeroExit(1)
                 }
             }
@@ -135,7 +150,9 @@ public enum KSWebView2Provisioner {
         return roots
     }
 
-    private static func loaderURL(in root: URL) -> URL {
+    /// SDK 헤더 (`WebView2.h`) 의 정규 경로. `CKalsaeWV2` 가
+    /// `headerSearchPath` 로 가리키는 위치.
+    private static func headerURL(in root: URL) -> URL {
         root
             .appendingPathComponent("Sources")
             .appendingPathComponent("CKalsaeWV2")
@@ -145,6 +162,24 @@ public enum KSWebView2Provisioner {
             .appendingPathComponent("native")
             .appendingPathComponent("include")
             .appendingPathComponent("WebView2.h")
+    }
+
+    /// 런타임 로더 DLL 의 정규 경로. `stageLoaderDLL` 이 EXE 옆으로
+    /// 복사하는 원본 위치이며, 누락 시 부팅 직후 환경 생성이
+    /// `0x8007007E` 로 실패하므로 fast-path 의 필수 조건.
+    private static func runtimeDLLURL(
+        in root: URL,
+        architecture: String = "win-x64"
+    ) -> URL {
+        root
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("CKalsaeWV2")
+            .appendingPathComponent("Vendor")
+            .appendingPathComponent("WebView2")
+            .appendingPathComponent("runtimes")
+            .appendingPathComponent(architecture)
+            .appendingPathComponent("native")
+            .appendingPathComponent("WebView2Loader.dll")
     }
 
     /// `scriptRoot/Scripts/fetch-webview2.ps1` 를 실행해 `installRoot/Vendor/WebView2/` 를 채운다.
@@ -200,35 +235,34 @@ public enum KSWebView2Provisioner {
     ///   - configuration: `"debug"` 또는 `"release"`.
     ///   - architecture: NuGet 패키지 내 `runtimes/<arch>/native` 의 `<arch>`.
     ///     기본값은 `"win-x64"` — 현재 `Package.swift` 가 x64 만 링크 가능.
+    ///
+    /// - Throws: 어느 Kalsae 체크아웃에서도 `WebView2Loader.dll` 소스를 찾지
+    ///   못하면 `ShellError.commandNotFound` 를 던진다. 이전에는 경고만 찍고
+    ///   계속 진행했으나, 그 결과 EXE 옆에 DLL 이 없는 채로 부팅이 시작돼
+    ///   런타임에 `CreateCoreWebView2EnvironmentWithOptions` 가
+    ///   `0x8007007E (ERROR_MOD_NOT_FOUND)` 로 조용히 실패하고 윈도우가
+    ///   즉시 닫혔다. 명확한 에러로 즉시 실패하도록 변경.
     public static func stageLoaderDLL(
         cwd: URL,
         configuration: String,
         architecture: String = "win-x64"
-    ) {
+    ) throws {
         #if os(Windows)
             let fm = FileManager.default
             // SDK 가 설치된 첫 번째 루트에서 로더를 찾는다.
             let roots = discoverKalsaeRoots(cwd: cwd, fm: fm)
             let candidate = roots.lazy.compactMap { root -> URL? in
-                let dll =
-                    root
-                    .appendingPathComponent("Sources")
-                    .appendingPathComponent("CKalsaeWV2")
-                    .appendingPathComponent("Vendor")
-                    .appendingPathComponent("WebView2")
-                    .appendingPathComponent("runtimes")
-                    .appendingPathComponent(architecture)
-                    .appendingPathComponent("native")
-                    .appendingPathComponent("WebView2Loader.dll")
+                let dll = runtimeDLLURL(in: root, architecture: architecture)
                 return fm.fileExists(atPath: dll.path) ? dll : nil
             }.first
 
             guard let source = candidate else {
-                print(
-                    "⚠  WebView2Loader.dll source not found under any Kalsae checkout"
+                throw ShellError.commandNotFound(
+                    "WebView2Loader.dll source under any Kalsae checkout"
                         + " (looked in .build/checkouts/*/Sources/CKalsaeWV2/Vendor/WebView2/runtimes/\(architecture)/native)."
+                        + " Re-run `kalsae dev` / `kalsae build` with auto-fetch enabled,"
+                        + " or run Scripts/fetch-webview2.ps1 against the missing checkout."
                 )
-                return
             }
 
             // 후보 출력 디렉터리:
