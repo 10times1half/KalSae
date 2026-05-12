@@ -52,6 +52,7 @@ extension KSFSScope {
         return normalizeSeparators(out)
     }
 
+    /// Checks both the lexical candidate path and its symlink-resolved real path.
     /// `path`(절대 파일시스템 경로)가 각 패턴의 `$` 확장 이후,
     /// 최소 하나의 `allow` 글롭과 일치하고 어떤 `deny` 글롭과도
     /// 일치하지 않으면 `true`를 반환한다.
