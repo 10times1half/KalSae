@@ -232,12 +232,25 @@
         /// exit code `0xC000041D` (STATUS_FATAL_USER_CALLBACK_EXCEPTION).
         ///
         /// We therefore route messages through the per-instance handler only
-        /// when we are actually on the captured main thread; otherwise we
-        /// fall back to `DefWindowProcW` which is safe to call from any
-        /// thread. Skipped messages are non-critical (activation focus
-        /// notifications): the corresponding `__ks.window.focus`/`.blur`
-        /// events may be missed when activation crosses the cross-process
-        /// WebView2 boundary, but the window itself remains functional.
+        /// when we are actually on the captured main thread.
+        ///
+        /// Off-main thread invocations are split:
+        ///
+        /// 1) Lifecycle messages (`WM_CLOSE` / `WM_DESTROY` / `WM_NCDESTROY`)
+        ///    MUST NOT be silently delegated to `DefWindowProcW` from the
+        ///    wrong thread — `WM_CLOSE` would skip our close interceptors
+        ///    (`hideOnClose`, `closeInterceptEnabled`, `onBeforeCloseSwift`)
+        ///    and `WM_DESTROY` would never reach our handler that posts
+        ///    `WM_QUIT`, hanging the main message pump forever. Instead we
+        ///    `PostMessageW` them so they re-enter the owning (main) thread's
+        ///    queue and our normal handler runs.
+        ///
+        /// 2) Everything else (activation, focus, paint hints, cross-process
+        ///    WebView2 notifications) is forwarded to `DefWindowProcW`, which
+        ///    is documented as safe to call from any thread. The
+        ///    corresponding `__ks.window.focus`/`.blur` events may be missed
+        ///    when activation crosses the WebView2 process boundary, but the
+        ///    window itself remains fully functional.
         private static let dispatch:
             @convention(c) (
                 HWND?, UINT, WPARAM, LPARAM
@@ -247,7 +260,15 @@
                 }
                 let mainTID = Win32App.mainThreadID
                 if mainTID != 0 && GetCurrentThreadId() != mainTID {
-                    return DefWindowProcW(hwnd, msg, wparam, lparam)
+                    switch Int32(msg) {
+                    case WM_CLOSE, WM_DESTROY, WM_NCDESTROY:
+                        // Re-queue to the owning (main) thread so our
+                        // normal handler runs and `PostQuitMessage` fires.
+                        _ = PostMessageW(hwnd, msg, wparam, lparam)
+                        return 0
+                    default:
+                        return DefWindowProcW(hwnd, msg, wparam, lparam)
+                    }
                 }
                 let key = Win32App.key(for: hwnd)
                 let handled: LRESULT? = MainActor.assumeIsolated {

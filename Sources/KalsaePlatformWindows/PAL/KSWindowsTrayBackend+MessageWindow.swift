@@ -49,9 +49,18 @@
                 // 가 libdispatch precondition을 트립한다(`STATUS_FATAL_USER_CALLBACK_EXCEPTION`).
                 // 메시지 윈도우는 메인 스레드가 소유하지만 시스템/COM 브로드캐스트가
                 // 다른 스레드에서 동기 디스패치할 수 있으므로 보수적으로 가드한다.
+                // 생명주기 메시지(WM_CLOSE/WM_DESTROY/WM_NCDESTROY)는 `DefWindowProcW`
+                // 폴백 시 윈도우를 즉시 파괴해 우리 정리 경로를 우회시키므로 `PostMessageW`
+                // 로 메인 스레드 큐에 재전송한다.
                 let mainTID = Win32App.mainThreadID
                 if mainTID != 0 && GetCurrentThreadId() != mainTID {
-                    return DefWindowProcW(hwnd, msg, wp, lp)
+                    switch Int32(msg) {
+                    case WM_CLOSE, WM_DESTROY, WM_NCDESTROY:
+                        _ = PostMessageW(hwnd, msg, wp, lp)
+                        return 0
+                    default:
+                        return DefWindowProcW(hwnd, msg, wp, lp)
+                    }
                 }
                 if UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd)))
                     == KSWindowsTrayBackend.trayWindowHWND

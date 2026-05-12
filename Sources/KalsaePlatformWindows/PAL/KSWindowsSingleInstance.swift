@@ -139,9 +139,17 @@
                 // 수신측 메시지 펌프(즉 우리 메인 스레드)에서 풀리는 것이 정상.
                 // 그러나 SendMessage가 다른 스레드에서 호출되어 `MainActor.assumeIsolated`
                 // 가 트립되는 일을 막기 위해 가드한다(0xC000041D 회피).
+                // 생명주기 메시지는 `DefWindowProcW`로 흘리면 우리 정리 경로를 우회하므로
+                // 메인 스레드 큐에 재전송한다.
                 let mainTID = Win32App.mainThreadID
-                if mainTID != 0 && GetCurrentThreadId() != mainTID {
-                    return DefWindowProcW(hwnd, msg, wparam, lparam)
+                if let hwnd, mainTID != 0 && GetCurrentThreadId() != mainTID {
+                    switch Int32(msg) {
+                    case WM_CLOSE, WM_DESTROY, WM_NCDESTROY:
+                        _ = PostMessageW(hwnd, msg, wparam, lparam)
+                        return 0
+                    default:
+                        return DefWindowProcW(hwnd, msg, wparam, lparam)
+                    }
                 }
                 if msg == UINT(WM_COPYDATA), lparam != 0 {
                     let raw = UnsafeMutableRawPointer(bitPattern: Int(lparam))
