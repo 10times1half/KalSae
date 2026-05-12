@@ -52,21 +52,22 @@ extension KSFSScope {
         return normalizeSeparators(out)
     }
 
+    /// Checks both the lexical candidate path and its symlink-resolved real path.
     /// `path`(절대 파일시스템 경로)가 각 패턴의 `$` 확장 이후,
     /// 최소 하나의 `allow` 글롭과 일치하고 어떤 `deny` 글롭과도
     /// 일치하지 않으면 `true`를 반환한다.
     /// `path` 자체는 **확장하지 않으므로**, 이미 해석된 절대 경로를 넘겨야 한다.
     public func permits(absolutePath path: String, in ctx: ExpansionContext) -> Bool {
-        let needle = Self.normalizeSeparators(path)
-        for pattern in deny {
-            let p = Self.expand(pattern, in: ctx)
-            if Self.glob(pattern: p, matches: needle) { return false }
-        }
-        for pattern in allow {
-            let p = Self.expand(pattern, in: ctx)
-            if Self.glob(pattern: p, matches: needle) { return true }
-        }
-        return false
+        let candidate = Self.normalizeSeparators(path)
+        guard matchesPatterns(candidate, in: ctx) else { return false }
+
+        // `resolvingSymlinksInPath()`는 존재하는 경로 구간만 realpath 스타일로
+        // 정규화하고, 아직 생성되지 않은 꼬리 경로는 그대로 남긴다. 따라서
+        // 읽기/쓰기/생성 모두에서 "허용된 디렉터리 내부처럼 보이지만 symlink를
+        // 통해 외부로 탈출하는" 케이스를 best-effort로 차단할 수 있다.
+        let resolvedURL = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+        let realPath = Self.normalizeSeparators(resolvedURL.path)
+        return matchesPatterns(realPath, in: ctx)
     }
 
     // MARK: - 내부 헬퍼
@@ -75,6 +76,18 @@ extension KSFSScope {
     /// 다른 쪽 구분자로 작성된 경로와도 일치하게 만든다(Windows는 둘 다 허용).
     static func normalizeSeparators(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "/")
+    }
+
+    private func matchesPatterns(_ path: String, in ctx: ExpansionContext) -> Bool {
+        for pattern in deny {
+            let p = Self.expand(pattern, in: ctx)
+            if Self.glob(pattern: p, matches: path) { return false }
+        }
+        for pattern in allow {
+            let p = Self.expand(pattern, in: ctx)
+            if Self.glob(pattern: p, matches: path) { return true }
+        }
+        return false
     }
 
     /// Tauri 호환 글롭 매처.
