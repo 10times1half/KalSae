@@ -57,16 +57,17 @@ extension KSFSScope {
     /// 일치하지 않으면 `true`를 반환한다.
     /// `path` 자체는 **확장하지 않으므로**, 이미 해석된 절대 경로를 넘겨야 한다.
     public func permits(absolutePath path: String, in ctx: ExpansionContext) -> Bool {
-        let needle = Self.normalizeSeparators(path)
-        for pattern in deny {
-            let p = Self.expand(pattern, in: ctx)
-            if Self.glob(pattern: p, matches: needle) { return false }
-        }
-        for pattern in allow {
-            let p = Self.expand(pattern, in: ctx)
-            if Self.glob(pattern: p, matches: needle) { return true }
-        }
-        return false
+        let candidate = Self.normalizeSeparators(path)
+        guard matchesPatterns(candidate, in: ctx) else { return false }
+
+        let resolved =
+            URL(fileURLWithPath: path)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        let realPath = Self.normalizeSeparators(resolved)
+        if realPath == candidate { return true }
+        return matchesPatterns(realPath, in: ctx)
     }
 
     // MARK: - 내부 헬퍼
@@ -75,6 +76,18 @@ extension KSFSScope {
     /// 다른 쪽 구분자로 작성된 경로와도 일치하게 만든다(Windows는 둘 다 허용).
     static func normalizeSeparators(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "/")
+    }
+
+    private func matchesPatterns(_ path: String, in ctx: ExpansionContext) -> Bool {
+        for pattern in deny {
+            let p = Self.expand(pattern, in: ctx)
+            if Self.glob(pattern: p, matches: path) { return false }
+        }
+        for pattern in allow {
+            let p = Self.expand(pattern, in: ctx)
+            if Self.glob(pattern: p, matches: path) { return true }
+        }
+        return false
     }
 
     /// Tauri 호환 글롭 매처.
