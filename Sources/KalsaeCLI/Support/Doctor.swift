@@ -253,10 +253,9 @@ public enum KSDoctor {
             if ext == "cmd" || ext == "bat" {
                 guard let cmdURL = findCmdExe() else { return nil }
                 process.executableURL = cmdURL
-                // cmd.exe /s /c "<quoted-path> --version"
-                // 외곽 따옴표는 cmd /s 규칙으로 제거되고 내부 인용은 보존된다.
-                let invocation = "\"\(url.path)\" --version"
-                process.arguments = ["/s", "/c", "\"\(invocation)\""]
+                // 인자를 분리해서 넘긴다 — Foundation Process 의 자동 quoting 과
+                // cmd /c 의 "exec-file 보존" 규칙으로 공백 포함 경로가 안전히 처리된다.
+                process.arguments = ["/c", url.path, "--version"]
             } else {
                 process.executableURL = url
                 process.arguments = ["--version"]

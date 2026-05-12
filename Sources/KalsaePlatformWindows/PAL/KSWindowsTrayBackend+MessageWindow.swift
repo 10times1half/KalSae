@@ -45,6 +45,14 @@
                 // Win32 계약상 WNDPROC 호출 시 `hwnd`는 항상 유효하지만,
                 // Swift에서는 Optional로 표현되므로 명시적으로 가드한다.
                 guard let hwnd else { return DefWindowProcW(hwnd, msg, wp, lp) }
+                // WNDPROC가 비-메인 스레드에서 호출되면 `MainActor.assumeIsolated`
+                // 가 libdispatch precondition을 트립한다(`STATUS_FATAL_USER_CALLBACK_EXCEPTION`).
+                // 메시지 윈도우는 메인 스레드가 소유하지만 시스템/COM 브로드캐스트가
+                // 다른 스레드에서 동기 디스패치할 수 있으므로 보수적으로 가드한다.
+                let mainTID = Win32App.mainThreadID
+                if mainTID != 0 && GetCurrentThreadId() != mainTID {
+                    return DefWindowProcW(hwnd, msg, wp, lp)
+                }
                 if UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd)))
                     == KSWindowsTrayBackend.trayWindowHWND
                 {

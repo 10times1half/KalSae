@@ -29,6 +29,16 @@
         /// to registered handlers. The handler is invoked on the main thread.
         var hotKeyHandler: ((Int32) -> Void)?
 
+        /// Main / UI thread id captured as early as possible (at
+        /// `ensureCOMInitialized` and again at `runMessageLoop`). The shared
+        /// `WNDPROC` consults this from the `@convention(c)` thunk — which
+        /// has no actor isolation of its own — to decide whether it is safe
+        /// to enter `MainActor.assumeIsolated`. A `0` value means the main
+        /// thread is not yet known and the WNDPROC will conservatively
+        /// proceed (this only happens before COM init, when no live HWND
+        /// exists yet).
+        nonisolated(unsafe) static var mainThreadID: DWORD = 0
+
         private init() {
             // GetModuleHandleW(nil)은 자기 프로세스 모듈의 HINSTANCE를
             // 반환한다. Win32 계약상 호스트 프로세스 컨텍스트에서는 절대
@@ -56,6 +66,11 @@
         /// because the UI thread never actually needs MTA semantics here.
         func ensureCOMInitialized() throws(KSError) {
             guard !comInitialized else { return }
+
+            // Capture main thread id for WNDPROC routing.
+            if Win32App.mainThreadID == 0 {
+                Win32App.mainThreadID = GetCurrentThreadId()
+            }
 
             let flags = DWORD(COINIT_APARTMENTTHREADED.rawValue) | DWORD(COINIT_DISABLE_OLE1DDE.rawValue)
 
@@ -186,6 +201,7 @@
         /// Runs the classic Win32 message loop. Returns the exit code supplied
         /// to `PostQuitMessage`.
         func runMessageLoop() -> Int32 {
+            Win32App.mainThreadID = GetCurrentThreadId()
             var msg = MSG()
             // Swift WinSDK 오버레이는 GetMessageW를 Bool 반환으로 가져와
             // 드물게 발생하는 -1 에러 케이스를 `false`(WM_QUIT과 동일)로
@@ -203,17 +219,35 @@
         // MARK: - Shared WNDPROC
 
         /// `@convention(c)` entry point. Finds the target `Win32Window` and
-        /// forwards the message to it. The function runs on the UI thread (which
-        /// is our main thread), so we cross into MainActor via `assumeIsolated`.
-        /// We pass only the `Sendable` HWND bit-pattern into the MainActor
-        /// closure; DefWindowProcW falls back to the raw HWND outside the
-        /// actor hop so that non-Sendable pointers never cross isolation.
+        /// forwards the message to it.
+        ///
+        /// Windows normally delivers messages to the thread that owns the HWND
+        /// (the main / UI thread for our windows), but a small number of
+        /// system / inter-thread messages — most notably `WM_NCACTIVATE` and
+        /// `WM_ACTIVATE` triggered by focus changes into the embedded
+        /// WebView2 child HWND — can be dispatched synchronously from a
+        /// worker thread (msedgewebview2's UI/focus thread, COM marshaller,
+        /// etc.). Entering `MainActor.assumeIsolated` from such a thread
+        /// would trip libdispatch's queue assertion and crash the host with
+        /// exit code `0xC000041D` (STATUS_FATAL_USER_CALLBACK_EXCEPTION).
+        ///
+        /// We therefore route messages through the per-instance handler only
+        /// when we are actually on the captured main thread; otherwise we
+        /// fall back to `DefWindowProcW` which is safe to call from any
+        /// thread. Skipped messages are non-critical (activation focus
+        /// notifications): the corresponding `__ks.window.focus`/`.blur`
+        /// events may be missed when activation crosses the cross-process
+        /// WebView2 boundary, but the window itself remains functional.
         private static let dispatch:
             @convention(c) (
                 HWND?, UINT, WPARAM, LPARAM
             ) -> LRESULT = { hwnd, msg, wparam, lparam in
                 guard let hwnd else {
                     return DefWindowProcW(nil, msg, wparam, lparam)
+                }
+                let mainTID = Win32App.mainThreadID
+                if mainTID != 0 && GetCurrentThreadId() != mainTID {
+                    return DefWindowProcW(hwnd, msg, wparam, lparam)
                 }
                 let key = Win32App.key(for: hwnd)
                 let handled: LRESULT? = MainActor.assumeIsolated {

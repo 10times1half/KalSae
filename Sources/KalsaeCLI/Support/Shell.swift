@@ -116,27 +116,17 @@ private func makeProcess(
             // `.cmd`/`.bat`는 Process API로 직접 실행할 수 없고 (193 ERROR_BAD_EXE_FORMAT),
             // `cmd.exe /c` 를 통해 실행한다. PowerShell 의존성을 제거하기 위해
             // 기존 pwsh `&` 래퍼 대신 cmd.exe 를 사용한다.
-            // cmd.exe /s /c "<cmdline>" 규칙: 외곽 따옴표는 제거되고 내부는
-            // 그대로 전달된다. Foundation Process 가 자체적으로 인자를 quote 하므로
-            // 우리는 사전에 결합된 단일 명령 문자열을 만든다.
+            //
+            // Foundation Process 가 Windows 에서 인자에 공백이 있으면 자동으로
+            // 큰따옴표로 감싸고 내부 `"` 는 `\"` 로 escape 한다. cmd.exe 는
+            // backslash-escape 를 모르므로 우리가 추가로 quoting 하지 말고
+            // 인자를 분리해서 넘긴다. 결과 명령행은
+            //   cmd /c "C:\Path with space\npm.cmd" arg1 arg2
+            // 형태가 되고, cmd /c 의 "2개의 따옴표 + 사이가 실행파일" 규칙으로
+            // 따옴표가 보존돼 정확히 실행된다.
             guard let cmdURL = findCmdExe() else { throw ShellError.shellUnavailable }
             process.executableURL = cmdURL
-            func cmdQuote(_ s: String) -> String {
-                // cmd 메타문자 (&, |, <, >, ^, (, ), %, !, ", spaces) 가 있으면
-                // 큰따옴표로 감싸고 내부의 `"` 는 `""` 로 이스케이프.
-                let needsQuote = s.isEmpty || s.contains { ch in
-                    ch == " " || ch == "\t" || ch == "&" || ch == "|"
-                        || ch == "<" || ch == ">" || ch == "^" || ch == "("
-                        || ch == ")" || ch == "%" || ch == "!" || ch == "\""
-                }
-                if !needsQuote { return s }
-                let escaped = s.replacingOccurrences(of: "\"", with: "\"\"")
-                return "\"\(escaped)\""
-            }
-            let invocation =
-                ([url.path] + arguments).map(cmdQuote).joined(separator: " ")
-            // /s /c 와 외곽 따옴표를 함께 써야 cmd 가 내부 따옴표를 보존한다.
-            process.arguments = ["/s", "/c", "\"\(invocation)\""]
+            process.arguments = ["/c", url.path] + arguments
         } else {
             process.executableURL = url
             process.arguments = arguments
@@ -174,11 +164,15 @@ private func makeShellProcess(commandLine: String, in directory: String?) throws
         // PowerShell 의존성을 제거하기 위해 cmd.exe /c 를 사용한다.
         // 사용자가 config 에 넣은 commandLine 은 cmd 문법 (`&&`, `|`, `%VAR%`,
         // `>` 등) 을 기대하는 경우가 일반적이므로 그 의미를 보존한다.
+        //
+        // commandLine 을 하나의 인자로 그대로 넘긴다 — Foundation Process 는
+        // 공백이 있을 때 큰따옴표로 감싸 `cmd /c "npm run dev"` 형태가 되고,
+        // cmd /c 는 외곽 따옴표를 벗겨 `npm run dev` 를 실행한다. (직접 `\"...\"`
+        // 로 감싸면 Foundation 이 내부 따옴표를 `\"` 로 escape 해 cmd 가
+        // 명령 자체를 찾지 못한다 — 그 경로의 회귀 방지.)
         guard let shellURL = findCmdExe() else { throw ShellError.shellUnavailable }
         process.executableURL = shellURL
-        // /s /c 와 외곽 따옴표 규칙: cmd 가 외곽 따옴표만 제거하고 내부 문자열을
-        // 그대로 평가한다.
-        process.arguments = ["/s", "/c", "\"\(commandLine)\""]
+        process.arguments = ["/c", commandLine]
     #else
         guard let shellURL = findExecutable(named: "sh") else { throw ShellError.shellUnavailable }
         process.executableURL = shellURL
