@@ -240,9 +240,8 @@ public enum KSDoctor {
     }
 
     /// `<exe> --version`을 실행해 stdout 첫 줄을 트리밍하여 반환한다.
-    /// Windows의 `.cmd`/`.bat` (npm 등)는 PowerShell `&` call 연산자로 래핑한다
-    /// — `cmd /c`는 `C:\Program Files\...\npm.cmd`처럼 공백 포함 경로를 안정적으로
-    /// 인용하기 어렵기 때문.
+    /// Windows의 `.cmd`/`.bat` (npm 등)는 `cmd.exe /s /c` 로 래핑한다 — Process API 가
+    /// `.cmd`/`.bat` 를 직접 실행할 수 없기 때문 (`ERROR_BAD_EXE_FORMAT`).
     private static func captureVersion(at url: URL) -> String? {
         let process = Process()
         let pipe = Pipe()
@@ -252,15 +251,12 @@ public enum KSDoctor {
         #if os(Windows)
             let ext = url.pathExtension.lowercased()
             if ext == "cmd" || ext == "bat" {
-                let psURL =
-                    findExecutable(named: "pwsh") ?? findExecutable(named: "powershell")
-                guard let psURL else { return nil }
-                process.executableURL = psURL
-                let escaped = url.path.replacingOccurrences(of: "'", with: "''")
-                process.arguments = [
-                    "-NoProfile", "-ExecutionPolicy", "Bypass",
-                    "-Command", "& '\(escaped)' --version",
-                ]
+                guard let cmdURL = findCmdExe() else { return nil }
+                process.executableURL = cmdURL
+                // cmd.exe /s /c "<quoted-path> --version"
+                // 외곽 따옴표는 cmd /s 규칙으로 제거되고 내부 인용은 보존된다.
+                let invocation = "\"\(url.path)\" --version"
+                process.arguments = ["/s", "/c", "\"\(invocation)\""]
             } else {
                 process.executableURL = url
                 process.arguments = ["--version"]

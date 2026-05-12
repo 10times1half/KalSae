@@ -69,15 +69,9 @@ public enum KSWebView2Provisioner {
             }
 
             let roots = discoverKalsaeRoots(cwd: cwd, fm: fm)
-            // fetch-webview2.ps1 는 Kalsae 체크아웃 (Sources/CKalsaeWV2/include 마커 보유) 안에만
-            // 존재한다. 컨슈머 cwd 에도 SDK 를 설치할 때 그 스크립트를 재사용한다.
-            let scriptRoot = roots.first { root in
-                fm.fileExists(
-                    atPath:
-                        root
-                        .appendingPathComponent("Scripts")
-                        .appendingPathComponent("fetch-webview2.ps1").path)
-            }
+            // 이전에는 fetch-webview2.ps1 를 PowerShell 로 실행했으나, NuGet
+            // 패키지 다운로드/추출 로직을 Swift 로 포팅해 PowerShell 의존성을 제거.
+            // scriptRoot 탐색이 더 이상 필요 없다.
 
             for root in roots {
                 let header = headerURL(in: root)
@@ -94,13 +88,7 @@ public enum KSWebView2Provisioner {
                             + " Scripts/fetch-webview2.ps1 -ProjectRoot \(root.path).")
                 }
 
-                guard let scriptRoot else {
-                    throw ShellError.commandNotFound(
-                        "Scripts/fetch-webview2.ps1 (no Kalsae checkout located).")
-                }
-
                 try fetchWebView2(
-                    scriptRoot: scriptRoot,
                     installRoot: root,
                     sdkVersion: sdkVersion,
                     fm: fm)
@@ -123,6 +111,10 @@ public enum KSWebView2Provisioner {
     /// 컨슈머 cwd 는 더 이상 install root 에 추가하지 않는다.
     private static func discoverKalsaeRoots(cwd: URL, fm: FileManager) -> [URL] {
         var roots: [URL] = []
+        // Windows 파일시스템은 case-insensitive 이고, URL 식별성 비교는 trailing
+        // slash / 대소문자 차이로 같은 디렉터리를 다른 항목으로 본다. 정규화된
+        // 경로 문자열 기준으로 dedup 한다.
+        var seen: Set<String> = []
         let marker = ["Sources", "CKalsaeWV2", "include"]
 
         func hasMarker(_ url: URL) -> Bool {
@@ -132,7 +124,14 @@ public enum KSWebView2Provisioner {
             return fm.fileExists(atPath: probe.path, isDirectory: &isDir) && isDir.boolValue
         }
 
-        if hasMarker(cwd) { roots.append(cwd) }
+        func append(_ url: URL) {
+            let key = url.standardizedFileURL.path.lowercased()
+            if seen.insert(key).inserted {
+                roots.append(url)
+            }
+        }
+
+        if hasMarker(cwd) { append(cwd) }
 
         let checkouts =
             cwd
@@ -144,7 +143,7 @@ public enum KSWebView2Provisioner {
             options: [.skipsHiddenFiles])
         {
             for child in children where hasMarker(child) {
-                roots.append(child)
+                append(child)
             }
         }
 
@@ -153,10 +152,8 @@ public enum KSWebView2Provisioner {
         // SwiftPM 이 resolve 후 작성하는 `.build/workspace-state.json` 에
         // 의존성 별 on-disk 경로가 들어 있으므로 그 경로들도 marker 검사 대상에
         // 추가한다. 파일이 없거나 스키마가 달라도 best-effort 로 무시한다.
-        for candidate in workspaceStateLocalPaths(cwd: cwd, fm: fm) {
-            if hasMarker(candidate), !roots.contains(candidate) {
-                roots.append(candidate)
-            }
+        for candidate in workspaceStateLocalPaths(cwd: cwd, fm: fm) where hasMarker(candidate) {
+            append(candidate)
         }
         return roots
     }
@@ -174,9 +171,14 @@ public enum KSWebView2Provisioner {
         else {
             return []
         }
-        guard let object = json["object"] as? [String: Any],
-            let deps = object["dependencies"] as? [[String: Any]]
-        else {
+        // SwiftPM <= 6.0 은 `object.dependencies` 로 래핑하지만, 6.1+ (workspace
+        // state schema v7+) 는 top-level `dependencies` 로 평탄화한다. 두 스키마
+        // 모두 best-effort 로 시도한다.
+        let deps: [[String: Any]] =
+            (json["object"] as? [String: Any])?["dependencies"] as? [[String: Any]]
+            ?? json["dependencies"] as? [[String: Any]]
+            ?? []
+        if deps.isEmpty {
             return []
         }
         var paths: [URL] = []
@@ -240,44 +242,143 @@ public enum KSWebView2Provisioner {
             .appendingPathComponent("WebView2Loader.dll")
     }
 
-    /// `scriptRoot/Scripts/fetch-webview2.ps1` 를 실행해 `installRoot/Vendor/WebView2/` 를 채운다.
-    /// 두 인자가 다른 디렉터리일 수 있다 (컨슈머 cwd 에 설치할 때 스크립트는 Kalsae 체크아웃에서 가져옴).
+    /// `installRoot/Sources/CKalsaeWV2/Vendor/WebView2/` 에 NuGet 패키지
+    /// `Microsoft.Web.WebView2` 의 헤더 + 런타임 DLL 을 설치한다.
+    /// 이전에는 `Scripts/fetch-webview2.ps1` 을 PowerShell 로 실행했으나,
+    /// PowerShell 의존성을 제거하기 위해 Swift 로 인라인 포팅됨.
+    /// (`fetch-webview2.ps1` 은 사용자 수동 실행 경로로 그대로 남아 있다.)
     private static func fetchWebView2(
-        scriptRoot: URL,
         installRoot: URL,
         sdkVersion: String,
         fm: FileManager
     ) throws {
-        let candidate =
-            scriptRoot
-            .appendingPathComponent("Scripts")
-            .appendingPathComponent("fetch-webview2.ps1")
-        guard fm.fileExists(atPath: candidate.path) else {
-            throw ShellError.commandNotFound(
-                "Scripts/fetch-webview2.ps1 (looked in \(candidate.path))")
+        // 1) 버전 결정 — "latest" 면 NuGet flat-container index 에서 마지막 stable 추출.
+        var resolvedVersion = sdkVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        if resolvedVersion.isEmpty || resolvedVersion.lowercased() == "latest" {
+            resolvedVersion = try fetchLatestWebView2Version()
         }
 
-        let shellName: String
-        if findExecutable(named: "pwsh") != nil {
-            shellName = "pwsh"
-        } else if findExecutable(named: "powershell") != nil {
-            shellName = "powershell"
-        } else {
-            throw ShellError.shellUnavailable
+        print("⬇️  WebView2 SDK \(resolvedVersion) — fetching into \(installRoot.path)...")
+
+        let dest =
+            installRoot
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("CKalsaeWV2")
+            .appendingPathComponent("Vendor")
+            .appendingPathComponent("WebView2")
+
+        // 2) .nupkg 다운로드 (zip).
+        let nupkgURLString =
+            "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/"
+            + "\(resolvedVersion)/microsoft.web.webview2.\(resolvedVersion).nupkg"
+        guard let nupkgURL = URL(string: nupkgURLString) else {
+            throw ShellError.message("Failed to construct NuGet URL: \(nupkgURLString)")
+        }
+        let tmpRoot = fm.temporaryDirectory
+            .appendingPathComponent("wv2-\(resolvedVersion)-\(UUID().uuidString)")
+        try fm.createDirectory(at: tmpRoot, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: tmpRoot) }
+
+        let nupkgPath = tmpRoot.appendingPathExtension("zip")
+        let data: Data
+        do {
+            data = try Data(contentsOf: nupkgURL)
+        } catch {
+            throw ShellError.message(
+                "Failed to download \(nupkgURLString): \(error.localizedDescription)")
+        }
+        try data.write(to: nupkgPath, options: [.atomic])
+
+        // 3) 추출.
+        let extractDir = tmpRoot.appendingPathComponent("extracted")
+        try fm.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        do {
+            try KSZipArchiver.unzip(archive: nupkgPath, to: extractDir)
+        } catch {
+            throw ShellError.message(
+                "Failed to extract WebView2 nupkg: \(error)")
         }
 
-        var args = [
-            "-NoProfile", "-ExecutionPolicy", "Bypass",
-            "-File", candidate.path,
-            "-ProjectRoot", installRoot.path,
-        ]
-        let trimmed = sdkVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty, trimmed.lowercased() != "latest" {
-            args += ["-Version", trimmed]
+        // 4) 기존 dest 제거 후 재생성.
+        if fm.fileExists(atPath: dest.path) {
+            try fm.removeItem(at: dest)
+        }
+        try fm.createDirectory(at: dest, withIntermediateDirectories: true)
+
+        // 5) 헤더 복사.
+        let includeSrc = extractDir
+            .appendingPathComponent("build")
+            .appendingPathComponent("native")
+            .appendingPathComponent("include")
+        let includeDst = dest
+            .appendingPathComponent("build")
+            .appendingPathComponent("native")
+            .appendingPathComponent("include")
+        try fm.createDirectory(at: includeDst, withIntermediateDirectories: true)
+        if let entries = try? fm.contentsOfDirectory(at: includeSrc, includingPropertiesForKeys: nil) {
+            for src in entries {
+                let dst = includeDst.appendingPathComponent(src.lastPathComponent)
+                if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+                try fm.copyItem(at: src, to: dst)
+            }
         }
 
-        print("⬇️  WebView2 SDK not found in \(installRoot.path) — fetching...")
-        try shell(command: shellName, arguments: args, in: installRoot.path)
+        // 6) 런타임 DLL 복사 (arch 별).
+        for arch in ["win-x64", "win-x86", "win-arm64"] {
+            let srcDLL = extractDir
+                .appendingPathComponent("runtimes")
+                .appendingPathComponent(arch)
+                .appendingPathComponent("native")
+                .appendingPathComponent("WebView2Loader.dll")
+            guard fm.fileExists(atPath: srcDLL.path) else { continue }
+            let dstDir = dest
+                .appendingPathComponent("runtimes")
+                .appendingPathComponent(arch)
+                .appendingPathComponent("native")
+            try fm.createDirectory(at: dstDir, withIntermediateDirectories: true)
+            let dstDLL = dstDir.appendingPathComponent("WebView2Loader.dll")
+            if fm.fileExists(atPath: dstDLL.path) { try fm.removeItem(at: dstDLL) }
+            try fm.copyItem(at: srcDLL, to: dstDLL)
+        }
+
+        // 7) 라이선스.
+        for name in ["LICENSE.txt", "THIRD_PARTY_NOTICES.txt"] {
+            let src = extractDir.appendingPathComponent(name)
+            guard fm.fileExists(atPath: src.path) else { continue }
+            let dst = dest.appendingPathComponent(name)
+            if fm.fileExists(atPath: dst.path) { try fm.removeItem(at: dst) }
+            try fm.copyItem(at: src, to: dst)
+        }
+
+        // 8) 버전 마커.
+        try Data(resolvedVersion.utf8).write(
+            to: dest.appendingPathComponent("VERSION.txt"), options: [.atomic])
+    }
+
+    /// NuGet flat-container index 에서 마지막 stable (prerelease 제외) 버전 추출.
+    private static func fetchLatestWebView2Version() throws -> String {
+        let indexURLString =
+            "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/index.json"
+        guard let indexURL = URL(string: indexURLString) else {
+            throw ShellError.message("Failed to construct NuGet index URL.")
+        }
+        let data: Data
+        do {
+            data = try Data(contentsOf: indexURL)
+        } catch {
+            throw ShellError.message(
+                "Failed to query NuGet for latest WebView2 version: \(error.localizedDescription)")
+        }
+        guard
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            let versions = json["versions"] as? [String]
+        else {
+            throw ShellError.message("Unexpected NuGet index schema.")
+        }
+        guard let last = versions.last(where: { !$0.contains("-") }) else {
+            throw ShellError.message("No stable WebView2 version found on NuGet.")
+        }
+        return last
     }
 
     /// `WebView2Loader.dll` 을 `cwd/.build/<configuration>/` 에 복사한다.
@@ -324,22 +425,38 @@ public enum KSWebView2Provisioner {
             }
 
             // 후보 출력 디렉터리:
-            //   .build/<configuration>/                       (구버전 SwiftPM / 일부 호스트)
             //   .build/<triple>/<configuration>/              (Windows: x86_64-unknown-windows-msvc 등)
-            // 둘 다 EXE 가 만들어질 수 있으므로 두 곳 모두 staging 한다.
+            //   .build/<configuration>/                       (SwiftPM 가 빌드 후 만드는 symlink)
             //
-            // 알려진 Windows MSVC triple 만 직접 검사해 `.build/` 전체
-            // 순회의 fileExists 호출을 절감한다 (RFC-002 §3.3). 향후
-            // Swift 툴체인 이 새 triple naming 을 도입하면 행 추가 필요.
-            var dests: [URL] = [
-                cwd.appendingPathComponent(".build").appendingPathComponent(configuration)
-            ]
+            // 신선한 체크아웃에서는 두 경로 모두 존재하지 않는다.
+            // `.build/<configuration>/` 를 미리 *실제 디렉터리*로 생성하면 SwiftPM 이
+            // 빌드 후 symlink 를 만들 자리를 차지해버려, EXE 는 `.build/<triple>/<configuration>/`
+            // 에 만들어지고 DLL 은 분리된 실 디렉터리에 남아 `LoadLibraryW("WebView2Loader.dll")`
+            // 가 0x8007007E 로 실패한다. 따라서 triple 디렉터리만 보장 생성하고,
+            // `.build/<configuration>/` 는 이미 존재할 때(symlink 또는 dir) 만 추가 staging.
+            //
+            // 현재 호스트 triple 을 컴파일타임 arch 매크로로 결정한다 — CLI 자체가
+            // 컨슈머 프로젝트와 같은 아키텍처로 빌드되기 때문에 일반적으로 일치한다.
+            #if arch(arm64)
+                let hostTriple = "aarch64-unknown-windows-msvc"
+            #else
+                let hostTriple = "x86_64-unknown-windows-msvc"
+            #endif
+
             let buildDir = cwd.appendingPathComponent(".build")
+            var dests: [URL] = [
+                buildDir
+                    .appendingPathComponent(hostTriple)
+                    .appendingPathComponent(configuration)
+            ]
+
+            // 다른 알려진 triple 디렉터리가 이미 존재하면 그곳에도 staging 한다
+            // (예: 동일 체크아웃을 x64/arm64 둘 다로 빌드한 경우).
             let knownTriples = [
                 "x86_64-unknown-windows-msvc",
                 "aarch64-unknown-windows-msvc",
             ]
-            for triple in knownTriples {
+            for triple in knownTriples where triple != hostTriple {
                 let triplePath =
                     buildDir
                     .appendingPathComponent(triple)
@@ -352,6 +469,13 @@ public enum KSWebView2Provisioner {
                 }
             }
 
+            // `.build/<configuration>/` 가 이미 symlink/실 dir 로 존재하면 함께 stage.
+            // (존재하지 않으면 새로 만들지 않는다 — SwiftPM 의 symlink 생성을 방해하지 않기 위함.)
+            let legacyDest = buildDir.appendingPathComponent(configuration)
+            if fm.fileExists(atPath: legacyDest.path) {
+                dests.append(legacyDest)
+            }
+
             for dest in dests {
                 do {
                     try fm.createDirectory(
@@ -362,12 +486,18 @@ public enum KSWebView2Provisioner {
                 }
                 let dst = dest.appendingPathComponent("WebView2Loader.dll")
 
-                // 동일 크기면 스킵.
+                // 크기 + mtime 으로 동일성 판단. 크기만 비교하면 NuGet 패키지
+                // 업데이트 후 우연히 같은 크기인 새 DLL 을 stale 사본으로 잘못
+                // 보존할 수 있어 디버깅이 어려워진다. dest mtime 이 source mtime
+                // 이상이고 크기까지 같을 때만 skip.
                 if let srcAttrs = try? fm.attributesOfItem(atPath: source.path),
                     let dstAttrs = try? fm.attributesOfItem(atPath: dst.path),
                     let sSize = srcAttrs[.size] as? NSNumber,
                     let dSize = dstAttrs[.size] as? NSNumber,
-                    sSize == dSize
+                    sSize == dSize,
+                    let sMtime = srcAttrs[.modificationDate] as? Date,
+                    let dMtime = dstAttrs[.modificationDate] as? Date,
+                    dMtime >= sMtime
                 {
                     continue
                 }

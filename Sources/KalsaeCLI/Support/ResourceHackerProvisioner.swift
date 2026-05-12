@@ -10,15 +10,14 @@
 /// 이 프로비저너는 `WebView2Provisioner` 와 같은 패턴으로:
 /// - 기본 사용자 캐시 (`%LOCALAPPDATA%\Kalsae\Tools\ResourceHacker\`) 또는
 ///   PATH 에서 ResourceHacker.exe 를 찾는다.
-/// - 없을 때 `Scripts/fetch-resourcehacker.ps1` 을 실행해 자동으로 다운로드.
+/// - 없을 때 angusj.com 공식 zip 을 다운로드해 캐시에 추출한다 (인-프로세스 Swift).
 /// - 결과 경로를 반환한다 (post-processor 에 명시적으로 전달).
 ///
 /// Windows 외 호스트에서는 모든 진입점이 no-op 이며 `nil` 을 반환한다.
 public import Foundation
 
 public enum KSResourceHackerProvisioner {
-    /// 기본 사용자 캐시 경로.
-    /// `Scripts/fetch-resourcehacker.ps1` 의 기본값과 일치해야 한다.
+    /// 기본 사용자 캐시 경로 (`%LOCALAPPDATA%\Kalsae\Tools\ResourceHacker\ResourceHacker.exe`).
     public static func defaultCachePath() -> URL? {
         #if os(Windows)
             let env = ProcessInfo.processInfo.environment
@@ -54,7 +53,9 @@ public enum KSResourceHackerProvisioner {
     }
 
     /// ResourceHacker.exe 가 사용 가능하도록 보장한다. 이미 있으면 그 경로를 반환,
-    /// 없고 `autoFetch` 가 true 면 `Scripts/fetch-resourcehacker.ps1` 을 실행해 설치 후 반환.
+    /// 없고 `autoFetch` 가 true 면 직접 다운로드 + 추출해 설치 후 반환.
+    /// 이전에는 `Scripts/fetch-resourcehacker.ps1` 을 PowerShell 로 실행했으나,
+    /// PowerShell 의존성을 제거하기 위해 Swift 로 인라인 포팅됨.
     /// `autoFetch` 가 false 이고 발견 실패 시 nil 을 반환한다 (호출자가 경고/에러 처리).
     /// Windows 외 호스트에서는 항상 nil.
     public static func ensure(
@@ -66,64 +67,76 @@ public enum KSResourceHackerProvisioner {
             if let existing = locate(fm: fm) { return existing }
             guard autoFetch else { return nil }
 
-            // fetch-resourcehacker.ps1 는 Kalsae 체크아웃 (Sources/CKalsaeWV2/include
-            // 마커) 안에만 존재한다. 컨슈머 cwd → SwiftPM 체크아웃 순으로 탐색한다.
-            guard let scriptRoot = discoverKalsaeRoot(cwd: cwd, fm: fm) else {
-                return nil
-            }
-            let script =
-                scriptRoot
-                .appendingPathComponent("Scripts")
-                .appendingPathComponent("fetch-resourcehacker.ps1")
-            guard fm.fileExists(atPath: script.path) else { return nil }
-
-            let shellName: String
-            if findExecutable(named: "pwsh") != nil {
-                shellName = "pwsh"
-            } else if findExecutable(named: "powershell") != nil {
-                shellName = "powershell"
-            } else {
-                return nil
-            }
-
             print("⬇️  ResourceHacker not found — fetching for --standalone embed...")
-            try shell(
-                command: shellName,
-                arguments: [
-                    "-NoProfile", "-ExecutionPolicy", "Bypass",
-                    "-File", script.path,
-                ],
-                in: cwd.path)
+            try downloadAndInstall(fm: fm)
             return locate(fm: fm)
         #else
             return nil
         #endif
     }
 
-    private static func discoverKalsaeRoot(cwd: URL, fm: FileManager) -> URL? {
-        let marker = ["Scripts", "fetch-resourcehacker.ps1"]
-
-        func hasMarker(_ url: URL) -> Bool {
-            var probe = url
-            for component in marker { probe.appendPathComponent(component) }
-            return fm.fileExists(atPath: probe.path)
-        }
-
-        if hasMarker(cwd) { return cwd }
-
-        let checkouts =
-            cwd
-            .appendingPathComponent(".build")
-            .appendingPathComponent("checkouts")
-        if let children = try? fm.contentsOfDirectory(
-            at: checkouts,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles])
-        {
-            for child in children where hasMarker(child) {
-                return child
+    #if os(Windows)
+        /// Resource Hacker 공식 zip 을 다운로드해 `defaultCachePath()` 위치에 추출.
+        /// 추출된 zip 이 하위 디렉터리에 ResourceHacker.exe 를 포함할 수 있어
+        /// 발견되면 캐시 루트로 끌어올린다.
+        private static func downloadAndInstall(fm: FileManager) throws {
+            guard let cache = defaultCachePath() else {
+                throw ShellError.message("LOCALAPPDATA not set; cannot locate cache dir.")
             }
+            let destDir = cache.deletingLastPathComponent()
+            try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
+
+            let downloadURLString = "https://www.angusj.com/resourcehacker/resource_hacker.zip"
+            guard let downloadURL = URL(string: downloadURLString) else {
+                throw ShellError.message("Failed to construct ResourceHacker URL.")
+            }
+
+            let tmpDir = fm.temporaryDirectory
+                .appendingPathComponent("rh-\(UUID().uuidString)")
+            try fm.createDirectory(at: tmpDir, withIntermediateDirectories: true)
+            defer { try? fm.removeItem(at: tmpDir) }
+
+            let zipPath = tmpDir.appendingPathComponent("resource_hacker.zip")
+            print("⬇️  Downloading Resource Hacker from \(downloadURLString)...")
+            let data: Data
+            do {
+                data = try Data(contentsOf: downloadURL)
+            } catch {
+                throw ShellError.message(
+                    "Failed to download ResourceHacker: \(error.localizedDescription)")
+            }
+            try data.write(to: zipPath, options: [.atomic])
+
+            do {
+                try KSZipArchiver.unzip(archive: zipPath, to: destDir)
+            } catch {
+                throw ShellError.message("Failed to extract ResourceHacker zip: \(error)")
+            }
+
+            // 만약 zip 안에 하위 디렉터리로 nested 되어 있으면 평탄화.
+            if !fm.fileExists(atPath: cache.path) {
+                if let found = locateExe(in: destDir, fm: fm) {
+                    try fm.copyItem(at: found, to: cache)
+                }
+            }
+            guard fm.fileExists(atPath: cache.path) else {
+                throw ShellError.message(
+                    "ResourceHacker.exe not found after extraction in \(destDir.path).")
+            }
+            print("✓  ResourceHacker installed: \(cache.path)")
         }
-        return nil
-    }
+
+        /// `root` 하위에서 ResourceHacker.exe 를 재귀 탐색.
+        private static func locateExe(in root: URL, fm: FileManager) -> URL? {
+            guard let enumerator = fm.enumerator(
+                at: root, includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles])
+            else { return nil }
+            for case let url as URL in enumerator
+            where url.lastPathComponent.lowercased() == "resourcehacker.exe" {
+                return url
+            }
+            return nil
+        }
+    #endif
 }

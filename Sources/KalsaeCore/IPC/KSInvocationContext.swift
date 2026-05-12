@@ -16,4 +16,11 @@ public enum KSInvocationContext {
     /// 브리지가 없는 컨텍스트(예: 직접 `registry.dispatch` 호출)에서는
     /// `nil`이다.
     @TaskLocal public static var windowLabel: String? = nil
+
+    /// 현재 디스패치 중인 명령의 등록 이름.
+    ///
+    /// `KSCommandRegistry.dispatch` 가 핸들러 호출 직전에 태스크 로컬로
+    /// 설정한다. 핸들러 내부에서 자신의 명령 이름을 알아야 하는 로깅 /
+    /// 메트릭 코드가 사용할 수 있다. 디스패치 외부 컨텍스트에서는 `nil`.
+    @TaskLocal public static var commandName: String? = nil
 }

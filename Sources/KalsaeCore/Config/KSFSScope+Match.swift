@@ -1,4 +1,7 @@
 public import Foundation
+#if os(Windows)
+    internal import WinSDK
+#endif
 
 extension KSFSScope {
     /// `$APP`, `$HOME`, `$DOCS`, `$TEMP` 치환 후의 경로 문자열 확장 결과.
@@ -61,14 +64,118 @@ extension KSFSScope {
         let candidate = Self.normalizeSeparators(path)
         guard matchesPatterns(candidate, in: ctx) else { return false }
 
-        // `resolvingSymlinksInPath()`는 존재하는 경로 구간만 realpath 스타일로
-        // 정규화하고, 아직 생성되지 않은 꼬리 경로는 그대로 남긴다. 따라서
-        // 읽기/쓰기/생성 모두에서 "허용된 디렉터리 내부처럼 보이지만 symlink를
-        // 통해 외부로 탈출하는" 케이스를 best-effort로 차단할 수 있다.
-        let resolvedURL = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
-        let realPath = Self.normalizeSeparators(resolvedURL.path)
+        // 존재하는 경로 구간만 realpath/final-path 스타일로 정규화하고, 아직
+        // 생성되지 않은 꼬리 경로는 그대로 남긴다. 따라서 읽기/쓰기/생성
+        // 모두에서 "허용된 디렉터리 내부처럼 보이지만 symlink를 통해 외부로
+        // 탈출하는" 케이스를 best-effort로 차단할 수 있다.
+        //
+        // Windows: Foundation 의 `resolvingSymlinksInPath()` 는 NTFS junction
+        // 과 일부 reparse point 를 불완전하게 해석하므로 `CreateFileW` +
+        // `GetFinalPathNameByHandleW` 로 직접 실제 경로를 구한다.
+        let realPath = Self.normalizeSeparators(Self.resolveRealPath(path))
         return matchesPatterns(realPath, in: ctx)
     }
+
+    /// 존재하는 경로 구간을 realpath/final-path 로 정규화하고 미존재 꼬리는
+    /// 그대로 보존한다. 플랫폼별로 구현이 다르다.
+    static func resolveRealPath(_ path: String) -> String {
+        #if os(Windows)
+            return resolveWindowsFinalPath(path)
+        #else
+            return URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
+        #endif
+    }
+
+    #if os(Windows)
+        /// Windows 전용 final-path 해석.
+        ///
+        /// 1. 가장 깊은 **존재하는** 부모 디렉터리/파일을 찾는다.
+        /// 2. `CreateFileW(FILE_FLAG_BACKUP_SEMANTICS)` 로 핸들을 얻는다
+        ///    (디렉터리도 열 수 있도록 BACKUP_SEMANTICS 필수).
+        /// 3. `GetFinalPathNameByHandleW(VOLUME_NAME_DOS)` 로 reparse point /
+        ///    junction / symlink 가 모두 해석된 normalized DOS path 를 얻는다.
+        /// 4. `\\?\` 또는 `\\?\UNC\` prefix 를 제거한다.
+        /// 5. 미존재 꼬리 컴포넌트를 다시 append.
+        ///
+        /// 어떤 단계든 실패하면 Foundation fallback (`resolvingSymlinksInPath`)
+        /// 으로 떨어진다.
+        static func resolveWindowsFinalPath(_ path: String) -> String {
+            let fm = FileManager.default
+            let fallback = {
+                URL(fileURLWithPath: path)
+                    .resolvingSymlinksInPath()
+                    .standardizedFileURL.path
+            }
+            // 1) 가장 깊은 존재하는 prefix 검색. 단, drive root(`C:\`) 까지
+            //    올라가버리면 Foundation 의 lexical 정규화와 결과가 갈라져
+            //    fake 경로(예: synthetic `/home/u/...`) 매칭이 깨진다. 따라서
+            //    leaf 또는 직계 부모가 존재할 때만 Win32 해석을 수행하고,
+            //    그렇지 않으면 Foundation fallback 으로 떨어진다.
+            var existing = path
+            var tail: [String] = []
+            if !fm.fileExists(atPath: existing) {
+                let parentURL = URL(fileURLWithPath: existing).deletingLastPathComponent()
+                let parentPath = parentURL.path
+                guard !parentPath.isEmpty,
+                    parentPath != existing,
+                    fm.fileExists(atPath: parentPath)
+                else {
+                    return fallback()
+                }
+                tail.insert(URL(fileURLWithPath: existing).lastPathComponent, at: 0)
+                existing = parentPath
+            }
+
+            // 2)~3) CreateFileW + GetFinalPathNameByHandleW.
+            let resolvedExisting: String? = existing.withCString(encodedAs: UTF16.self) {
+                wp -> String? in
+                let shareMode = DWORD(
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                let handle = CreateFileW(
+                    wp,
+                    0,  // 메타데이터만 필요 — 접근 권한 0.
+                    shareMode,
+                    nil,
+                    DWORD(OPEN_EXISTING),
+                    DWORD(FILE_FLAG_BACKUP_SEMANTICS),
+                    nil)
+                guard let h = handle, h != INVALID_HANDLE_VALUE else { return nil }
+                defer { CloseHandle(h) }
+
+                // VOLUME_NAME_DOS(0) | FILE_NAME_NORMALIZED(0) = 0.
+                let flags: DWORD = 0
+                let needed = GetFinalPathNameByHandleW(h, nil, 0, flags)
+                guard needed > 0 else { return nil }
+                var buf = [WCHAR](repeating: 0, count: Int(needed) + 1)
+                let written = buf.withUnsafeMutableBufferPointer { bp -> DWORD in
+                    GetFinalPathNameByHandleW(h, bp.baseAddress, DWORD(bp.count), flags)
+                }
+                guard written > 0, Int(written) < buf.count else { return nil }
+                return String(decoding: buf.prefix(Int(written)), as: UTF16.self)
+            }
+
+            guard var final = resolvedExisting else {
+                return fallback()
+            }
+
+            // 4) prefix 제거. `\\?\UNC\server\share` → `\\server\share`,
+            //    `\\?\C:\dir` → `C:\dir`.
+            if final.hasPrefix(#"\\?\UNC\"#) {
+                final = #"\\"# + String(final.dropFirst(#"\\?\UNC\"#.count))
+            } else if final.hasPrefix(#"\\?\"#) {
+                final = String(final.dropFirst(#"\\?\"#.count))
+            }
+
+            // 5) 미존재 꼬리 다시 append.
+            for component in tail {
+                if !final.hasSuffix(#"\"#) {
+                    final.append(#"\"#)
+                }
+                final.append(component)
+            }
+            return final
+        }
+    #endif
 
     // MARK: - 내부 헬퍼
 

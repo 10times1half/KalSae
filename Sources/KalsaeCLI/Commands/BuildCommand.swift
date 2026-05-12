@@ -100,7 +100,7 @@ struct BuildCommand: ParsableCommand {
     @Flag(
         name: .long, inversion: .prefixedNo,
         help:
-            "Automatically run Scripts/fetch-resourcehacker.ps1 when --standalone is on and ResourceHacker is missing (Windows only)."
+            "Automatically download ResourceHacker when --standalone is on and it is missing (Windows only)."
     )
     var autoFetchResourceHacker: Bool = true
 
@@ -595,7 +595,7 @@ struct BuildCommand: ParsableCommand {
 
             // standalone 빌드면 ResourceHacker 가용성을 보장 (없으면 자동 fetch).
             // PATH 또는 사용자 캐시(`%LOCALAPPDATA%\Kalsae\Tools\ResourceHacker\`) 에서
-            // 찾고, 없으면 Scripts/fetch-resourcehacker.ps1 을 실행한다.
+            // 찾고, 없으면 angusj.com 에서 직접 zip 을 받아 캐시에 설치한다.
             let resourceHackerPath: URL? = {
                 guard standalone else { return nil }
                 do {

@@ -7,6 +7,10 @@ import KalsaeCore
     import FoundationNetworking
 #endif
 
+#if os(Windows)
+    import WinSDK
+#endif
+
 /// `Kalsae dev` — 개발 모드로 프로젝트를 빌드하고 실행한다.
 struct DevCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -375,12 +379,20 @@ struct DevCommand: ParsableCommand {
     /// 기본 브라우저로 URL 열기. 실패는 경고만 출력하고 무시.
     private func openInBrowser(_ url: String) {
         #if os(Windows)
-            // PowerShell `Start-Process` 가 가장 확실하다. cmd `start` 는 첫
-            // 인자를 윈도우 타이틀로 해석할 수 있어 회피한다.
-            do {
-                try shell(command: "powershell", arguments: ["-NoProfile", "-Command", "Start-Process", "'\(url)'"])
-            } catch {
-                print("⚠  Failed to open browser: \(error)")
+            // Win32 `ShellExecuteW` 가 PATH 의존성 없이 기본 브라우저(또는
+            // 등록된 URL 핸들러)를 직접 띄운다. PowerShell `Start-Process`
+            // 의존성을 제거.
+            //
+            // ShellExecuteW 는 성공 시 > 32 인 HINSTANCE 를 반환한다.
+            let rawHandle: Int = url.withCString(encodedAs: UTF16.self) { wURL in
+                "open".withCString(encodedAs: UTF16.self) { wVerb in
+                    let h = ShellExecuteW(
+                        nil, wVerb, wURL, nil, nil, Int32(SW_SHOWNORMAL))
+                    return Int(bitPattern: UnsafeRawPointer(h))
+                }
+            }
+            if rawHandle <= 32 {
+                print("⚠  Failed to open browser (ShellExecuteW returned \(rawHandle)).")
             }
         #elseif os(macOS)
             do { try shell(command: "open", arguments: [url]) } catch {

@@ -270,6 +270,13 @@ struct PackagerWindowsTests {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
 
+        // KSKalsaeCheckoutDetector 가 테스트 프로세스의 부모 Kalsae 체크아웃을
+        // 찾아 fallback #3 경로에서 실제 Vendor/WebView2/.../WebView2Loader.dll
+        // 을 발견하면 warning 이 추가되지 않아 본 테스트의 의도(missing 시 warn)
+        // 가 깨진다. 환경변수로 auto-detect 를 비활성화한다.
+        _ = putenv("KALSAE_DISABLE_AUTODETECT_PATH=1")
+        defer { _ = putenv("KALSAE_DISABLE_AUTODETECT_PATH=") }
+
         let exe = work.appendingPathComponent("App.exe")
         try writeText("MZ", to: exe)
         let config = work.appendingPathComponent("Kalsae.json")

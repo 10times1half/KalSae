@@ -66,6 +66,45 @@ public enum KSZipArchiver {
         try runArchiver(directory: directory, archive: archive, keepParent: true)
     }
 
+    /// `archive` zip 의 내용을 `destination` 디렉터리에 추출한다.
+    /// `destination` 은 이미 존재해야 한다 (없으면 생성). 기존 파일은 덮어쓴다.
+    ///
+    /// Windows: 내장 `tar.exe` (libarchive) 를 사용 — PowerShell `Expand-Archive`
+    ///   를 대체. macOS: `/usr/bin/ditto`. Linux: `/usr/bin/unzip`.
+    public static func unzip(archive: URL, to destination: URL) throws {
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: archive.path) else {
+            throw KSZipArchiverError.sourceMissing(archive)
+        }
+        try fm.createDirectory(at: destination, withIntermediateDirectories: true)
+
+        #if os(Windows)
+            let toolPath = "C:\\Windows\\System32\\tar.exe"
+            guard fm.fileExists(atPath: toolPath) else {
+                throw KSZipArchiverError.toolNotFound(toolPath)
+            }
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: toolPath)
+            p.arguments = ["-x", "-f", archive.path, "-C", destination.path]
+            try runAndCheck(p, tool: "tar")
+        #elseif os(macOS)
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+            // ditto -xk <src.zip> <destDir>
+            p.arguments = ["-x", "-k", archive.path, destination.path]
+            try runAndCheck(p, tool: "ditto")
+        #else
+            let toolPath = "/usr/bin/unzip"
+            guard fm.fileExists(atPath: toolPath) else {
+                throw KSZipArchiverError.toolNotFound(toolPath)
+            }
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: toolPath)
+            p.arguments = ["-o", "-q", archive.path, "-d", destination.path]
+            try runAndCheck(p, tool: "unzip")
+        #endif
+    }
+
     // MARK: - Implementation
 
     private static func runArchiver(

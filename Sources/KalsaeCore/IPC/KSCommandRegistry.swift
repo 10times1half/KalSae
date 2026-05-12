@@ -89,6 +89,8 @@ public actor KSCommandRegistry {
         guard let handler = handlers[name] else {
             return .failure(.commandNotFound(name))
         }
-        return await handler(args)
+        return await KSInvocationContext.$commandName.withValue(name) {
+            await handler(args)
+        }
     }
 }

@@ -84,7 +84,11 @@ struct KSFSScopeMatchTests {
         defer { try? fileManager.removeItem(at: root) }
 
         let link = allowed.appendingPathComponent("escape")
-        try fileManager.createSymbolicLink(at: link, withDestinationURL: outside)
+        // Windows: symlink 생성에는 Developer Mode 또는 관리자 권한이 필요.
+        // 환경이 충족되지 않으면 setup 자체가 실패하므로 silent skip 한다.
+        guard
+            (try? fileManager.createSymbolicLink(at: link, withDestinationURL: outside)) != nil
+        else { return }
 
         let scope = KSFSScope(allow: ["\(allowed.path)/**"])
         let context = KSFSScope.ExpansionContext(
@@ -107,7 +111,10 @@ struct KSFSScopeMatchTests {
         defer { try? fileManager.removeItem(at: root) }
 
         let link = allowed.appendingPathComponent("alias")
-        try fileManager.createSymbolicLink(at: link, withDestinationURL: nested)
+        // Windows: symlink 생성에는 Developer Mode 또는 관리자 권한이 필요.
+        guard
+            (try? fileManager.createSymbolicLink(at: link, withDestinationURL: nested)) != nil
+        else { return }
 
         let scope = KSFSScope(allow: ["\(allowed.path)/**"])
         let context = KSFSScope.ExpansionContext(
