@@ -72,11 +72,11 @@ struct KSFSScopeMatchTests {
         let fm = FileManager.default
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("kalsae-fs-scope-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: root) }
         let allowed = root.appendingPathComponent("allowed")
         let outside = root.appendingPathComponent("outside")
         try fm.createDirectory(at: allowed, withIntermediateDirectories: true)
         try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
 
         let link = allowed.appendingPathComponent("escape")
         try fm.createSymbolicLink(at: link, withDestinationURL: outside)
@@ -99,10 +99,10 @@ struct KSFSScopeMatchTests {
         let fm = FileManager.default
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("kalsae-fs-scope-\(UUID().uuidString)")
-        defer { try? fm.removeItem(at: root) }
         let allowed = root.appendingPathComponent("allowed")
         let nested = allowed.appendingPathComponent("nested")
         try fm.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
 
         let link = allowed.appendingPathComponent("alias")
         try fm.createSymbolicLink(at: link, withDestinationURL: nested)
