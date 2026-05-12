@@ -64,12 +64,8 @@ extension KSFSScope {
         // 정규화하고, 아직 생성되지 않은 꼬리 경로는 그대로 남긴다. 따라서
         // 읽기/쓰기/생성 모두에서 "허용된 디렉터리 내부처럼 보이지만 symlink를
         // 통해 외부로 탈출하는" 케이스를 best-effort로 차단할 수 있다.
-        let resolved =
-            URL(fileURLWithPath: path)
-            .resolvingSymlinksInPath()
-            .standardizedFileURL
-            .path
-        let realPath = Self.normalizeSeparators(resolved)
+        let resolvedURL = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL
+        let realPath = Self.normalizeSeparators(resolvedURL.path)
         return matchesPatterns(realPath, in: ctx)
     }
 
