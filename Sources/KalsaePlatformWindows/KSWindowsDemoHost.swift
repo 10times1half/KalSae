@@ -308,7 +308,10 @@
         }
 
         public func runMessageLoop() -> Int32 {
-            Win32App.shared.runMessageLoop()
+            // 프로세스 수명 동안 UI 스레드를 돌린다 — 마지막 창이 닫히면
+            // WM_DESTROY 핸들러가 PostQuitMessage 를 실행한다.
+            Win32App.autoQuitOnLastWindow = true
+            return Win32App.shared.runMessageLoop()
         }
 
         public func emit(_ event: String, payload: any Encodable) throws(KSError) {

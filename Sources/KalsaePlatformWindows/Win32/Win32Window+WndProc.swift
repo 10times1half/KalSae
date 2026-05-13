@@ -233,7 +233,14 @@
                 hwnd = nil
                 // 마지막 창이 닫힌 경우에만 메시지 루프를 종료한다.
                 // `untrack` 이후에 확인하므로 해제된 창은 집계에 포함되지 않는다.
-                if KSWin32MainWindowTracker.shared.allWindowHWNDs().isEmpty {
+                //
+                // 테스트 환경에서는 개별 창이 테스트마다 닫히지만 UI 스레드
+                // 자체는 프로세스 수명 동안 돌아야 하므로, `Win32App.autoQuitOnLastWindow`
+                // 가 true 일 때만 PostQuitMessage 를 보낸다 (`KSWindowsDemoHost` 에서
+                // 설정).
+                if Win32App.autoQuitOnLastWindow,
+                    KSWin32MainWindowTracker.shared.allWindowHWNDs().isEmpty
+                {
                     PostQuitMessage(0)
                 }
                 return 0

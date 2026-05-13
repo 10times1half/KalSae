@@ -33,10 +33,17 @@ extension KSApp {
     /// "something is listening", which is enough to prefer the dev server.
     ///
     /// 동기 함수다 — `decideServingMode` 가 동기이므로 `DispatchSemaphore` 로
-    /// 결과를 기다린다. `decideServingMode` 는 부팅 1회만 호출되므로 200ms
+    /// 결과를 기다린다. `decideServingMode` 는 부팅 1회만 호출되므로 1.5s
     /// 정도의 가벼운 블로킹은 허용 가능하다.
+    ///
+    /// 타임아웃을 짧게(예: 250ms) 잡으면 Windows 의 Foundation URLSession
+    /// 콜드 스타트(첫 호출 시 CFNetwork/libcurl 초기화)가 그 안에 끝나지
+    /// 못해 `kalsae dev` 가 이미 vite reachability 를 확인한 직후에도 부팅
+    /// 시점 probe 가 false 를 돌려주는 경우가 있다. 결과적으로 dev 서버를
+    /// 두고 가상 호스트로 폴백 → React/Vue/Svelte 프리셋의 리소스 번들에는
+    /// `index.html` 이 없어 흰 화면이 된다. 이를 막기 위해 1.5s 까지 기다린다.
     internal static func isDevServerReachable(
-        _ urlString: String, timeout: TimeInterval = 0.25
+        _ urlString: String, timeout: TimeInterval = 1.5
     ) -> Bool {
         guard let url = URL(string: urlString) else { return false }
         let cfg = URLSessionConfiguration.ephemeral

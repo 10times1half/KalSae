@@ -56,19 +56,21 @@
                 exStyle |= DWORD(WS_EX_LAYERED)
             }
 
-            let hwnd = className.withUTF16Pointer { cls -> HWND? in
-                config.title.withUTF16Pointer { title -> HWND? in
-                    CreateWindowExW(
-                        exStyle,
-                        cls,
-                        title,
-                        style,
-                        Int32(CW_USEDEFAULT), Int32(CW_USEDEFAULT),
-                        Int32(config.width), Int32(config.height),
-                        nil,  // parent
-                        nil,  // menu
-                        Win32App.shared.instanceHandle,
-                        nil)
+            let hwnd: HWND? = Win32App.runOnUIThread {
+                className.withUTF16Pointer { cls -> HWND? in
+                    config.title.withUTF16Pointer { title -> HWND? in
+                        CreateWindowExW(
+                            exStyle,
+                            cls,
+                            title,
+                            style,
+                            Int32(CW_USEDEFAULT), Int32(CW_USEDEFAULT),
+                            Int32(config.width), Int32(config.height),
+                            nil,  // parent
+                            nil,  // menu
+                            Win32App.shared.instanceHandle,
+                            nil)
+                    }
                 }
             }
             guard let hwnd else {
@@ -189,7 +191,10 @@
 
         func close() {
             guard let hwnd else { return }
-            _ = DestroyWindow(hwnd)
+            // UI 스레드에서 실행 — HWND 소유 스레드와 동일해야 안전.
+            Win32App.runOnUIThread {
+                _ = DestroyWindow(hwnd)
+            }
         }
 
         // MARK: - Window state — see `Win32Window+State.swift`.

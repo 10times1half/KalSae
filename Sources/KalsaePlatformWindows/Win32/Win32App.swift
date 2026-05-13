@@ -1,6 +1,7 @@
 #if os(Windows)
     internal import WinSDK
     internal import KalsaeCore
+    internal import Foundation
 
     /// Process-wide Win32 application state: module handle, registered window
     /// class, and the message pump.
@@ -24,10 +25,37 @@
         /// strict concurrency.
         fileprivate var windows: [UInt: Win32Window] = [:]
 
+        /// WNDPROC 가 UI 스레드(non-MainActor)에서 안전하게 윈도우를
+        /// 찾기 위한 nonisolated 미러. `register` / `unregister` 가
+        /// `windows` 와 함께 갱신한다. NSLock 으로 보호.
+        nonisolated(unsafe) fileprivate static var windowsMirror: [UInt: Win32Window] = [:]
+        nonisolated(unsafe) fileprivate static let windowsMirrorLock = NSLock()
+
+        nonisolated static func lookupWindowNonisolated(key: UInt) -> Win32Window? {
+            windowsMirrorLock.lock()
+            defer { windowsMirrorLock.unlock() }
+            return windowsMirror[key]
+        }
+
         /// Optional WM_HOTKEY router. Set by the accelerator backend so that
         /// hot-key messages received by the message pump can be dispatched
         /// to registered handlers. The handler is invoked on the main thread.
-        var hotKeyHandler: ((Int32) -> Void)?
+        ///
+        /// 데디케이트 UI 스레드 도입 후: UI 스레드의 메시지 펌프는
+        /// `hotKeyHandlerNonisolated` 미러를 읽어 호출한다. 두 값은 항상
+        /// 동시에 갱신되어야 한다.
+        var hotKeyHandler: ((Int32) -> Void)? {
+            didSet {
+                Win32App.hotKeyHandlerNonisolated = hotKeyHandler
+            }
+        }
+
+        /// UI 스레드 펌프(`Win32App+UIThread.swift`)가 참조하는 nonisolated
+        /// 미러. `hotKeyHandler` 설정 시 자동 갱신된다. 호출 대상은
+        /// MainActor 격리 클로저이지만, 호출 함수가 즉시 Swift main 큐로
+        /// 디스패치하기만 한다는 contract 하에 nonisolated 컨텍스트에서
+        /// 호출해도 안전하다.
+        nonisolated(unsafe) static var hotKeyHandlerNonisolated: ((Int32) -> Void)?
 
         /// Main / UI thread id captured as early as possible (at
         /// `ensureCOMInitialized` and again at `runMessageLoop`). The shared
@@ -175,11 +203,19 @@
 
         func register(_ window: Win32Window) {
             guard let hwnd = window.hwnd else { return }
-            windows[Self.key(for: hwnd)] = window
+            let k = Self.key(for: hwnd)
+            windows[k] = window
+            Self.windowsMirrorLock.lock()
+            Self.windowsMirror[k] = window
+            Self.windowsMirrorLock.unlock()
         }
 
         func unregister(hwnd: HWND) {
-            windows.removeValue(forKey: Self.key(for: hwnd))
+            let k = Self.key(for: hwnd)
+            windows.removeValue(forKey: k)
+            Self.windowsMirrorLock.lock()
+            Self.windowsMirror.removeValue(forKey: k)
+            Self.windowsMirrorLock.unlock()
         }
 
         /// Looks up the tracked `Win32Window` for an HWND. Used by the
@@ -198,22 +234,22 @@
             UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd)))
         }
 
-        /// Runs the classic Win32 message loop. Returns the exit code supplied
-        /// to `PostQuitMessage`.
+        /// 메인 진입점. 전용 UI 스레드를 보장하고, Swift main 스레드는
+        /// UI 스레드 종료까지 블로킹한다. 종료 코드는 `PostQuitMessage`
+        /// 로 전달된 값을 그대로 반환한다.
+        ///
+        /// 과거에는 이 함수가 직접 `GetMessageW` 루프를 돌았지만, Swift
+        /// `@MainActor` 가 Windows 에서 단일 OS 스레드에 고정되지 않아
+        /// `CreateWindowExW` 호출 스레드와 펌프 스레드가 갈리는 문제가
+        /// 있었다. 자세한 배경은 `Win32App+UIThread.swift` 헤더 주석 참고.
         func runMessageLoop() -> Int32 {
-            Win32App.mainThreadID = GetCurrentThreadId()
-            var msg = MSG()
-            // Swift WinSDK 오버레이는 GetMessageW를 Bool 반환으로 가져와
-            // 드물게 발생하는 -1 에러 케이스를 `false`(WM_QUIT과 동일)로
-            // 단읽한다. 이 점을 수용한다.
-            while GetMessageW(&msg, nil, 0, 0) {
-                if msg.message == UINT(WM_HOTKEY) {
-                    hotKeyHandler?(Int32(msg.wParam))
-                }
-                _ = TranslateMessage(&msg)
-                _ = DispatchMessageW(&msg)
+            do {
+                try Win32App.ensureUIThread()
+            } catch {
+                log.error("ensureUIThread failed: \(error.message)")
+                return Int32(bitPattern: 0xFFFF_FFFF)
             }
-            return Int32(msg.wParam)
+            return Win32App.waitForUIThreadExit()
         }
 
         // MARK: - Shared WNDPROC
@@ -271,13 +307,21 @@
                     }
                 }
                 let key = Win32App.key(for: hwnd)
-                let handled: LRESULT? = MainActor.assumeIsolated {
-                    if let window = Win32App.shared.windows[key] {
-                        return window.handle(msg: msg, wparam: wparam, lparam: lparam)
-                    }
-                    return nil
+                // WNDPROC 는 전용 UI 스레드(Win32App+UIThread.swift)에서
+                // 호출된다. 이 스레드는 Swift 의 MainActor 가 아니므로
+                // `MainActor.assumeIsolated` 는 트랩한다. 대신 nonisolated
+                // 미러(`Win32App.windowsMirror`)에서 윈도우를 찾아 `handle`
+                // 을 unsafe 캐스트로 직접 호출한다. 안전성: Win32Window 의
+                // 가변 상태는 (a) UI 스레드 WNDPROC, (b) `runOnUIThread`
+                // 마샬링 클로저, (c) postJob 메시지 → 모두 UI 스레드에서만
+                // 단일 진입한다.
+                guard let window = Win32App.lookupWindowNonisolated(key: key) else {
+                    return DefWindowProcW(hwnd, msg, wparam, lparam)
                 }
-                return handled ?? DefWindowProcW(hwnd, msg, wparam, lparam)
+                typealias HandleFn = (UINT, WPARAM, LPARAM) -> LRESULT
+                let mainIsolated: @MainActor (UINT, WPARAM, LPARAM) -> LRESULT = window.handle
+                let nonIsolated = unsafeBitCast(mainIsolated, to: HandleFn.self)
+                return nonIsolated(msg, wparam, lparam)
             }
     }
 
