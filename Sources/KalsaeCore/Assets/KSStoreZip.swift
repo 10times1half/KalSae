@@ -57,36 +57,36 @@ public enum KSStoreZip {
 
             // Local file header
             archive.append(le32: 0x0403_4b50)
-            archive.append(le16: 20)            // version needed
-            archive.append(le16: 0)             // general purpose bit flag
-            archive.append(le16: 0)             // method (STORE)
-            archive.append(le16: 0)             // mod time
-            archive.append(le16: 0)             // mod date
+            archive.append(le16: 20)  // version needed
+            archive.append(le16: 0)  // general purpose bit flag
+            archive.append(le16: 0)  // method (STORE)
+            archive.append(le16: 0)  // mod time
+            archive.append(le16: 0)  // mod date
             archive.append(le32: crc)
-            archive.append(le32: size)          // compressed
-            archive.append(le32: size)          // uncompressed
+            archive.append(le32: size)  // compressed
+            archive.append(le32: size)  // uncompressed
             archive.append(le16: UInt16(nameBytes.count))
-            archive.append(le16: 0)             // extra len
+            archive.append(le16: 0)  // extra len
             archive.append(contentsOf: nameBytes)
             archive.append(entry.data)
 
             // Central directory record (built up here, appended after local headers)
             cdRecords.append(le32: 0x0201_4b50)
-            cdRecords.append(le16: 20)          // version made by
-            cdRecords.append(le16: 20)          // version needed
-            cdRecords.append(le16: 0)           // bit flag
-            cdRecords.append(le16: 0)           // method
-            cdRecords.append(le16: 0)           // mod time
-            cdRecords.append(le16: 0)           // mod date
+            cdRecords.append(le16: 20)  // version made by
+            cdRecords.append(le16: 20)  // version needed
+            cdRecords.append(le16: 0)  // bit flag
+            cdRecords.append(le16: 0)  // method
+            cdRecords.append(le16: 0)  // mod time
+            cdRecords.append(le16: 0)  // mod date
             cdRecords.append(le32: crc)
             cdRecords.append(le32: size)
             cdRecords.append(le32: size)
             cdRecords.append(le16: UInt16(nameBytes.count))
-            cdRecords.append(le16: 0)           // extra len
-            cdRecords.append(le16: 0)           // comment len
-            cdRecords.append(le16: 0)           // disk number start
-            cdRecords.append(le16: 0)           // internal attrs
-            cdRecords.append(le32: 0)           // external attrs
+            cdRecords.append(le16: 0)  // extra len
+            cdRecords.append(le16: 0)  // comment len
+            cdRecords.append(le16: 0)  // disk number start
+            cdRecords.append(le16: 0)  // internal attrs
+            cdRecords.append(le32: 0)  // external attrs
             cdRecords.append(le32: offsets.last!)
             cdRecords.append(contentsOf: nameBytes)
         }
@@ -97,13 +97,13 @@ public enum KSStoreZip {
 
         // EOCD
         archive.append(le32: 0x0605_4b50)
-        archive.append(le16: 0)                 // disk number
-        archive.append(le16: 0)                 // disk where CD starts
+        archive.append(le16: 0)  // disk number
+        archive.append(le16: 0)  // disk where CD starts
         archive.append(le16: UInt16(entries.count))
         archive.append(le16: UInt16(entries.count))
         archive.append(le32: cdSize)
         archive.append(le32: cdOffset)
-        archive.append(le16: 0)                 // comment len
+        archive.append(le16: 0)  // comment len
 
         return archive
     }

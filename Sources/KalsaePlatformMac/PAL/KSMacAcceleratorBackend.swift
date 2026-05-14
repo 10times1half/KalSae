@@ -64,7 +64,7 @@
             if KSMacAppPackageContext.isSandboxed() {
                 print(
                     "⚠  KSMacAcceleratorBackend: skipping global key monitor under MAS sandbox "
-                    + "(accessibility permission required). Accelerators are window-scoped only.")
+                        + "(accessibility permission required). Accelerators are window-scoped only.")
                 return
             }
 

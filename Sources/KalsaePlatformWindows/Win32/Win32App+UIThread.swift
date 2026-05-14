@@ -44,7 +44,7 @@
         nonisolated(unsafe) private static var invokerHWND: HWND?
         nonisolated(unsafe) private static var uiInitError: KSError?
 
-        nonisolated(unsafe) private static let uiThreadLock = NSLock()
+        nonisolated private static let uiThreadLock = NSLock()
         nonisolated static var _uiThreadLockShared: NSLock { uiThreadLock }
         nonisolated(unsafe) private static var uiReadyEvent: HANDLE?
 
@@ -156,6 +156,53 @@
             }
         }
 
+        /// `MainActor.assumeIsolated` 의 안전치 못한 대체. 전용 UI 스레드가
+        /// Swift 의 MainActor 가 아니므로 `assumeIsolated` 가 libdispatch
+        /// precondition 을 트립한다 (`STATUS_FATAL_USER_CALLBACK_EXCEPTION`,
+        /// 0xC000041D). WebView2 C 콜백 / Win32 WNDPROC 처럼 호출 컨텍스트가
+        /// 우리가 통제하는 단일 스레드임을 보장하는 곳에서만 사용한다.
+        /// 클로저 본체에서 `MainActor.assumeIsolated` 재호출이나 `await` 는
+        /// 금지된다.
+        nonisolated static func unsafelyAssumeMainActor<T>(
+            _ block: @MainActor () -> T
+        ) -> T {
+            withoutActuallyEscaping(block) { escaping in
+                typealias Fn = () -> T
+                let casted = unsafeBitCast(escaping, to: Fn.self)
+                return casted()
+            }
+        }
+
+        /// `runOnUIThread` 의 `@MainActor` 클로저 변종. WebView2 / Win32
+        /// 콘트롤러처럼 `@MainActor` 격리로 선언된 API 를 UI 스레드 (실제로는
+        /// MainActor 가 아님) 에서 호출하기 위해 사용한다. 클로저는 컴파일
+        /// 타임에는 `@MainActor` 로 보이지만 런타임에는 `unsafeBitCast` 로
+        /// 비격리 함수로 변환된다. 안전성: 클로저 본체가 `MainActor.
+        /// assumeIsolated` 를 호출하지 않고 `await` 도 하지 않아야 한다.
+        /// WebView2 호출 경로는 모두 동기이므로 조건을 만족한다.
+        nonisolated static func runOnUIThreadIsolated<T>(
+            _ block: @MainActor () -> T
+        ) -> T {
+            withoutActuallyEscaping(block) { escaping in
+                typealias Fn = () -> T
+                let casted = unsafeBitCast(escaping, to: Fn.self)
+                return runOnUIThread { casted() }
+            }
+        }
+
+        /// Throwing 변종.
+        nonisolated static func runOnUIThreadIsolatedThrowing<T>(
+            _ block: @MainActor () throws(KSError) -> T
+        ) throws(KSError) -> T {
+            try withoutActuallyEscaping(block) { escaping throws(KSError) -> T in
+                typealias Fn = () throws(KSError) -> T
+                let casted = unsafeBitCast(escaping, to: Fn.self)
+                return try runOnUIThreadThrowing { () throws(KSError) -> T in
+                    try casted()
+                }
+            }
+        }
+
         /// UI 스레드의 종료(WM_QUIT) 를 기다리고 종료 코드를 반환한다.
         nonisolated static func waitForUIThreadExit() -> Int32 {
             guard let h = _uiThreadHandle else { return 0 }
@@ -167,7 +214,7 @@
 
         // MARK: - UI 스레드 진입점
 
-        private static func uiThreadMain() {
+        nonisolated private static func uiThreadMain() {
             // 1) STA COM 초기화 — WebView2 가 요구.
             let flags =
                 DWORD(COINIT_APARTMENTTHREADED.rawValue)

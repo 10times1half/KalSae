@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 @testable import KalsaeCore
 
@@ -12,7 +13,8 @@ struct PackagerIOSTests {
         withASCKeys: Bool = false,
         manualSigning: Bool = false
     ) -> KSPackager.IOSPackagingInput {
-        let project: KSPackager.IOSProjectKind = useWorkspace
+        let project: KSPackager.IOSProjectKind =
+            useWorkspace
             ? .xcworkspace(URL(fileURLWithPath: "/tmp/Demo.xcworkspace"))
             : .xcodeproj(URL(fileURLWithPath: "/tmp/Demo.xcodeproj"))
         return KSPackager.IOSPackagingInput(
@@ -113,10 +115,12 @@ struct PackagerIOSTests {
         let steps = KSPackager.planIOSPackagingPipeline(makeInput(manualSigning: true))
         let archive = steps[0]
         #expect(archive.args.contains("CODE_SIGN_STYLE=Manual"))
-        #expect(archive.args.contains(
-            "CODE_SIGN_IDENTITY=Apple Distribution: Acme (TEAM12345)"))
-        #expect(archive.args.contains(
-            "PROVISIONING_PROFILE_SPECIFIER=Demo App Store Profile"))
+        #expect(
+            archive.args.contains(
+                "CODE_SIGN_IDENTITY=Apple Distribution: Acme (TEAM12345)"))
+        #expect(
+            archive.args.contains(
+                "PROVISIONING_PROFILE_SPECIFIER=Demo App Store Profile"))
     }
 
     @Test("Export step references archive + exportOptionsPlist + exportPath")

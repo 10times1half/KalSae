@@ -37,8 +37,8 @@
                 // 토글하도록 안내. PAL 에서는 no-op + 성공 반환.
                 print(
                     "⚠  KSWindowsAutostartBackend.enable(): no-op under MSIX "
-                    + "(autostart is managed by AppxManifest `windows.startupTask`). "
-                    + "User must enable via Settings > Apps > Startup.")
+                        + "(autostart is managed by AppxManifest `windows.startupTask`). "
+                        + "User must enable via Settings > Apps > Startup.")
                 return
             }
             let exe = try KSWindowsModule.resolvePath()
@@ -67,7 +67,7 @@
             if KSWindowsAppPackageContext.isMSIXPackaged() {
                 print(
                     "⚠  KSWindowsAutostartBackend.disable(): no-op under MSIX "
-                    + "(managed by AppxManifest).")
+                        + "(managed by AppxManifest).")
                 return
             }
             try Self.deleteValue(keyPath: Self.runKey, valueName: identifier)

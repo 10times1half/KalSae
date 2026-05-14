@@ -44,7 +44,8 @@ public enum KSKalsaeCheckoutDetector {
         for candidate in ancestors(of: exe) {
             let buildDir = candidate.appendingPathComponent(".build")
             let pkgFile = candidate.appendingPathComponent("Package.swift")
-            let kalsaeMarker = candidate
+            let kalsaeMarker =
+                candidate
                 .appendingPathComponent("Sources")
                 .appendingPathComponent("Kalsae")
                 .appendingPathComponent("Kalsae.swift")

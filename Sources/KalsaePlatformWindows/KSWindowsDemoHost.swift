@@ -65,10 +65,12 @@
         }
 
         public func start(url: String, devtools: Bool) throws(KSError) {
-            try ensureWebViewInitialized(devtools: devtools)
-            try webview.navigate(url: url)
-            if devtools {
-                try? webview.openDevTools()
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: devtools)
+                try self.webview.navigate(url: url)
+                if devtools {
+                    try? self.webview.openDevTools()
+                }
             }
         }
 
@@ -89,8 +91,10 @@
                     code: .windowCreationFailed,
                     message: "Window has no HWND")
             }
-            try ensureWebViewInitialized(devtools: pendingDevtools)
-            try webview.setVirtualHostMapping(host: host, folder: folder)
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: self.pendingDevtools)
+                try self.webview.setVirtualHostMapping(host: host, folder: folder)
+            }
         }
 
         /// 모든 문서 시작 시 실행될 스크립트를 설치한다.
@@ -101,8 +105,10 @@
                     code: .windowCreationFailed,
                     message: "Window has no HWND")
             }
-            try ensureWebViewInitialized(devtools: pendingDevtools)
-            try webview.addDocumentCreatedScript(script)
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: self.pendingDevtools)
+                try self.webview.addDocumentCreatedScript(script)
+            }
         }
 
         /// `resolver`에서 `https://{host}/*` 하위의 모든 요청을 처리하는
@@ -118,16 +124,20 @@
                     code: .windowCreationFailed,
                     message: "Window has no HWND")
             }
-            try ensureWebViewInitialized(devtools: pendingDevtools)
-            try webview.setResourceHandler(
-                resolver: resolver, csp: csp, host: host,
-                crossOriginIsolation: crossOriginIsolation)
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: self.pendingDevtools)
+                try self.webview.setResourceHandler(
+                    resolver: resolver, csp: csp, host: host,
+                    crossOriginIsolation: crossOriginIsolation)
+            }
         }
 
         /// WebView2의 기본 브라우저 스타일 컨텍스트 메뉴를 토글한다.
         /// `false`를 전달하면 억제된다 (페이지에서 자체 메뉴를 렌더링할 수 있음).
         public func setDefaultContextMenusEnabled(_ enabled: Bool) {
-            webview.setDefaultContextMenusEnabled(enabled)
+            Win32App.runOnUIThreadIsolated { () -> Void in
+                self.webview.setDefaultContextMenusEnabled(enabled)
+            }
         }
 
         // MARK: - 네이티브 라이프사이클 훅
@@ -166,7 +176,9 @@
         /// `false`이면 OS 파일 드롱이 호스트 윈도우의 드롱 타겟으로
         /// 전달된다.
         public func setAllowExternalDrop(_ allow: Bool) {
-            webview.setAllowExternalDrop(allow)
+            Win32App.runOnUIThreadIsolated { () -> Void in
+                self.webview.setAllowExternalDrop(allow)
+            }
         }
 
         /// 윈도우의 HWND에 호스트 측 `IDropTarget`을 설치하여 드뜩을
@@ -182,25 +194,27 @@
         /// ```
         public func installFileDropEmitter() throws(KSError) {
             let bridge = self.bridge
-            try webview.installFileDropHandler {
-                kind, x, y, paths in
-                struct Payload: Encodable {
-                    let kind: String
-                    let x: Int32
-                    let y: Int32
-                    let paths: [String]
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.webview.installFileDropHandler {
+                    kind, x, y, paths in
+                    struct Payload: Encodable {
+                        let kind: String
+                        let x: Int32
+                        let y: Int32
+                        let paths: [String]
+                    }
+                    let kindStr: String
+                    switch kind {
+                    case .enter: kindStr = "enter"
+                    case .leave: kindStr = "leave"
+                    case .drop: kindStr = "drop"
+                    }
+                    let payload = Payload(kind: kindStr, x: x, y: y, paths: paths)
+                    try? bridge.emit(event: "__ks.file.drop", payload: payload)
+                    // 아키텍처에서는 경로가 하나라도 있을 때만 enter/drop을 수락해
+                    // OS가 금지 아이콘 대신 복사 커서를 표시하도록 한다.
+                    return !paths.isEmpty || kind == .leave
                 }
-                let kindStr: String
-                switch kind {
-                case .enter: kindStr = "enter"
-                case .leave: kindStr = "leave"
-                case .drop: kindStr = "drop"
-                }
-                let payload = Payload(kind: kindStr, x: x, y: y, paths: paths)
-                try? bridge.emit(event: "__ks.file.drop", payload: payload)
-                // 아키텍처에서는 경로가 하나라도 있을 때만 enter/drop을 수락해
-                // OS가 금지 아이콘 대신 복사 커서를 표시하도록 한다.
-                return !paths.isEmpty || kind == .leave
             }
         }
 
@@ -221,18 +235,20 @@
             openExternal: (@MainActor (String) -> Void)?
         ) throws(KSError) {
             let bridge = self.bridge
-            try webview.installSecurityHandlers(
-                allowPopups: allowPopups,
-                openExternal: openExternal,
-                downloadEmit: { url, mime in
-                    struct Payload: Encodable {
-                        let url: String
-                        let mimeType: String
-                    }
-                    try? bridge.emit(
-                        event: "__ks.webview.downloadStarting",
-                        payload: Payload(url: url, mimeType: mime))
-                })
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.webview.installSecurityHandlers(
+                    allowPopups: allowPopups,
+                    openExternal: openExternal,
+                    downloadEmit: { url, mime in
+                        struct Payload: Encodable {
+                            let url: String
+                            let mimeType: String
+                        }
+                        try? bridge.emit(
+                            event: "__ks.webview.downloadStarting",
+                            payload: Payload(url: url, mimeType: mime))
+                    })
+            }
         }
 
         private var webviewInitialized = false
@@ -242,9 +258,11 @@
         /// 사전에 준비 단계가 없는 경우 `start(url:devtools:)`와 동일하다.
         public func startPrepared(url: String, devtools: Bool) throws(KSError) {
             pendingDevtools = devtools
-            try ensureWebViewInitialized(devtools: devtools)
-            try webview.navigate(url: url)
-            if devtools { try? webview.openDevTools() }
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: devtools)
+                try self.webview.navigate(url: url)
+                if devtools { try? self.webview.openDevTools() }
+            }
         }
 
         /// 웹뷰가 올바른 devtools 플래그로 생성되도록 보장하여
@@ -252,7 +270,9 @@
         /// `addDocumentCreatedScript` 호출이 잘못된 설정을 고착시키지 않도록 한다.
         public func prepare(devtools: Bool) throws(KSError) {
             pendingDevtools = devtools
-            try ensureWebViewInitialized(devtools: devtools)
+            try Win32App.runOnUIThreadIsolatedThrowing { () throws(KSError) -> Void in
+                try self.ensureWebViewInitialized(devtools: devtools)
+            }
         }
 
         /// 중앙집중식 지연 웹뷰 초기화. `KSWebViewOptions`에서 윈도우별 `userDataPath`
@@ -322,7 +342,9 @@
         /// 리로드(`KALSAE_DEV_RELOAD=1`)에서 사용된다. 웹뷰가 아직 초기화되지
         /// 않았다면 무시된다.
         public func reload() {
-            webview.reload()
+            Win32App.runOnUIThreadIsolated { () -> Void in
+                self.webview.reload()
+            }
         }
 
         /// 클로저를 UI 스레드의 메시지 큐에 전달한다. 백그라운드 스레드 /

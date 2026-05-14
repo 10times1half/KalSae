@@ -4,6 +4,105 @@
     internal import KalsaeCore
     internal import Foundation
 
+    // MARK: - File-scope @convention(c) thunks
+    //
+    // These are intentionally declared at file scope (not inside any
+    // @MainActor-isolated type) so the compiler cannot inject any actor /
+    // isolation runtime check into the thunk prologue. A closure literal
+    // written inside an @MainActor function (such as `WebView2Host.invoke
+    // CreateEnvironment`) can pick up implicit MainActor semantics that
+    // raise `STATUS_ILLEGAL_INSTRUCTION` (0xC000001D / `ud2`) when the
+    // WebView2 UI thread invokes it.
+    internal let ksEnvCompletedThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, Int32, KSWV2Env?
+        ) -> Void = { user, hr, env in
+            WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
+        }
+
+    internal let ksControllerCompletedThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, Int32, KSWV2Controller?
+        ) -> Void = { user, hr, ctrl in
+            WebView2Callbacks.receiveController(user: user, hr: hr, ctrl: ctrl)
+        }
+
+    internal let ksMessageDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?
+        ) -> Void = { user, msg in
+            WebView2Callbacks.dispatchMessage(user: user, msg: msg)
+        }
+
+    internal let ksResourceDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?,
+            UnsafePointer<UInt16>?,
+            UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>?,
+            UnsafeMutablePointer<Int>?,
+            UnsafeMutablePointer<UnsafeMutablePointer<UInt16>?>?,
+            UnsafeMutablePointer<UnsafeMutablePointer<UInt16>?>?
+        ) -> Int32 = { user, uri, outData, outLen, outCT, outCSP in
+            WebView2Callbacks.dispatchResource(
+                user: user, uri: uri,
+                outData: outData, outLen: outLen,
+                outCT: outCT, outCSP: outCSP)
+        }
+
+    internal let ksDropDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?,
+            Int32, Int32, Int32,
+            UnsafeMutablePointer<UnsafePointer<UInt16>?>?,
+            Int32
+        ) -> Int32 = { user, kind, x, y, paths, count in
+            WebView2Callbacks.dispatchDrop(
+                user: user, kind: kind, x: x, y: y,
+                paths: UnsafePointer(paths), count: count)
+        }
+
+    internal let ksNewWindowDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?
+        ) -> Int32 = { user, uri in
+            WebView2Callbacks.dispatchNewWindow(user: user, uri: uri)
+        }
+
+    internal let ksPermissionDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?, Int32
+        ) -> Int32 = { user, uri, kind in
+            WebView2Callbacks.dispatchPermission(user: user, uri: uri, kind: kind)
+        }
+
+    internal let ksDownloadDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?, UnsafePointer<UInt16>?
+        ) -> Int32 = { user, url, mime in
+            WebView2Callbacks.dispatchDownload(user: user, url: url, mime: mime)
+        }
+
+    internal let ksServerCertDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?
+        ) -> Int32 = { user in
+            WebView2Callbacks.dispatchServerCertError(user: user)
+        }
+
+    internal let ksBasicAuthDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?, UnsafePointer<UInt16>?
+        ) -> Int32 = { user, uri, challenge in
+            WebView2Callbacks.dispatchBasicAuth(user: user, uri: uri, challenge: challenge)
+        }
+
+    internal let ksClientCertDispatchThunk:
+        @convention(c) (
+            UnsafeMutableRawPointer?, UnsafePointer<UInt16>?
+        ) -> Int32 = { user, host in
+            WebView2Callbacks.dispatchClientCert(user: user, host: host)
+        }
+
     // MARK: - Sendable pointer wrappers
     //
     // WebView2's opaque pointer types are not `Sendable`. All real uses are
@@ -129,7 +228,7 @@
     //
     // Every entry point here is invoked from a `@convention(c)` thunk in
     // the C shim. They run on the WebView2 UI thread, which is also the
-    // main actor; we use `MainActor.assumeIsolated` rather than hopping
+    // main actor; we use `Win32App.unsafelyAssumeMainActor` rather than hopping
     // through the executor so resource-request callbacks remain synchronous.
 
     internal enum WebView2Callbacks {
@@ -137,26 +236,19 @@
             user: UnsafeMutableRawPointer?, hr: Int32, env: KSWV2Env?
         ) {
             guard let user else { return }
-            let userBox = KSSendableRaw(value: user)
-            let envBox = env.map { KSSendableEnv(value: $0) }
-            MainActor.assumeIsolated {
-                let host = Unmanaged<WebView2Host>.fromOpaque(userBox.value)
-                    .takeUnretainedValue()
-                host.fulfillEnv(hr: hr, env: envBox?.value)
-            }
+            // `fulfillEnv` is `nonisolated`; calling it directly avoids the
+            // `unsafelyAssumeMainActor` indirection and any ABI surprises
+            // around `unsafeBitCast`ing a @MainActor closure on the UI thread.
+            let host = Unmanaged<WebView2Host>.fromOpaque(user).takeUnretainedValue()
+            host.fulfillEnv(hr: hr, env: env)
         }
 
         static func receiveController(
             user: UnsafeMutableRawPointer?, hr: Int32, ctrl: KSWV2Controller?
         ) {
             guard let user else { return }
-            let userBox = KSSendableRaw(value: user)
-            let ctrlBox = ctrl.map { KSSendableController(value: $0) }
-            MainActor.assumeIsolated {
-                let host = Unmanaged<WebView2Host>.fromOpaque(userBox.value)
-                    .takeUnretainedValue()
-                host.fulfillController(hr: hr, ctrl: ctrlBox?.value)
-            }
+            let host = Unmanaged<WebView2Host>.fromOpaque(user).takeUnretainedValue()
+            host.fulfillController(hr: hr, ctrl: ctrl)
         }
 
         static func dispatchMessage(
@@ -165,7 +257,7 @@
             guard let user, let msg else { return }
             let userBox = KSSendableRaw(value: user)
             let msgBox = KSSendableUTF16(value: msg)
-            MainActor.assumeIsolated {
+            Win32App.unsafelyAssumeMainActor {
                 let text = msgBox.value.toString()
                 let box = Unmanaged<MessageHandlerBox>.fromOpaque(userBox.value)
                     .takeUnretainedValue()
@@ -192,7 +284,7 @@
             let outLenBox = KSSendableOutLen(value: outLen)
             let outCTBox = outCT.map { KSSendableOutWStr(value: $0) }
             let outCSPBox = outCSP.map { KSSendableOutWStr(value: $0) }
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<ResourceHandlerBox>.fromOpaque(userBox.value)
                     .takeUnretainedValue()
                 let uriString = uriBox.value.toString()
@@ -251,7 +343,7 @@
                 }
             }
             let pathsCopy = collected
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<DropTargetBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 let evt: WebView2Host.DropEventKind =
@@ -267,7 +359,7 @@
             guard let user else { return 0 }
             let userBox = KSSendableRaw(value: user)
             let uriStr = uri.map { $0.toString() } ?? ""
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<NewWindowHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler(uriStr) ? Int32(1) : Int32(0)
@@ -282,7 +374,7 @@
             guard let user else { return 0 }
             let userBox = KSSendableRaw(value: user)
             let uriStr = uri.map { $0.toString() } ?? ""
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<PermissionHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler(uriStr, kind)
@@ -298,7 +390,7 @@
             let userBox = KSSendableRaw(value: user)
             let urlStr = url.map { $0.toString() } ?? ""
             let mimeStr = mime.map { $0.toString() } ?? ""
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<DownloadHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler(urlStr, mimeStr)
@@ -310,7 +402,7 @@
         ) -> Int32 {
             guard let user else { return 0 }  // default: deny
             let userBox = KSSendableRaw(value: user)
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<ServerCertHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler()
@@ -326,7 +418,7 @@
             let userBox = KSSendableRaw(value: user)
             let uriStr = uri.map { $0.toString() } ?? ""
             let challengeStr = challenge.map { $0.toString() } ?? ""
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<BasicAuthHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler(uriStr, challengeStr)
@@ -340,7 +432,7 @@
             guard let user else { return 0 }  // default: cancel
             let userBox = KSSendableRaw(value: user)
             let hostStr = host.map { $0.toString() } ?? ""
-            return MainActor.assumeIsolated {
+            return Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<ClientCertHandlerBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 return box.handler(hostStr)

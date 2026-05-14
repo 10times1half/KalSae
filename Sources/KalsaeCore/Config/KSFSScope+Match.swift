@@ -1,4 +1,5 @@
 public import Foundation
+
 #if os(Windows)
     internal import WinSDK
 #endif

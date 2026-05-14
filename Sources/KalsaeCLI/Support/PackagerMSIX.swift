@@ -167,7 +167,8 @@ extension KSPackager {
                         </desktop:Extension>
                 """)
         }
-        let extensionsBlock = extensions.isEmpty
+        let extensionsBlock =
+            extensions.isEmpty
             ? ""
             : "\n            <Extensions>\n\(extensions.joined(separator: "\n"))\n            </Extensions>"
 

@@ -197,7 +197,7 @@ extension KSPackager {
         } else if let identity = opts.codesignIdentity, !identity.isEmpty {
             warnings.append(
                 "Code signing identity '\(identity)' supplied but --store devid/mas not set. "
-                + "Pass --store devid or --store mas to invoke the signing pipeline automatically."
+                    + "Pass --store devid or --store mas to invoke the signing pipeline automatically."
             )
         }
 
@@ -237,7 +237,7 @@ extension KSPackager {
         guard let identity = opts.codesignIdentity, !identity.isEmpty else {
             warnings.append(
                 "--store devid requires --codesign-identity (e.g. 'Developer ID Application: …'). "
-                + "Skipping codesign + notarize.")
+                    + "Skipping codesign + notarize.")
             return
         }
 
@@ -268,7 +268,7 @@ extension KSPackager {
         if opts.notarytoolProfile == nil {
             warnings.append(
                 "--notarytool-profile not provided; codesign was performed but the bundle "
-                + "is NOT notarized/stapled. Gatekeeper will warn on first launch.")
+                    + "is NOT notarized/stapled. Gatekeeper will warn on first launch.")
         }
     }
 
@@ -284,7 +284,7 @@ extension KSPackager {
         guard let appIdentity = opts.codesignIdentity, !appIdentity.isEmpty else {
             warnings.append(
                 "--store mas requires --codesign-identity "
-                + "(e.g. '3rd Party Mac Developer Application: …'). Skipping MAS pipeline.")
+                    + "(e.g. '3rd Party Mac Developer Application: …'). Skipping MAS pipeline.")
             return
         }
         guard let installerIdentity = opts.installerSigningIdentity,
@@ -292,13 +292,13 @@ extension KSPackager {
         else {
             warnings.append(
                 "--store mas requires --installer-identity "
-                + "(e.g. '3rd Party Mac Developer Installer: …'). Skipping MAS pipeline.")
+                    + "(e.g. '3rd Party Mac Developer Installer: …'). Skipping MAS pipeline.")
             return
         }
         guard let profile = opts.provisionProfilePath else {
             warnings.append(
                 "--store mas requires --provision-profile <embedded.provisionprofile>. "
-                + "Skipping MAS pipeline.")
+                    + "Skipping MAS pipeline.")
             return
         }
 
@@ -315,7 +315,7 @@ extension KSPackager {
         } else {
             warnings.append(
                 "--store mas needs either --entitlements <path> or a Kalsae.json "
-                + "with distribution.target=\"mac-app-store\". Skipping MAS pipeline.")
+                    + "with distribution.target=\"mac-app-store\". Skipping MAS pipeline.")
             return
         }
 

@@ -60,10 +60,11 @@ extension KSPackager {
         let dst = input.bundle
             .appendingPathComponent("Contents")
             .appendingPathComponent("embedded.provisionprofile")
-        steps.append(.init(
-            command: "<cp>",
-            args: [input.provisionProfilePath.path, dst.path],
-            label: "copy-provisioning"))
+        steps.append(
+            .init(
+                command: "<cp>",
+                args: [input.provisionProfilePath.path, dst.path],
+                label: "copy-provisioning"))
 
         // (2) codesign — MAS 는 --options=runtime 제거. entitlements 가 sandbox 강제.
         let codesignArgs = [
@@ -119,7 +120,7 @@ extension KSPackager {
             if !dryRun {
                 warnings.append(
                     "Mac App Store pipeline skipped on non-macOS host. "
-                    + "Re-run `kalsae build --store mas` on macOS to actually sign + package.")
+                        + "Re-run `kalsae build --store mas` on macOS to actually sign + package.")
             }
         #endif
     }

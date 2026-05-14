@@ -9,10 +9,38 @@
 
 #include <wrl.h>
 #include <objbase.h>           // CoTaskMemFree
+#include <windows.h>
+#include <stdio.h>
 #include "kswv2_internal.h"
 #include "../Vendor/WebView2/build/native/include/WebView2EnvironmentOptions.h"
 
 using namespace Microsoft::WRL;
+
+// SEH-guarded invocation of the Swift env-completion callback. WebView2
+// invokes the WRL handler on its UI thread; if Swift raises a structured
+// exception (e.g. fatalError, executor-check trap), letting it propagate
+// out of the WRL callback boundary causes Windows to terminate the
+// process with STATUS_FATAL_USER_CALLBACK_EXCEPTION (0xC000041D) with no
+// useful diagnostic. Catching the SEH here lets us log + return failure.
+static int32_t ks_invoke_env_completed_safe(
+    KSWV2EnvCompletedCB cb, void *user, int32_t hr, KSWV2Env env)
+{
+    __try {
+        cb(user, hr, env);
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        DWORD code = GetExceptionCode();
+        char buf[160];
+        int n = _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+            "[diag-cpp] SEH escaped Swift env completion callback: code=0x%08X\n",
+            (unsigned)code);
+        if (n > 0) {
+            DWORD w = 0;
+            WriteFile(GetStdHandle(STD_ERROR_HANDLE), buf, (DWORD)n, &w, NULL);
+        }
+        return (int32_t)code;
+    }
+}
 
 // MARK: - Environment
 
@@ -44,8 +72,9 @@ extern "C" int32_t KSWV2_CreateEnvironmentEx(
         ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
         [user, completed](HRESULT hr, ICoreWebView2Environment *env) -> HRESULT {
             if (SUCCEEDED(hr) && env) env->AddRef();
-            completed(user, static_cast<int32_t>(hr),
-                      reinterpret_cast<KSWV2Env>(env));
+            ks_invoke_env_completed_safe(
+                completed, user, static_cast<int32_t>(hr),
+                reinterpret_cast<KSWV2Env>(env));
             return S_OK;
         });
 
@@ -135,8 +164,20 @@ extern "C" int32_t KSWV2_CreateController(
         ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
         [user, completed](HRESULT hr, ICoreWebView2Controller *ctrl) -> HRESULT {
             if (SUCCEEDED(hr) && ctrl) ctrl->AddRef();
-            completed(user, static_cast<int32_t>(hr),
-                      reinterpret_cast<KSWV2Controller>(ctrl));
+            __try {
+                completed(user, static_cast<int32_t>(hr),
+                          reinterpret_cast<KSWV2Controller>(ctrl));
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                DWORD code = GetExceptionCode();
+                char buf[160];
+                int n = _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                    "[diag-cpp] SEH escaped Swift controller completion callback: code=0x%08X\n",
+                    (unsigned)code);
+                if (n > 0) {
+                    DWORD w = 0;
+                    WriteFile(GetStdHandle(STD_ERROR_HANDLE), buf, (DWORD)n, &w, NULL);
+                }
+            }
             return S_OK;
         });
 

@@ -35,7 +35,7 @@
                 // 수신 경로는 그대로 (CommandLine.arguments) 동작.
                 print(
                     "⚠  KSWindowsDeepLinkBackend.register(\"\(scheme)\"): no-op under MSIX "
-                    + "(scheme is declared in AppxManifest `windows.protocol`).")
+                        + "(scheme is declared in AppxManifest `windows.protocol`).")
                 return
             }
             let s = try Self.normalizeScheme(scheme)

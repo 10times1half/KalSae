@@ -29,7 +29,8 @@ struct CheckoutDetectorTests {
         try writeText(
             "// dummy",
             to: root.appendingPathComponent("Sources/Kalsae/Kalsae.swift"))
-        let exe = root
+        let exe =
+            root
             .appendingPathComponent(".build/x86_64-windows-msvc/release/kalsae.exe")
         try writeText("MZ", to: exe)
 

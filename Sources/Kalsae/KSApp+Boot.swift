@@ -36,24 +36,20 @@ extension KSApp {
         devServerURL: String,
         resourceRoot: URL?
     ) -> ServingMode {
-        // dev 서버 reachability 검사는 KSApp 전용 — DEBUG 빌드에서만 활성화.
-        let probe: ((String) -> Bool)?
-        #if DEBUG
-            probe = { Self.isDevServerReachable($0) }
-        #else
-            probe = nil
-        #endif
+        // dev 서버 reachability 검사. DEBUG/RELEASE 모두에서 활성화한다 —
+        // RELEASE 빌드라도 `kalsae build` 가 `devServerURL` 을 비우지 않는
+        // 한 (또는 사용자가 `kalsae dev` 로 RELEASE 산출물을 실행하는 한)
+        // dev 서버가 떠 있지 않으면 가상 호스트로 폴백해야 흰 화면을 피한다.
+        let probe: (String) -> Bool = { Self.isDevServerReachable($0) }
         // probe 실패 시 한 줄 진단 로그 — `KSBootOrchestrator` 는 stateless 라
         // 로깅 책임은 호출자(KSApp)가 진다.
         let isRemote = KSBootOrchestrator.isRemoteURL(devServerURL)
         if urlOverride == nil, windowURL == nil, isRemote {
-            #if DEBUG
-                if !(probe?(devServerURL) ?? true) {
-                    KSLog.logger("kalsae.app").warning(
-                        "dev server unreachable at \(devServerURL); falling back to virtualHost/file"
-                    )
-                }
-            #endif
+            if !probe(devServerURL) {
+                KSLog.logger("kalsae.app").warning(
+                    "dev server unreachable at \(devServerURL); falling back to virtualHost/file"
+                )
+            }
         }
         let preferEmbedded: Bool
         #if os(Windows)

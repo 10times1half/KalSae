@@ -1,8 +1,0 @@
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM already initialized as MTA; re-initializing as STA
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM initialized (STA, hr=0x0)
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] Process attached to JobObject (KILL_ON_JOB_CLOSE)
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] Registered window class 'KalsaeWindow' (atom=49845)
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.window: [KalsaePlatformWindows] Created window 'main' hwnd=0x00000000002607be
-2026-05-13T05:37:32+0900 info dev.Kalsae.platform.windows.webview: [KalsaePlatformWindows] WebView2 environment: userDataFolder=C:\Users\seoje\AppData\Local/kalsae-demo\WebView2, browserExecutableFolder=<default>
-2026-05-13T05:37:33+0900 info dev.Kalsae.platform.windows.webview: [KalsaePlatformWindows] WebView2 host 'main' ready
-2026-05-13T05:37:33+0900 info dev.Kalsae.kalsae.app: [Kalsae] boot serving=virtualHost(C:/Projects/Kalsae/.build/debug/Kalsae_KalsaeDemo.resources/Resources) startURL=https://app.kalsae/index.html devServerURL=about:blank

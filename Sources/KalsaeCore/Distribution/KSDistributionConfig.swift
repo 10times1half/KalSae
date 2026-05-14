@@ -54,7 +54,8 @@ public struct KSDistributionConfig: Codable, Sendable, Equatable {
                 throw DecodingError.dataCorruptedError(
                     forKey: .target, in: c,
                     debugDescription:
-                        "Unknown distribution.target '\(rawTarget)'. Allowed: developer, developer-id, mac-app-store, microsoft-store, ios-app-store (or short: dev, devid, mas, win-store, ios-appstore).")
+                        "Unknown distribution.target '\(rawTarget)'. Allowed: developer, developer-id, mac-app-store, microsoft-store, ios-app-store (or short: dev, devid, mas, win-store, ios-appstore)."
+                )
             }
             self.target = parsed
         } else {

@@ -1,5 +1,0 @@
-2026-05-12T23:39:49+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM already initialized as MTA; re-initializing as STA
-2026-05-12T23:39:49+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM initialized (STA, hr=0x0)
-2026-05-12T23:39:49+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] Registered window class 'KalsaeWindow' (atom=49820)
-2026-05-12T23:39:49+0900 info dev.Kalsae.platform.windows.window: [KalsaePlatformWindows] Created window 'main' hwnd=0x0000000000110182
-2026-05-12T23:39:50+0900 info dev.Kalsae.platform.windows.webview: [KalsaePlatformWindows] WebView2 host 'main' ready

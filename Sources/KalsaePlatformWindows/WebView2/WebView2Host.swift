@@ -28,7 +28,8 @@
         /// Internal so the handler-installation extension can verify init
         /// state without surface-leaking the COM pointer.
         internal private(set) var webviewPtr: KSWV2WebView?
-        // postJob?⑹쑝濡?諛깃렇?쇱슫???ㅻ젅?쒖뿉???묎렐?쒕떎. UI ?ㅻ젅?쒖뿉??        // Win32Window.attach()? ?숈떆????踰덈쭔 ?ㅼ젙?쒕떎.
+        // postJob 용으로 백그라운드 스레드에서 접근한다. UI 스레드에서
+        // Win32Window.attach()와 동시에 한 번만 설정한다.
         nonisolated(unsafe) internal weak var ownerWindow: Win32Window?
 
         /// Phase A4: Capability report populated during `initialize` based on
@@ -54,18 +55,22 @@
 
         // MARK: - Synchronous creation with message pumping
         //
-        // WebView2???꾨즺 肄쒕갚???앹꽦 ?ㅻ젅?쒖쓽 STA 硫붿떆吏 ?먮줈 ?꾨떖?쒕떎.
-        // ?곕━ UI ?ㅻ젅?쒓? 諛붾줈 Swift async ?ㅽ뻾湲곌? ?숈옉?섎뒗 硫붿씤 ?ㅻ젅?쒖씠誘濡?        // ?닿납?먯꽌 continuation??await?섎㈃ 硫붿떆吏 ?꾪봽媛 援댁＜??肄쒕갚???덈?
-        // ?꾩갑?섏? 紐삵븳?? ?곕씪???湲?以묒씤 肄쒕갚???쇱뼱???뚭퉴吏 濡쒖뺄 硫붿떆吏
-        // ?꾪봽瑜??뚮┛??
+        // WebView2의 완료 콜백은 생성 스레드의 STA 메시지 루프로 전달된다.
+        // 우리 UI 스레드가 바로 Swift async 실행기가 동작하는 메인 스레드이므로
+        // 여기서 continuation을 await하면 메시지 펌프가 멈춰서 콜백이 영원히
+        // 도달하지 못한다. 따라서 대기 중인 콜백이 들어올 때까지 로컬 메시지
+        // 펌프를 돌린다.
 
-        private var pendingEnv: KSWV2Env?
-        private var pendingEnvError: KSError?
-        private var pendingEnvDone: Bool = false
+        // C 콜백은 UI 스레드에서 직접 호출되므로,
+        // `@MainActor` executor check 트랩이 일어나지 않도록
+        // 슬롯을 nonisolated(unsafe)로 선언한다.
+        nonisolated(unsafe) private var pendingEnv: KSWV2Env?
+        nonisolated(unsafe) private var pendingEnvError: KSError?
+        nonisolated(unsafe) private var pendingEnvDone: Bool = false
 
-        private var pendingCtrl: KSWV2Controller?
-        private var pendingCtrlError: KSError?
-        private var pendingCtrlDone: Bool = false
+        nonisolated(unsafe) private var pendingCtrl: KSWV2Controller?
+        nonisolated(unsafe) private var pendingCtrlError: KSError?
+        nonisolated(unsafe) private var pendingCtrlDone: Bool = false
 
         func initialize(hwnd: HWND, devtools: Bool) throws(KSError) {
             try initialize(hwnd: hwnd, devtools: devtools, userDataFolderOverride: nil)
@@ -109,8 +114,9 @@
             }
             self.webviewPtr = webview
 
-            // Phase A4: legacy `devtools` ?몄옄蹂대떎 preferences 媛 ?곗꽑?쒕떎.
-            // preferences 媛 nil ?대㈃ ?꾨옒 applySettingsBundle ??湲곕낯媛?            // (debug=true / release=false) 媛 ?곸슜?쒕떎.
+            // Phase A4: legacy `devtools` 인자보다 preferences 가 우선한다.
+            // preferences 가 nil 이면 아래 applySettingsBundle 의 기본값
+            // (debug=true / release=false) 가 적용된다.
             if preferences == nil {
                 try KSHRESULT(KSWV2_SetDevToolsEnabled(webview, devtools ? 1 : 0))
                     .throwIfFailed(.webviewInitFailed, "put_AreDevToolsEnabled")
@@ -125,7 +131,7 @@
                     .webviewInitFailed,
                     "AddScriptToExecuteOnDocumentCreated")
 
-            // Phase A4: ?좎뼵???좉? ?쇨큵 ?곸슜.
+            // Phase A4: 선언된 토글 일괄 적용.
             if preferences != nil || envOptions != nil {
                 self.capabilityReport = applySettingsBundle(
                     preferences: preferences, windows: envOptions)
@@ -134,7 +140,8 @@
             log.info("WebView2 host '\(label)' ready")
         }
 
-        // `setDefaultContextMenusEnabled` / `setAllowExternalDrop` ??        // `WebView2Host+Operations.swift` 李멸퀬.
+        // `setDefaultContextMenusEnabled` / `setAllowExternalDrop` 등은
+        // `WebView2Host+Operations.swift` 참고.
 
         private func createEnvironmentSync(
             userDataFolderOverride: String? = nil,
@@ -145,23 +152,26 @@
             pendingEnvError = nil
             pendingEnvDone = false
 
-            // ?ㅽ뻾 ?뚯씪 ??`kalsae.runtime.json`?먯꽌 fixed ?고???/ ?ъ슜??            // ?곗씠???ъ젙??媛믪쓣 ?댁꽍?쒕떎.
+            // 실행 파일 옆 `kalsae.runtime.json`에서 fixed 런타임 / 사용자
+            // 데이터 폴더 값을 해석한다.
             let exeDir = WebView2Callbacks.executableDirectory()
-            // `swift build` / `swift run` 泥섎읆 EXE ?놁뿉 `WebView2Loader.dll`
-            // ??staging ?섏? ?딆? 寃쎌슦?쇰룄 SDK 泥댄겕?꾩썐?먯꽌 吏곸젒 濡쒕뱶????            // ?덈룄濡?寃??寃쎈줈瑜?prepend ?쒕떎. 泥??섍꼍 ?앹꽦 ?댁쟾?먮쭔 ?④낵媛
-            // ?덉쑝誘濡????쒖젏?먯꽌 ?몄텧?쒕떎.
+            // `swift build` / `swift run` 처럼 EXE 옆에 `WebView2Loader.dll`
+            // 이 staging 되지 않은 경우에도 SDK 체크아웃에서 직접 로드할 수
+            // 있도록 검색 경로를 prepend 한다. 첫 환경 생성 이전에만 효과가
+            // 있으므로 이 시점에서 호출한다.
             KSWebView2LoaderResolver.ensureLoaderDir(executableDir: exeDir)
             let resolved = KSWebView2Runtime.resolve(
                 executableDir: exeDir, identifier: WebView2Callbacks.appIdentifier())
-            // ?덈룄?곕퀎 userDataPath ?ㅻ쾭?쇱씠?쒕뒗 runtime.json 寃곌낵蹂대떎 ?곗꽑?쒕떎.
+            // 윈도우별 userDataPath 오버라이드는 runtime.json 결과보다 우선한다.
             let userDataFolder =
                 userDataFolderOverride
                 .flatMap { KSWebView2Runtime.expand($0, base: exeDir) }
                 ?? resolved.userDataFolder
 
-            // Phase B: mediaAutoplay ??--autoplay-policy=???⑹꽦.
-            // ?ъ슜???몄옄 ?ㅼ뿉 遺숈뿬 ?ъ슜??紐낆떆媛믪씠 ?덉쑝硫??곗꽑?섏? ?딅룄濡?            // ?쒕떎(Chromium ? 留덉?留?媛믪씠 ?닿릿?????ъ슜?먭? 吏곸젒 吏?뺥븳
-            // ?몄옄瑜?蹂댁〈?섍린 ?꾪빐 ?⑹꽦??癒쇱?, ?ъ슜???몄옄瑜??섏쨷???붾떎).
+            // Phase B: mediaAutoplay 로 --autoplay-policy=… 합성.
+            // 사용자 인자 앞에 붙여서 사용자 명시값이 있으면 우선하도록
+            // 한다(Chromium 은 마지막 값이 이긴다 ㅡ 사용자가 직접 지정한
+            // 인자를 보존하기 위해 합성을 먼저, 사용자 인자를 나중에 둔다).
             let mergedArgs = composeArgs(
                 userArgs: envOptions?.additionalBrowserArguments,
                 mediaAutoplay: mediaAutoplay)
@@ -195,8 +205,10 @@
             return env
         }
 
-        /// `additionalBrowserArguments` ? `--autoplay-policy=?? 瑜??⑹꽦?쒕떎.
-        /// ?ъ슜???몄옄 ?ㅼ뿉 ?⑹꽦 ?몄옄瑜??먮㈃ Chromium ??last-wins 洹쒖튃 ??        /// ?ъ슜??紐낆떆媛믪씠 ?④낵媛 ?щ씪吏誘濡? ?⑹꽦 ?몄옄瑜?癒쇱? ?먭퀬 ?ъ슜??        /// ?몄옄瑜??ㅼ뿉 ?붾떎.
+        /// `additionalBrowserArguments` 와 `--autoplay-policy=…` 를 합성한다.
+        /// 사용자 인자 뒤에 합성 인자를 두면 Chromium 의 last-wins 규칙 상
+        /// 사용자 명시값이 효과가 사라지므로, 합성 인자를 먼저 두고 사용자
+        /// 인자를 뒤에 둔다.
         private func composeArgs(
             userArgs: String?, mediaAutoplay: KSWebViewMediaAutoplay?
         ) -> String? {
@@ -219,7 +231,7 @@
             }
         }
 
-        /// `KSWV2_CreateEnvironment` / `KSWV2_CreateEnvironmentEx` 遺꾧린.
+        /// `KSWV2_CreateEnvironment` / `KSWV2_CreateEnvironmentEx` 분기.
         private func invokeCreateEnvironment(
             browserPtr: UnsafePointer<UInt16>?,
             userPtr: UnsafePointer<UInt16>?,
@@ -236,10 +248,8 @@
                 || envOptions?.trackingPrevention != nil
 
             if !needsEx {
-                return KSWV2_CreateEnvironment(browserPtr, userPtr, selfPtr) {
-                    user, hr, env in
-                    WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
-                }
+                return KSWV2_CreateEnvironment(
+                    browserPtr, userPtr, selfPtr, ksEnvCompletedThunk)
             }
 
             // tri-state helper
@@ -269,10 +279,8 @@
                             custom_crash_reporting_enabled: -1,
                             enable_tracking_prevention: trackingTri)
                         return KSWV2_CreateEnvironmentEx(
-                            browserPtr, userPtr, &opts, selfPtr
-                        ) { user, hr, env in
-                            WebView2Callbacks.receiveEnv(user: user, hr: hr, env: env)
-                        }
+                            browserPtr, userPtr, &opts, selfPtr,
+                            ksEnvCompletedThunk)
                     }
                 }
             }
@@ -286,9 +294,9 @@
             pendingCtrlDone = false
 
             let selfPtr = Unmanaged.passUnretained(self).toOpaque()
-            let hr = KSWV2_CreateController(env, UnsafeMutableRawPointer(hwnd), selfPtr) { user, hr, c in
-                WebView2Callbacks.receiveController(user: user, hr: hr, ctrl: c)
-            }
+            let hr = KSWV2_CreateController(
+                env, UnsafeMutableRawPointer(hwnd), selfPtr,
+                ksControllerCompletedThunk)
             try KSHRESULT(hr).throwIfFailed(
                 .webviewInitFailed, "CreateCoreWebView2Controller")
 
@@ -313,14 +321,20 @@
                     TranslateMessage(&msg)
                     DispatchMessageW(&msg)
                 } else {
-                    // WM_QUIT ?섏떊
+                    // WM_QUIT 수신
                     break
                 }
             }
         }
 
-        // C 肄쒕갚 thunk?먯꽌 ?몄텧?섎뒗 梨꾩? ?ы띁.
-        internal func fulfillEnv(hr: Int32, env: KSWV2Env?) {
+        // C 콜백 thunk에서 호출되는 채움 헬퍼.
+        // nonisolated: Swift 6 ABI emits an executor check in the prologue
+        // of @MainActor methods even when callers use `unsafeBitCast` to drop
+        // the isolation. That check raises STATUS_ILLEGAL_INSTRUCTION
+        // (0xC000001D) on the dedicated UI thread because it is not the main
+        // actor's thread. Marking these methods nonisolated removes the check
+        // entirely; the slots they touch are nonisolated(unsafe) above.
+        nonisolated internal func fulfillEnv(hr: Int32, env: KSWV2Env?) {
             if hr >= 0, let env {
                 self.pendingEnv = env
             } else {
@@ -331,7 +345,7 @@
             self.pendingEnvDone = true
         }
 
-        internal func fulfillController(hr: Int32, ctrl: KSWV2Controller?) {
+        nonisolated internal func fulfillController(hr: Int32, ctrl: KSWV2Controller?) {
             if hr >= 0, let ctrl {
                 self.pendingCtrl = ctrl
             } else {
@@ -342,7 +356,7 @@
             self.pendingCtrlDone = true
         }
 
-        // MARK: - Public operations ??see `WebView2Host+Operations.swift`.
+        // MARK: - Public operations — see `WebView2Host+Operations.swift`.
 
         // MARK: - Teardown
 

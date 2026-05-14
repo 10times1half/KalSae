@@ -1,5 +1,6 @@
-import Testing
 import Foundation
+import Testing
+
 @testable import KalsaeCLICore
 @testable import KalsaeCore
 
@@ -12,8 +13,10 @@ struct EntitlementsGeneratorTests {
             app: KSAppInfo(
                 name: "Demo", version: "0.1.0", identifier: "app.kalsae.demo"),
             build: KSBuildConfig(frontendDist: "dist"),
-            windows: [KSWindowConfig(
-                label: "main", title: "Demo", width: 800, height: 600)])
+            windows: [
+                KSWindowConfig(
+                    label: "main", title: "Demo", width: 800, height: 600)
+            ])
     }
 
     // MARK: - 기본 매핑
@@ -42,8 +45,9 @@ struct EntitlementsGeneratorTests {
         #expect(xml.contains("<string>ABCDE12345.app.kalsae.demo</string>"))
         #expect(xml.contains("<key>com.apple.developer.team-identifier</key>"))
         #expect(xml.contains("<string>ABCDE12345</string>"))
-        #expect(xml.contains(
-            "<key>com.apple.security.files.user-selected.read-write</key>"))
+        #expect(
+            xml.contains(
+                "<key>com.apple.security.files.user-selected.read-write</key>"))
     }
 
     @Test("network.client appears only when allowOutboundHTTP=true")
@@ -65,18 +69,21 @@ struct EntitlementsGeneratorTests {
 
     @Test("camera/microphone/photoLibrary/location entitlements gate properly")
     func devicePermissions() {
-        let all = renderEntitlementsPlist(EntitlementsInput(
-            target: .macAppStore,
-            requiresCamera: true,
-            requiresMicrophone: true,
-            requiresPhotoLibrary: true,
-            requiresLocation: true))
+        let all = renderEntitlementsPlist(
+            EntitlementsInput(
+                target: .macAppStore,
+                requiresCamera: true,
+                requiresMicrophone: true,
+                requiresPhotoLibrary: true,
+                requiresLocation: true))
         #expect(all.contains("<key>com.apple.security.device.camera</key>"))
         #expect(all.contains("<key>com.apple.security.device.audio-input</key>"))
-        #expect(all.contains(
-            "<key>com.apple.security.personal-information.photos-library</key>"))
-        #expect(all.contains(
-            "<key>com.apple.security.personal-information.location</key>"))
+        #expect(
+            all.contains(
+                "<key>com.apple.security.personal-information.photos-library</key>"))
+        #expect(
+            all.contains(
+                "<key>com.apple.security.personal-information.location</key>"))
 
         let none = renderEntitlementsPlist(
             EntitlementsInput(target: .macAppStore))
@@ -88,8 +95,9 @@ struct EntitlementsGeneratorTests {
 
     @Test("Developer ID does not emit files.user-selected even when usesFileDialogs=true")
     func developerIDNoUserSelected() {
-        let xml = renderEntitlementsPlist(EntitlementsInput(
-            target: .developerID, usesFileDialogs: true))
+        let xml = renderEntitlementsPlist(
+            EntitlementsInput(
+                target: .developerID, usesFileDialogs: true))
         #expect(!xml.contains("files.user-selected"))
     }
 

@@ -445,28 +445,32 @@ public enum KSDoctor {
             return
         case .developerID:
             requireTool("codesign", target: target, report: &report)
-            requireTool("xcrun", target: target, report: &report,
+            requireTool(
+                "xcrun", target: target, report: &report,
                 hint: "xcrun is required to invoke notarytool and stapler.")
             report.infos.append(
                 "macOS Developer ID: store a notarytool profile with "
-                + "`xcrun notarytool store-credentials <name>` and pass it via "
-                + "--notarytool-profile when building.")
+                    + "`xcrun notarytool store-credentials <name>` and pass it via "
+                    + "--notarytool-profile when building.")
         case .macAppStore:
             requireTool("codesign", target: target, report: &report)
             requireTool("productbuild", target: target, report: &report)
             report.infos.append(
                 "Mac App Store: provide --provisioning-profile pointing to "
-                + "the embedded.provisionprofile downloaded from developer.apple.com.")
+                    + "the embedded.provisionprofile downloaded from developer.apple.com.")
         case .microsoftStore:
-            requireTool("MakeAppx.exe", target: target, report: &report,
+            requireTool(
+                "MakeAppx.exe", target: target, report: &report,
                 hint: "MakeAppx.exe ships with the Windows 10/11 SDK.")
-            requireTool("signtool.exe", target: target, report: &report,
+            requireTool(
+                "signtool.exe", target: target, report: &report,
                 hint: "signtool.exe ships with the Windows 10/11 SDK.")
             report.infos.append(
                 "Microsoft Store: set --publisher to match the Publisher CN "
-                + "registered on Microsoft Partner Center.")
+                    + "registered on Microsoft Partner Center.")
         case .iosAppStore:
-            requireTool("xcodebuild", target: target, report: &report,
+            requireTool(
+                "xcodebuild", target: target, report: &report,
                 hint: "Requires a macOS host with Xcode 15+ installed.")
             requireTool("xcrun", target: target, report: &report)
         }

@@ -306,11 +306,13 @@ public enum KSWebView2Provisioner {
         try fm.createDirectory(at: dest, withIntermediateDirectories: true)
 
         // 5) 헤더 복사.
-        let includeSrc = extractDir
+        let includeSrc =
+            extractDir
             .appendingPathComponent("build")
             .appendingPathComponent("native")
             .appendingPathComponent("include")
-        let includeDst = dest
+        let includeDst =
+            dest
             .appendingPathComponent("build")
             .appendingPathComponent("native")
             .appendingPathComponent("include")
@@ -325,13 +327,15 @@ public enum KSWebView2Provisioner {
 
         // 6) 런타임 DLL 복사 (arch 별).
         for arch in ["win-x64", "win-x86", "win-arm64"] {
-            let srcDLL = extractDir
+            let srcDLL =
+                extractDir
                 .appendingPathComponent("runtimes")
                 .appendingPathComponent(arch)
                 .appendingPathComponent("native")
                 .appendingPathComponent("WebView2Loader.dll")
             guard fm.fileExists(atPath: srcDLL.path) else { continue }
-            let dstDir = dest
+            let dstDir =
+                dest
                 .appendingPathComponent("runtimes")
                 .appendingPathComponent(arch)
                 .appendingPathComponent("native")

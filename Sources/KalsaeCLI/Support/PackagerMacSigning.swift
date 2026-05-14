@@ -173,7 +173,7 @@ extension KSPackager {
             if !dryRun {
                 warnings.append(
                     "Developer ID signing pipeline skipped on non-macOS host. "
-                    + "Re-run `kalsae build --store devid` on macOS to actually sign + notarize.")
+                        + "Re-run `kalsae build --store devid` on macOS to actually sign + notarize.")
             }
         #endif
     }

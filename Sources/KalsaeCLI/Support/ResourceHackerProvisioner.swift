@@ -128,9 +128,10 @@ public enum KSResourceHackerProvisioner {
 
         /// `root` 하위에서 ResourceHacker.exe 를 재귀 탐색.
         private static func locateExe(in root: URL, fm: FileManager) -> URL? {
-            guard let enumerator = fm.enumerator(
-                at: root, includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles])
+            guard
+                let enumerator = fm.enumerator(
+                    at: root, includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles])
             else { return nil }
             for case let url as URL in enumerator
             where url.lastPathComponent.lowercased() == "resourcehacker.exe" {

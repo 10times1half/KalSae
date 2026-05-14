@@ -214,13 +214,17 @@ extension KSPackager {
             lines.append("<key>\(key)</key>")
             lines.append("<string>\(xmlEscapeIOSPlist(reason))</string>")
         }
-        append("NSCameraUsageDescription", permissions.camera,
+        append(
+            "NSCameraUsageDescription", permissions.camera,
             "This app uses the camera.")
-        append("NSMicrophoneUsageDescription", permissions.microphone,
+        append(
+            "NSMicrophoneUsageDescription", permissions.microphone,
             "This app uses the microphone.")
-        append("NSPhotoLibraryUsageDescription", permissions.photoLibrary,
+        append(
+            "NSPhotoLibraryUsageDescription", permissions.photoLibrary,
             "This app accesses your photo library.")
-        append("NSLocationWhenInUseUsageDescription", permissions.location,
+        append(
+            "NSLocationWhenInUseUsageDescription", permissions.location,
             "This app uses your location while in use.")
         return lines.joined(separator: "\n")
     }
@@ -246,7 +250,7 @@ extension KSPackager {
             if !dryRun {
                 warnings.append(
                     "iOS packaging pipeline skipped on non-macOS host. "
-                    + "Re-run `kalsae build --store ios-appstore` on macOS with Xcode installed.")
+                        + "Re-run `kalsae build --store ios-appstore` on macOS with Xcode installed.")
             }
         #endif
     }

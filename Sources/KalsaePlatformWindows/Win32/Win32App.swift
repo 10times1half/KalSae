@@ -29,7 +29,7 @@
         /// 찾기 위한 nonisolated 미러. `register` / `unregister` 가
         /// `windows` 와 함께 갱신한다. NSLock 으로 보호.
         nonisolated(unsafe) fileprivate static var windowsMirror: [UInt: Win32Window] = [:]
-        nonisolated(unsafe) fileprivate static let windowsMirrorLock = NSLock()
+        nonisolated fileprivate static let windowsMirrorLock = NSLock()
 
         nonisolated static func lookupWindowNonisolated(key: UInt) -> Win32Window? {
             windowsMirrorLock.lock()

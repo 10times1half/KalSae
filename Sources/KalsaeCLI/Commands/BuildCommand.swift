@@ -174,7 +174,8 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "macOS: notarytool keychain profile name (set up via `xcrun notarytool store-credentials`). When provided with --store devid, the bundle is notarized + stapled."
+        help:
+            "macOS: notarytool keychain profile name (set up via `xcrun notarytool store-credentials`). When provided with --store devid, the bundle is notarized + stapled."
     )
     var notarytoolProfile: String? = nil
 
@@ -186,7 +187,8 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "macOS MAS: installer signing identity (e.g. '3rd Party Mac Developer Installer: Name (TEAMID)'). Required with --store mas."
+        help:
+            "macOS MAS: installer signing identity (e.g. '3rd Party Mac Developer Installer: Name (TEAMID)'). Required with --store mas."
     )
     var installerIdentity: String? = nil
 
@@ -228,7 +230,8 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "MSIX: AppxManifest Publisher DN (e.g. 'CN=Acme Inc, O=Acme Inc, C=US'). Required with --store win-store. Must match Partner Center registration."
+        help:
+            "MSIX: AppxManifest Publisher DN (e.g. 'CN=Acme Inc, O=Acme Inc, C=US'). Required with --store win-store. Must match Partner Center registration."
     )
     var publisher: String? = nil
 
@@ -240,13 +243,15 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "MSIX: directory containing manifest Assets (Square150x150Logo.png, Square44x44Logo.png, Wide310x150Logo.png, StoreLogo.png, SplashScreen.png). If absent, placeholders are generated."
+        help:
+            "MSIX: directory containing manifest Assets (Square150x150Logo.png, Square44x44Logo.png, Wide310x150Logo.png, StoreLogo.png, SplashScreen.png). If absent, placeholders are generated."
     )
     var msixAssets: String? = nil
 
     @Option(
         name: .long,
-        help: "MSIX: signtool template (shell-evaluated, e.g. 'signtool.exe sign /a /fd sha256 {file}'). Omit to skip signing."
+        help:
+            "MSIX: signtool template (shell-evaluated, e.g. 'signtool.exe sign /a /fd sha256 {file}'). Omit to skip signing."
     )
     var msixSigntoolCmd: String? = nil
 
@@ -264,8 +269,8 @@ struct BuildCommand: ParsableCommand {
         if let raw = store, KSDistributionTarget.parse(raw) == nil {
             throw ValidationError(
                 "--store must be one of: dev | devid | mas | win-store | ios-appstore "
-                + "(or full names: developer | developer-id | mac-app-store | "
-                + "microsoft-store | ios-app-store). Got '\(raw)'.")
+                    + "(or full names: developer | developer-id | mac-app-store | "
+                    + "microsoft-store | ios-app-store). Got '\(raw)'.")
         }
     }
 
@@ -517,7 +522,7 @@ struct BuildCommand: ParsableCommand {
             #else
                 print(
                     "⚠  --store \(target.shortName): iOS packaging requires macOS host with Xcode. "
-                    + "Skipping (the pipeline is otherwise wired and will run on macOS).")
+                        + "Skipping (the pipeline is otherwise wired and will run on macOS).")
             #endif
         }
 
@@ -702,11 +707,12 @@ struct BuildCommand: ParsableCommand {
             guard let publisher = publisher, !publisher.isEmpty else {
                 throw ValidationError(
                     "--store win-store requires --publisher (e.g. "
-                    + "'CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR'). The CN must "
-                    + "match your Microsoft Partner Center registration.")
+                        + "'CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR'). The CN must "
+                        + "match your Microsoft Partner Center registration.")
             }
-            guard let archEnum = KSPackager.MSIXArchitecture(rawValue: arch.lowercased())
-                ?? msixArchFallback(arch.lowercased())
+            guard
+                let archEnum = KSPackager.MSIXArchitecture(rawValue: arch.lowercased())
+                    ?? msixArchFallback(arch.lowercased())
             else {
                 throw ValidationError(
                     "MSIX --arch must be one of: x64 | x86 | arm64 (got '\(arch)')")
@@ -724,7 +730,7 @@ struct BuildCommand: ParsableCommand {
             guard fm.fileExists(atPath: stagingURL.path) else {
                 throw ValidationError(
                     "MSIX staging directory not found: \(stagingURL.path) "
-                    + "(expected the base Windows package to exist).")
+                        + "(expected the base Windows package to exist).")
             }
 
             // Assets/ 디렉터리 보장 (사용자 제공 우선, 없으면 placeholder 1x1 PNG).
@@ -827,8 +833,9 @@ struct BuildCommand: ParsableCommand {
                         try Self.placeholderPNG.write(to: d)
                     }
                 }
-                print("⚠  --msix-assets not provided; using placeholder PNGs for all 5 MSIX images. "
-                    + "Replace before Partner Center submission.")
+                print(
+                    "⚠  --msix-assets not provided; using placeholder PNGs for all 5 MSIX images. "
+                        + "Replace before Partner Center submission.")
             }
         }
 
@@ -954,7 +961,7 @@ struct BuildCommand: ParsableCommand {
             guard let method = KSPackager.IOSExportMethod(rawValue: iosExportMethod) else {
                 throw ValidationError(
                     "--ios-export-method must be one of: "
-                    + "app-store-connect | app-store | ad-hoc | enterprise | development.")
+                        + "app-store-connect | app-store | ad-hoc | enterprise | development.")
             }
 
             let projectURL = URL(fileURLWithPath: projectArg, relativeTo: cwd)
@@ -996,7 +1003,7 @@ struct BuildCommand: ParsableCommand {
             let steps = KSPackager.planIOSPackagingPipeline(input)
             print(
                 "🍎  iOS App Store pipeline (\(steps.count) step(s)) → "
-                + ipaURL.path)
+                    + ipaURL.path)
             var warnings: [String] = []
             try KSPackager.executeIOSSteps(steps, dryRun: dryrun, warnings: &warnings)
             for w in warnings { print("⚠  \(w)") }

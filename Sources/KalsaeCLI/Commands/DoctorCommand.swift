@@ -35,7 +35,7 @@ struct DoctorCommand: ParsableCommand {
         if let raw = store, !raw.isEmpty, resolvedStore == nil {
             throw ValidationError(
                 "--store must be one of: dev | devid | mas | win-store | ios-appstore "
-                + "(got '\(raw)').")
+                    + "(got '\(raw)').")
         }
         let report = KSDoctor.run(
             .init(

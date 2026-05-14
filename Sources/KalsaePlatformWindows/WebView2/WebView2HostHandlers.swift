@@ -27,9 +27,7 @@
             let unmanaged = Unmanaged.passRetained(box)
             messageHandlerBox = unmanaged
             let user = unmanaged.toOpaque()
-            let hr = KSWV2_AddMessageHandler(webview, user) { u, msg in
-                WebView2Callbacks.dispatchMessage(user: u, msg: msg)
-            }
+            let hr = KSWV2_AddMessageHandler(webview, user, ksMessageDispatchThunk)
             try KSHRESULT(hr).throwIfFailed(
                 .webviewInitFailed, "add_WebMessageReceived")
         }
@@ -65,13 +63,7 @@
             // COI 플래그를 헤더 빌더에 전달. 0/non-zero만 의미가 있다.
             _ = KSWV2_SetCrossOriginIsolation(webview, crossOriginIsolation ? 1 : 0)
 
-            let hr = KSWV2_AddWebResourceRequestedHandler(webview, user) {
-                u, uri, outData, outLen, outCT, outCSP in
-                WebView2Callbacks.dispatchResource(
-                    user: u, uri: uri,
-                    outData: outData, outLen: outLen,
-                    outCT: outCT, outCSP: outCSP)
-            }
+            let hr = KSWV2_AddWebResourceRequestedHandler(webview, user, ksResourceDispatchThunk)
             try KSHRESULT(hr).throwIfFailed(
                 .webviewInitFailed, "add_WebResourceRequested")
 
@@ -112,12 +104,7 @@
             dropTargetBox = unmanaged
             let user = unmanaged.toOpaque()
             let hr = KSWV2_RegisterDropTarget(
-                UnsafeMutableRawPointer(hwnd), user
-            ) { u, kind, x, y, paths, count in
-                WebView2Callbacks.dispatchDrop(
-                    user: u, kind: kind, x: x, y: y,
-                    paths: paths, count: count)
-            }
+                UnsafeMutableRawPointer(hwnd), user, ksDropDispatchThunk)
             try KSHRESULT(hr).throwIfFailed(
                 .webviewInitFailed, "RegisterDragDrop")
         }
@@ -158,9 +145,7 @@
             let nwUnmanaged = Unmanaged.passRetained(nwBox)
             newWindowHandlerBox = nwUnmanaged
             let nwUser = nwUnmanaged.toOpaque()
-            let nwHR = KSWV2_AddNewWindowRequestedHandler(webview, nwUser) { u, uri in
-                WebView2Callbacks.dispatchNewWindow(user: u, uri: uri)
-            }
+            let nwHR = KSWV2_AddNewWindowRequestedHandler(webview, nwUser, ksNewWindowDispatchThunk)
             try KSHRESULT(nwHR).throwIfFailed(.webviewInitFailed, "add_NewWindowRequested")
 
             // 2. 권한 요청 핸들러 (마이크/카메라/지오로케이션 등 기본 거부)
@@ -169,9 +154,7 @@
             let permUnmanaged = Unmanaged.passRetained(permBox)
             permissionHandlerBox = permUnmanaged
             let permUser = permUnmanaged.toOpaque()
-            let permHR = KSWV2_AddPermissionRequestedHandler(webview, permUser) { u, uri, kind in
-                WebView2Callbacks.dispatchPermission(user: u, uri: uri, kind: kind)
-            }
+            let permHR = KSWV2_AddPermissionRequestedHandler(webview, permUser, ksPermissionDispatchThunk)
             try KSHRESULT(permHR).throwIfFailed(.webviewInitFailed, "add_PermissionRequested")
 
             // 3. 다운로드 시작 핸들러 — 항상 허용하되 JS 측에 알린다.
@@ -183,9 +166,7 @@
             let dlUnmanaged = Unmanaged.passRetained(dlBox)
             downloadHandlerBox = dlUnmanaged
             let dlUser = dlUnmanaged.toOpaque()
-            let dlHR = KSWV2_AddDownloadStartingHandler(webview, dlUser) { u, url, mime in
-                WebView2Callbacks.dispatchDownload(user: u, url: url, mime: mime)
-            }
+            let dlHR = KSWV2_AddDownloadStartingHandler(webview, dlUser, ksDownloadDispatchThunk)
             try KSHRESULT(dlHR).throwIfFailed(.webviewInitFailed, "add_DownloadStarting")
 
             // 4. TLS/서버 인증서 오류 — deny-secure 기본값. 런타임이
@@ -195,9 +176,7 @@
             let scUnmanaged = Unmanaged.passRetained(scBox)
             serverCertHandlerBox = scUnmanaged
             let scUser = scUnmanaged.toOpaque()
-            let scHR = KSWV2_AddServerCertificateErrorHandler(webview, scUser) { u in
-                WebView2Callbacks.dispatchServerCertError(user: u)
-            }
+            let scHR = KSWV2_AddServerCertificateErrorHandler(webview, scUser, ksServerCertDispatchThunk)
             // E_NOINTERFACE: 이전 런타임 버전 — 핸들러 없이 기본 동작(오류 UI 표시).
             if KSHRESULT(scHR).isNotInterface {
                 serverCertHandlerBox?.release()
@@ -210,9 +189,7 @@
             let baUnmanaged = Unmanaged.passRetained(baBox)
             basicAuthHandlerBox = baUnmanaged
             let baUser = baUnmanaged.toOpaque()
-            let baHR = KSWV2_AddBasicAuthenticationHandler(webview, baUser) { u, uri, challenge in
-                WebView2Callbacks.dispatchBasicAuth(user: u, uri: uri, challenge: challenge)
-            }
+            let baHR = KSWV2_AddBasicAuthenticationHandler(webview, baUser, ksBasicAuthDispatchThunk)
             if KSHRESULT(baHR).isNotInterface {
                 basicAuthHandlerBox?.release()
                 basicAuthHandlerBox = nil
@@ -224,9 +201,7 @@
             let ccUnmanaged = Unmanaged.passRetained(ccBox)
             clientCertHandlerBox = ccUnmanaged
             let ccUser = ccUnmanaged.toOpaque()
-            let ccHR = KSWV2_AddClientCertificateHandler(webview, ccUser) { u, host in
-                WebView2Callbacks.dispatchClientCert(user: u, host: host)
-            }
+            let ccHR = KSWV2_AddClientCertificateHandler(webview, ccUser, ksClientCertDispatchThunk)
             if KSHRESULT(ccHR).isNotInterface {
                 clientCertHandlerBox?.release()
                 clientCertHandlerBox = nil

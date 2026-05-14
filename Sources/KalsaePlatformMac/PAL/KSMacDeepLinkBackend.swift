@@ -36,7 +36,7 @@
                 // 샌드박스 제한으로 실패 가능성이 높다. No-op.
                 print(
                     "⚠  KSMacDeepLinkBackend.register(\"\(scheme)\"): no-op under MAS sandbox "
-                    + "(scheme registration handled by Info.plist CFBundleURLTypes).")
+                        + "(scheme registration handled by Info.plist CFBundleURLTypes).")
                 return
             }
             guard #available(macOS 12.0, *) else {
