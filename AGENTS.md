@@ -56,7 +56,7 @@ swift test --no-parallel
 
 - This repo is developed in **PowerShell 5.1 / 7**. Chain commands with `;` —
   **never** `&&`.
-- Working directory is `C:\Projects\Kalsae`.
+- Working directory is the repository root (this workspace).
 
 _🇰🇷 `swift build` / `swift test`. `kalsae build`는 WebView2를 자동 fetch함. bare `swift build` 사용 시만 `./Scripts/fetch-webview2.ps1` 먼저 실행._
 _🇰🇷 PowerShell 체이닝은 `;`만 사용 (`&&` 금지)._
