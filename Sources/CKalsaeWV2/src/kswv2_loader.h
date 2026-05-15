@@ -17,14 +17,14 @@
 
 // ---------------------------------------------------------------------------
 // 초기화 (선택적). 첫 번째 LoadLibraryW 이전에 DLL 검색 경로를 prepend한다.
-// fixed-runtime 모드에서 "webview2-runtime/" 을 우선 검색하도록 BuildCommand가
+// fixed-runtime 모드에서 "webview2-runtime/"을 우선 검색하도록 BuildCommand가
 // 패키지 디렉터리 내 경로를 전달한다.
 // dir == nullptr 이면 no-op.
 // ---------------------------------------------------------------------------
 void KSWV2_Loader_SetDir(const wchar_t *dir);
 
 // ---------------------------------------------------------------------------
-// 동적 디스패치 — WebView2LoaderStatic.lib 의 두 export를 대체한다.
+// 동적 디스패치 — WebView2LoaderStatic.lib의 두 export를 대체한다.
 // ---------------------------------------------------------------------------
 
 /// CreateCoreWebView2EnvironmentWithOptions 동적 디스패치.

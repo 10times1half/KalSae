@@ -15,7 +15,7 @@
 #include <synchapi.h>    // InitOnceExecuteOnce
 
 // ---------------------------------------------------------------------------
-// 함수 포인터 타입
+// 함수 포인터 타입 — WebView2Loader.dll의 export 함수 시그니처와 일치해야 한다.
 // ---------------------------------------------------------------------------
 
 using FnCreateEnv = decltype(&CreateCoreWebView2EnvironmentWithOptions);
@@ -23,22 +23,31 @@ using FnGetVersion = decltype(&GetAvailableCoreWebView2BrowserVersionString);
 
 // ---------------------------------------------------------------------------
 // 모듈 전역 상태
+//
+// InitOnceExecuteOnce로 보호되므로 최초 호출 시에만 초기화가 실행된다.
+// 이후 모든 호출은 캐시된 함수 포인터를 즉시 사용한다.
 // ---------------------------------------------------------------------------
 
 static INIT_ONCE   g_initOnce       = INIT_ONCE_STATIC_INIT;
-static HMODULE     g_hModule        = nullptr;
-static FnCreateEnv g_pfnCreateEnv   = nullptr;
-static FnGetVersion g_pfnGetVersion = nullptr;
-static HRESULT     g_loadHR         = S_OK;  // 로드 결과 캐시
-static wchar_t     g_tmpFile[MAX_PATH] = {};
+static HMODULE     g_hModule        = nullptr;   // 로드된 DLL 핸들
+static FnCreateEnv g_pfnCreateEnv   = nullptr;   // CreateEnvironment 함수 포인터
+static FnGetVersion g_pfnGetVersion = nullptr;   // GetVersion 함수 포인터
+static HRESULT     g_loadHR         = S_OK;      // 로드 결과 캐시 (실패 시 재시도 없음)
+static wchar_t     g_tmpFile[MAX_PATH] = {};     // 리소스에서 추출한 임시 DLL 경로
 
 // LoadLibraryW 전에 prepend 할 디렉터리 (SetDir로 설정, 첫 초기화 전에만 유효).
 static wchar_t     g_dir[MAX_PATH]  = {};
 
 // ---------------------------------------------------------------------------
-// 리소스 로드 (standalone)
+// 리소스 로드 (standalone 모드)
+//
+// exe의 RT_RCDATA 리소스(KWV2_LOADER_DLL)에서 WebView2Loader.dll 바이트를
+// 읽어 %TEMP% 임시 파일로 쓴 뒤 LoadLibraryExW로 로드한다.
+// RFC-010 §2.2 Phase 3: LoadLibraryExW hardening — DLL 검색을 full path로 제한.
+// 리소스가 없으면 false를 반환하고, 호출자는 일반 LoadLibrary 경로로 fallback한다.
 // ---------------------------------------------------------------------------
 
+/// DLL 핸들에서 두 개의 export 함수 포인터를 바인딩한다.
 static bool BindExports(HMODULE hMod) {
     g_pfnCreateEnv = reinterpret_cast<FnCreateEnv>(
         GetProcAddress(hMod, "CreateCoreWebView2EnvironmentWithOptions"));
@@ -54,10 +63,8 @@ static bool BindExports(HMODULE hMod) {
     return true;
 }
 
-/// exe의 RT_RCDATA 리소스(KWV2_LOADER_DLL)에서 WebView2Loader.dll 바이트를
-/// 읽어 %TEMP% 임시 파일로 쓴 뒤 LoadLibraryExW로 로드한다.
-/// RFC-010 §2.2 Phase 3: LoadLibraryExW hardening — DLL search는 full path 제한.
-/// 리소스가 없으면 false를 반환하고, 호출자는 일반 LoadLibrary 경로로 fallback한다.
+/// exe에 내장된 RT_RCDATA 리소스에서 WebView2Loader.dll을 추출하여 로드한다.
+/// standalone 배포(WebView2Loader.dll이 exe 옆에 없는 경우)를 지원한다.
 static bool TryLoadFromResource() {
     HRSRC hRes = FindResourceW(nullptr, L"KWV2_LOADER_DLL", RT_RCDATA);
     if (!hRes) return false;
@@ -69,11 +76,13 @@ static bool TryLoadFromResource() {
     DWORD size = SizeofResource(nullptr, hRes);
     if (!data || size == 0) return false;
 
+    // 임시 파일 경로 생성
     wchar_t tmpDir[MAX_PATH] = {};
     wchar_t tmpFile[MAX_PATH] = {};
     if (!GetTempPathW(MAX_PATH, tmpDir)) return false;
     if (!GetTempFileNameW(tmpDir, L"kwv", 0, tmpFile)) return false;
 
+    // 리소스 데이터를 임시 파일에 쓰기
     HANDLE hFile = CreateFileW(
         tmpFile,
         GENERIC_WRITE,
@@ -92,8 +101,8 @@ static bool TryLoadFromResource() {
         return false;
     }
 
-    // RFC-010 Phase 3 Hardening: Use LoadLibraryExW with LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR
-    // to ensure the DLL is loaded only from the full path specified, not from system paths.
+    // RFC-010 Phase 3 Hardening: LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR를 사용하여
+    // 지정된 full path에서만 DLL을 로드하고 시스템 경로에서는 로드하지 않는다.
     HMODULE hMod = LoadLibraryExW(tmpFile, nullptr, LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR);
     if (!hMod) {
         DeleteFileW(tmpFile);
@@ -106,12 +115,13 @@ static bool TryLoadFromResource() {
         return false;
     }
 
+    // 프로세스 종료 시 임시 파일 정리를 위해 경로 저장
     wcsncpy_s(g_tmpFile, MAX_PATH, tmpFile, _TRUNCATE);
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// InitOnce 콜백
+// InitOnce 콜백 — 최초 1회만 실행된다.
 // ---------------------------------------------------------------------------
 
 static BOOL CALLBACK LoadOnce(PINIT_ONCE, PVOID, PVOID *) {
@@ -121,7 +131,8 @@ static BOOL CALLBACK LoadOnce(PINIT_ONCE, PVOID, PVOID *) {
         return TRUE;
     }
 
-    // 디렉터리가 설정되어 있으면 prepend (기존 검색 순서는 유지).
+    // 디렉터리가 설정되어 있으면 SetDllDirectoryW로 검색 경로에 prepend
+    // (기존 검색 순서는 유지).
     if (g_dir[0] != L'\0') {
         SetDllDirectoryW(g_dir);
     }
@@ -151,18 +162,20 @@ static BOOL CALLBACK LoadOnce(PINIT_ONCE, PVOID, PVOID *) {
 // 공개 API
 // ---------------------------------------------------------------------------
 
+/// DLL 검색 디렉터리를 설정한다. 첫 번째 Ensure() 이전에만 유효하다.
 void KSWV2_Loader_SetDir(const wchar_t *dir) {
     if (!dir) return;
-    // SetDir는 첫 번째 Ensure 이전에만 유효하다.
     // InitOnce가 이미 완료된 경우 g_dir 변경은 효과가 없다 — 문서화된 제약.
     wcsncpy_s(g_dir, MAX_PATH, dir, _TRUNCATE);
 }
 
+/// InitOnce를 통해 LoadOnce를 1회 실행하고, 캐시된 로드 결과를 반환한다.
 static HRESULT Ensure() {
     InitOnceExecuteOnce(&g_initOnce, LoadOnce, nullptr, nullptr);
     return g_loadHR;
 }
 
+/// CreateCoreWebView2EnvironmentWithOptions를 동적 디스패치한다.
 HRESULT KSWV2_Loader_CreateEnvironmentWithOptions(
     PCWSTR browserExecutableFolder,
     PCWSTR userDataFolder,
@@ -178,6 +191,7 @@ HRESULT KSWV2_Loader_CreateEnvironmentWithOptions(
         environmentCreatedHandler);
 }
 
+/// GetAvailableCoreWebView2BrowserVersionString을 동적 디스패치한다.
 HRESULT KSWV2_Loader_GetAvailableBrowserVersionString(
     PCWSTR browserExecutableFolder,
     LPWSTR *versionInfo)

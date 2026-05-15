@@ -3,7 +3,8 @@
 //  CKalsaeWV2
 //
 //  ITaskbarList3 래퍼 — C 전용 API 표면.
-//  진행 상태 및 오버레이 아이콘 표시를 지원한다.
+//  작업 표시줄 진행 상태 표시 및 오버레이 아이콘 표시를 지원한다.
+//  구현은 kswv2_taskbar.cpp에 있다.
 //
 
 #ifndef KSWV2_TASKBAR_H
@@ -23,7 +24,7 @@ typedef int32_t KSWV2_TaskbarState;
 
 /// `hwnd` 윈도우의 작업 표시줄 진행 상태를 설정한다.
 /// - `state`: KSWV2_TaskbarState 값.
-/// - `value`: 진행률 (0 – 100). `state == 0 || state == 1`이면 무시된다.
+/// - `value`: 진행률 (0–100). `state == 0 || state == 1`이면 무시된다.
 /// 반환: S_OK(0) 성공, 그 외 HRESULT 오류 코드.
 int32_t KSWV2_SetTaskbarProgress(HWND hwnd, KSWV2_TaskbarState state, uint32_t value);
 

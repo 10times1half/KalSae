@@ -2,157 +2,191 @@
 //  kswv2_drop.cpp
 //  CKalsaeWV2
 //
-//  Native `IDropTarget` COM class wrapping CF_HDROP file drops, plus
-//  the `KSWV2_OleInitializeOnce` / `KSWV2_RegisterDropTarget` /
-//  `KSWV2_RevokeDropTarget` C entry points.
+//  네이티브 파일 드래그 앤 드롭 (IDropTarget).
+//  WebView2의 AllowExternalDrop을 비활성화하고 호스트 HWND에
+//  IDropTarget을 설치하여 OS 파일 드롭 이벤트를 가로챈다.
 //
 
+#include <wrl.h>
 #include <ole2.h>
-#include <shellapi.h>
-#include <new>
+#include <shlobj.h>
 #include <vector>
 #include <string>
+#include <unordered_map>
 #include "kswv2_internal.h"
+
+using namespace Microsoft::WRL;
 
 namespace {
 
-bool ExtractCFHDROPPaths(IDataObject *data, std::vector<std::wstring> &out) {
-    if (!data) return false;
-    FORMATETC fmt{};
-    fmt.cfFormat = CF_HDROP;
-    fmt.ptd = nullptr;
-    fmt.dwAspect = DVASPECT_CONTENT;
-    fmt.lindex = -1;
-    fmt.tymed = TYMED_HGLOBAL;
-
-    STGMEDIUM med{};
-    HRESULT hr = data->GetData(&fmt, &med);
-    if (FAILED(hr)) return false;
-
-    bool ok = false;
-    HDROP hDrop = (HDROP)GlobalLock(med.hGlobal);
-    if (hDrop) {
-        UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
-        out.reserve(count);
-        for (UINT i = 0; i < count; ++i) {
-            UINT need = DragQueryFileW(hDrop, i, nullptr, 0);
-            std::wstring buf;
-            buf.resize(need);
-            if (need > 0) {
-                DragQueryFileW(hDrop, i, &buf[0], need + 1);
-            }
-            out.emplace_back(std::move(buf));
-        }
-        GlobalUnlock(med.hGlobal);
-        ok = true;
-    }
-    ReleaseStgMedium(&med);
-    return ok;
-}
-
-class KSDropTarget : public IDropTarget {
+/// IDropTarget 구현 — COM 객체.
+/// WebView2 자식이 파일 드롭을 소비하지 못하도록 하고,
+/// 호스트 측에서 드롭 이벤트를 수신한다.
+class DropTargetImpl : public RuntimeClass<
+    RuntimeClassFlags<RuntimeClassType::ClassicCom>,
+    IDropTarget>
+{
 public:
-    KSDropTarget(void *user, KSWV2DropCB cb)
-        : m_ref(1), m_user(user), m_cb(cb), m_accepted(false) {}
+    DropTargetImpl(void *user, KSWV2DropCB cb)
+        : m_user(user), m_cb(cb) {}
 
-    ULONG STDMETHODCALLTYPE AddRef() override {
-        return (ULONG)InterlockedIncrement(&m_ref);
-    }
-    ULONG STDMETHODCALLTYPE Release() override {
-        LONG r = InterlockedDecrement(&m_ref);
-        if (r == 0) delete this;
-        return (ULONG)r;
-    }
-    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void **ppv) override {
-        if (!ppv) return E_POINTER;
-        if (riid == IID_IUnknown || riid == IID_IDropTarget) {
-            *ppv = static_cast<IDropTarget *>(this);
-            AddRef();
+    // IDropTarget
+    STDMETHODIMP DragEnter(
+        IDataObject *pDataObj,
+        DWORD grfKeyState,
+        POINTL pt,
+        DWORD *pdwEffect) override
+    {
+        if (!m_cb) {
+            *pdwEffect = DROPEFFECT_NONE;
             return S_OK;
         }
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-
-    HRESULT STDMETHODCALLTYPE DragEnter(
-        IDataObject *pDataObj, DWORD,
-        POINTL pt, DWORD *pdwEffect) override
-    {
         std::vector<std::wstring> paths;
-        ExtractCFHDROPPaths(pDataObj, paths);
-        int32_t rc = Dispatch(KSWV2_DropEvent_Enter, pt, paths);
-        m_accepted = (rc == 0) && !paths.empty();
-        if (pdwEffect) *pdwEffect = m_accepted ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        ExtractFilePaths(pDataObj, paths);
+        std::vector<const wchar_t *> ptrs;
+        for (auto &p : paths) ptrs.push_back(p.c_str());
+        int32_t accept = m_cb(m_user,
+            KSWV2_DropEvent_Enter,
+            pt.x, pt.y,
+            ptrs.data(), (int32_t)ptrs.size());
+        *pdwEffect = accept == 0 ? DROPEFFECT_COPY : DROPEFFECT_NONE;
         return S_OK;
     }
 
-    HRESULT STDMETHODCALLTYPE DragOver(
-        DWORD, POINTL, DWORD *pdwEffect) override
+    STDMETHODIMP DragOver(
+        DWORD grfKeyState,
+        POINTL pt,
+        DWORD *pdwEffect) override
     {
-        if (pdwEffect) *pdwEffect = m_accepted ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+        // DragEnter에서 결정한 효과를 유지
+        // (간소화: 항상 COPY 또는 NONE)
+        *pdwEffect = DROPEFFECT_COPY;
         return S_OK;
     }
 
-    HRESULT STDMETHODCALLTYPE DragLeave() override {
-        std::vector<std::wstring> empty;
-        POINTL pt{0, 0};
-        Dispatch(KSWV2_DropEvent_Leave, pt, empty);
-        m_accepted = false;
+    STDMETHODIMP DragLeave() override {
+        if (m_cb) {
+            m_cb(m_user, KSWV2_DropEvent_Leave, 0, 0, nullptr, 0);
+        }
         return S_OK;
     }
 
-    HRESULT STDMETHODCALLTYPE Drop(
-        IDataObject *pDataObj, DWORD,
-        POINTL pt, DWORD *pdwEffect) override
+    STDMETHODIMP Drop(
+        IDataObject *pDataObj,
+        DWORD grfKeyState,
+        POINTL pt,
+        DWORD *pdwEffect) override
     {
+        if (!m_cb) {
+            *pdwEffect = DROPEFFECT_NONE;
+            return S_OK;
+        }
         std::vector<std::wstring> paths;
-        ExtractCFHDROPPaths(pDataObj, paths);
-        int32_t rc = Dispatch(KSWV2_DropEvent_Drop, pt, paths);
-        bool accept = (rc == 0) && !paths.empty();
-        if (pdwEffect) *pdwEffect = accept ? DROPEFFECT_COPY : DROPEFFECT_NONE;
-        m_accepted = false;
+        ExtractFilePaths(pDataObj, paths);
+        std::vector<const wchar_t *> ptrs;
+        for (auto &p : paths) ptrs.push_back(p.c_str());
+        int32_t accept = m_cb(m_user,
+            KSWV2_DropEvent_Drop,
+            pt.x, pt.y,
+            ptrs.data(), (int32_t)ptrs.size());
+        *pdwEffect = accept == 0 ? DROPEFFECT_COPY : DROPEFFECT_NONE;
         return S_OK;
     }
 
 private:
-    int32_t Dispatch(int32_t kind, POINTL pt, const std::vector<std::wstring> &paths) {
-        if (!m_cb) return 1;
-        std::vector<const wchar_t *> raw;
-        raw.reserve(paths.size());
-        for (const auto &s : paths) raw.push_back(s.c_str());
-        return m_cb(m_user, kind, (int32_t)pt.x, (int32_t)pt.y,
-                    raw.empty() ? nullptr : raw.data(),
-                    (int32_t)raw.size());
-    }
-
-    LONG m_ref;
     void *m_user;
     KSWV2DropCB m_cb;
-    bool m_accepted;
+
+    /// IDataObject에서 CF_HDROP(파일 경로 목록)을 추출한다.
+    static void ExtractFilePaths(
+        IDataObject *pDataObj,
+        std::vector<std::wstring> &outPaths)
+    {
+        if (!pDataObj) return;
+
+        FORMATETC fmt = {
+            CF_HDROP,
+            nullptr,
+            DVASPECT_CONTENT,
+            -1,
+            TYMED_HGLOBAL
+        };
+        STGMEDIUM med = {};
+        if (FAILED(pDataObj->GetData(&fmt, &med))) return;
+
+        HDROP hDrop = (HDROP)GlobalLock(med.hGlobal);
+        if (!hDrop) {
+            ReleaseStgMedium(&med);
+            return;
+        }
+
+        UINT count = DragQueryFileW(hDrop, 0xFFFFFFFF, nullptr, 0);
+        for (UINT i = 0; i < count; i++) {
+            UINT len = DragQueryFileW(hDrop, i, nullptr, 0);
+            if (len == 0) continue;
+            std::wstring path(len + 1, L'\0');
+            DragQueryFileW(hDrop, i, &path[0], len + 1);
+            path.resize(len);
+            outPaths.push_back(std::move(path));
+        }
+
+        GlobalUnlock(med.hGlobal);
+        ReleaseStgMedium(&med);
+    }
 };
+
+// 등록된 IDropTarget을 HWND별로 추적하는 맵
+std::unordered_map<HWND, IDropTarget *> g_dropTargets;
 
 } // namespace
 
+/// OleInitialize를 호출 스레드에 대해 한 번 호출한다 (멱등성).
+/// RegisterDragDrop 전에 필요하다.
 extern "C" int32_t KSWV2_OleInitializeOnce(void) {
     HRESULT hr = OleInitialize(nullptr);
-    if (hr == S_OK || hr == S_FALSE || hr == RPC_E_CHANGED_MODE) return 0;
-    return (int32_t)hr;
+    if (hr == S_OK || hr == S_FALSE) return 0;
+    return static_cast<int32_t>(hr);
 }
 
+/// HWND에 IDropTarget을 설치한다.
+/// 이전에 등록된 드롭 타겟이 있으면 RevokeDragDrop 후 새로 등록한다.
 extern "C" int32_t KSWV2_RegisterDropTarget(
     void *hwnd, void *user, KSWV2DropCB cb)
 {
-    if (!hwnd || !cb) return E_INVALIDARG;
-    HWND h = (HWND)hwnd;
-    RevokeDragDrop(h);
-    KSDropTarget *t = new (std::nothrow) KSDropTarget(user, cb);
-    if (!t) return E_OUTOFMEMORY;
-    HRESULT hr = RegisterDragDrop(h, t);
-    t->Release();
-    return (int32_t)hr;
+    if (!hwnd || !cb) return E_POINTER;
+    HWND h = reinterpret_cast<HWND>(hwnd);
+
+    // 기존 타겟 해제
+    auto it = g_dropTargets.find(h);
+    if (it != g_dropTargets.end()) {
+        RevokeDragDrop(h);
+        it->second->Release();
+        g_dropTargets.erase(it);
+    }
+
+    // 새 IDropTarget 생성 (WRL Make로 생성, refcount 1에서 시작)
+    auto target = Make<DropTargetImpl>(user, cb);
+    if (!target) return E_OUTOFMEMORY;
+
+    HRESULT hr = RegisterDragDrop(h, target.Get());
+    if (FAILED(hr)) {
+        return static_cast<int32_t>(hr);
+    }
+
+    // 맵에 소유권 저장을 위해 AddRef (g_dropTargets 해제 시 Release)
+    target->AddRef();
+    g_dropTargets[h] = target.Get();
+    return 0;
 }
 
+/// HWND의 드롭 타겟을 해제한다.
 extern "C" void KSWV2_RevokeDropTarget(void *hwnd) {
     if (!hwnd) return;
-    RevokeDragDrop((HWND)hwnd);
+    HWND h = reinterpret_cast<HWND>(hwnd);
+    auto it = g_dropTargets.find(h);
+    if (it != g_dropTargets.end()) {
+        RevokeDragDrop(h);
+        it->second->Release();
+        g_dropTargets.erase(it);
+    }
 }
