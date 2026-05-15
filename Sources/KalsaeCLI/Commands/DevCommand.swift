@@ -100,6 +100,14 @@ struct DevCommand: ParsableCommand {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
 
+        // 비-ASCII 경로는 SwiftPM(Windows) 가 임시 빌드 산출물을 찾지 못해 깨지므로
+        // 명확한 에러로 사전 차단한다. 모든 OS 에서 일관되게 적용.
+        do {
+            try KSProjectNameValidator.validatePath(cwd, role: "current working directory")
+        } catch let e as KSProjectNameValidator.ValidationFailure {
+            throw ValidationError(e.description)
+        }
+
         // Windows: `swift run` 이 CKalsaeWV2 를 컴파일하기 전에
         // Kalsae 체크아웃의 Vendor/WebView2 를 채워둔다.
         do {

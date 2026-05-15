@@ -1,5 +1,3 @@
-public import Foundation
-
 /// IPC 정책 평가 결과.
 public enum KSPolicyDecision: Sendable, Equatable {
     /// 호출이 허용됨. `capability`는 매칭된 capability 식별자(진단용).

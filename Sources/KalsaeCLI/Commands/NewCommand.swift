@@ -89,6 +89,21 @@ struct NewCommand: ParsableCommand {
             return
         }
 
+        // 비-ASCII 경로/이름은 SwiftPM(Windows) 가 깨지므로 모든 OS 에서 일관되게 차단.
+        // - 현재 작업 디렉터리(부모) 가 비-ASCII 면 거부 (이미 그 안에서 새 프로젝트를
+        //   만들어봤자 swift build 가 깨진다).
+        // - `--dir` 가 명시되었으면 그 경로도 거부.
+        do {
+            let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            try KSProjectNameValidator.validatePath(cwd, role: "current working directory")
+            if let dir, !dir.isEmpty {
+                let dirURL = URL(fileURLWithPath: dir, relativeTo: cwd).standardizedFileURL
+                try KSProjectNameValidator.validatePath(dirURL, role: "--dir target")
+            }
+        } catch let e as KSProjectNameValidator.ValidationFailure {
+            throw ValidationError(e.description)
+        }
+
         let resolvedName = try resolveName()
 
         let dest = try resolveDestination(name: resolvedName)
@@ -197,12 +212,10 @@ struct NewCommand: ParsableCommand {
     }
 
     private func validateName(_ value: String) throws {
-        guard value.first?.isLetter == true,
-            value.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" })
-        else {
-            throw ValidationError(
-                "'\(value)' is not a valid project name. Use letters, digits, hyphens or underscores, starting with a letter."
-            )
+        do {
+            try KSProjectNameValidator.validateName(value)
+        } catch let e as KSProjectNameValidator.ValidationFailure {
+            throw ValidationError(e.description)
         }
     }
 

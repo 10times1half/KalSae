@@ -31,7 +31,7 @@
 /// 본 패키저는 어느 호스트 OS 에서도 실행 가능하다 (순수 파일 emit). 실제
 /// Android 크로스 컴파일은 Linux/macOS 호스트에서 Android Swift SDK 로 수행한다.
 public import Foundation
-public import KalsaeCore
+internal import KalsaeCore
 
 extension KSPackager {
 
