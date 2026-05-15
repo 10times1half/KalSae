@@ -14,7 +14,7 @@
         // 스레드 안전하므로, 백그라운드 스레드도 `postJob`를 호출할 수 있다.
         nonisolated private let window: Win32Window
         private let webview: WebView2Host
-        public let bridge: WebView2Bridge
+        public let bridge: any KSBridge
         private let webviewOptions: KSWebViewOptions?
         private let backdropType: KSWindowBackdrop?
         private let windowTransparent: Bool

@@ -9,10 +9,10 @@
     /// 디스패치, 응답 인코드, 이벤트 이미트)는 KalsaeCore에 있어
     /// 플랫폼 간 동일하다. 이 타입은 `WKWebViewHost` 배관만 담당한다.
     @MainActor
-    public final class WKBridge {
+    public final class WKBridge: KSBridge {
         private let host: WKWebViewHost
         private let core: KSIPCBridgeCore
-        internal let windowLabel: String
+        public let windowLabel: String
 
         /// JS에서 수신하는 `emit` 메시지의 싱크.
         public var onEvent: (@MainActor (String, Data?) -> Void)? {

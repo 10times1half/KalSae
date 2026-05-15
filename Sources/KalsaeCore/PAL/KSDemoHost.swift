@@ -20,6 +20,10 @@ public protocol KSDemoHost: AnyObject, Sendable {
     /// 명령 레지스트리. 기본 명령과 사용자 정의 명령을 관리한다.
     var registry: KSCommandRegistry { get }
 
+    /// 이 호스트의 IPC 브리지. JS 프론트엔드와 Swift IPC 코어를 연결한다.
+    /// 모든 플랫폼 DemoHost는 정확히 하나의 브리지를 갖는다.
+    var bridge: any KSBridge { get }
+
     /// 이 호스트의 주 윈도우 핸들 (선택적).
     /// 다중 윈도우 시스템에서 주 창을 구분하기 위해 사용된다.
     var mainHandle: KSWindowHandle? { get }

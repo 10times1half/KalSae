@@ -7,10 +7,10 @@
     /// `GtkWebViewHost`를 `KSCommandRegistry`에 연결하는 브리지.
     /// GTK 전용 배관만 여기에 있는 `KSIPCBridgeCore`의 업은 래퍼.
     @MainActor
-    public final class GtkBridge {
+    public final class GtkBridge: KSBridge {
         private let host: GtkWebViewHost
         private let core: KSIPCBridgeCore
-        internal let windowLabel: String
+        public let windowLabel: String
 
         public var onEvent: (@MainActor (String, Data?) -> Void)? {
             get { core.onEvent }

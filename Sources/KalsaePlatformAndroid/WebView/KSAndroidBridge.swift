@@ -8,10 +8,10 @@
     /// `KSIPCBridgeCore`. Android's main thread is the Activity UI thread;
     /// Swift's `MainActor` maps to a Dispatch main queue hop.
     @MainActor
-    public final class KSAndroidBridge {
+    public final class KSAndroidBridge: KSBridge {
         private let host: KSAndroidWebViewHost
         private let core: KSIPCBridgeCore
-        internal let windowLabel: String
+        public let windowLabel: String
 
         public var onEvent: (@MainActor (String, Data?) -> Void)? {
             get { core.onEvent }

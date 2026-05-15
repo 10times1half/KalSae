@@ -1,5 +1,5 @@
-public import Foundation
 internal import Logging
+import Foundation
 
 /// IPC 디스패치 직전에 호출되는 정책 평가 엔진.
 ///

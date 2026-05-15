@@ -6,6 +6,7 @@
 /// - `registry` — `@KSCommand` 핸들러를 등록하는 액터
 /// - `platform` — 읽기 전용 PAL 접근 (tray, menus, notifications 등)
 /// - `emit(_:payload:)` — 모든 열린 창에 이벤트 브로드캐스트
+/// - `quit()` — 앱 종료 요청 (예: 업데이터 플러그인이 설치 후 재시작용)
 public protocol KSPluginContext: Sendable {
     /// JS `invoke(name, args)` 호출을 Swift 핸들러로 연결하는 명령 레지스트리.
     var registry: KSCommandRegistry { get }
@@ -16,6 +17,16 @@ public protocol KSPluginContext: Sendable {
 
     /// 모든 열린 창의 JS 프론트엔드에 이벤트를 브로드캐스트한다.
     func emit(_ event: String, payload: sending any Encodable) async throws(KSError)
+
+    /// 앱의 정리된 종료를 요청한다. 호스트(`KSApp.quit()`)에 위임되어 플랫폼별로
+    /// `WM_CLOSE` 게시(Windows) · `NSApplication` 종료(macOS) · `GtkApplication`
+    /// 종료(Linux) 등 적절한 시그널을 발생시킨다.
+    ///
+    /// 이 호출은 비차단(non-blocking)이며, 실제 종료까지의 시간 보장은 없다.
+    /// 플랫폼이 self-update 자체를 허용하지 않는 환경(iOS / Android)에서는
+    /// 업데이터 등이 이 메서드 호출 전에 별도로 차단해야 한다 — `quit()` 자체는
+    /// 모든 플랫폼에서 호출 가능하다.
+    func quit()
 }
 
 // MARK: - 플러그인 계약

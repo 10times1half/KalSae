@@ -166,6 +166,13 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--standalone-allow-fallback` | When `--standalone` is on but no PE editor is on PATH, fall back to the compatibility layout (external `WebView2Loader.dll` + `.manifest`) instead of failing. Off by default — without this flag, missing PE editors hard-error so a "standalone" build is never silently identical to a regular build. |
 | `--no-auto-fetch-web-view2` | Disable automatic fetching of the WebView2 SDK on Windows. |
 | `--webview2-sdk-version <ver>` | WebView2 SDK version when auto-fetching. |
+| `--android` | Generate an Android Gradle project instead of a desktop package. Requires `--android-native-lib`. Host-OS agnostic (pure file emission). |
+| `--android-native-lib <path>` | Path to a pre-built `libKalsaePlatformAndroid.so` (arm64-v8a). Build it with `swift build --swift-sdk aarch64-unknown-linux-android26 -c release --product KalsaePlatformAndroid`. |
+| `--android-application-id <id>` | Override the Android `applicationId` (must match `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`). Defaults to `Kalsae.json` `app.identifier`. |
+| `--android-version-code <n>` | Integer `versionCode` (default `1`). Increment for each Play Store release. |
+| `--android-min-sdk <n>` | Android minimum SDK level (default `26`). Values below 26 are rejected. |
+| `--android-target-sdk <n>` | Android target SDK level (default `35`). Must be ≥ `--android-min-sdk`. |
+| `--android-icon <path>` | PNG icon for `mipmap-*dpi/ic_launcher.png`. On Apple hosts (CoreGraphics/ImageIO) it is resized per density; on other hosts the source PNG is copied unchanged to all densities and Android selects at runtime. |
 | `--timings` / `--no-timings` | Print stage-by-stage wall-clock timings after the build. **Default: ON**. The summary distinguishes `WALL` (real elapsed time) from the stage sum when parallel stages overlap. |
 | `--timings-json <path>` | Also write machine-readable timings to JSON (`{ totalMs, stageSumMs, stages: [...] }`). Path is resolved relative to cwd. |
 | `--parallel-build` / `--no-parallel-build` | Run the frontend build in parallel with `swift build`. **Default: ON** when `build.buildCommand` is set; ignored under `--dryrun` or `--skip-frontend`. The first `swift build` runs against the *current* `Resources/`; if `sync-resources` then changes any file, an incremental finalize pass re-bundles them. |
@@ -220,6 +227,40 @@ also produces a `.zip` archive (`--zip`).
 - `Info.plist` keys: `CFBundleIdentifier`, `CFBundleName`, `CFBundleVersion`,
   `CFBundleExecutable`, `LSMinimumSystemVersion`, etc.
 - `--arch universal` is supported when `lipo` is available.
+
+**Android (`--android`, RFC-007 Phase 2/3)** (`KSPackager.runAndroid`):
+
+- Generates a complete Gradle project rooted at `dist/android-<App>-<ver>/`
+  (or `--output`), including:
+  - `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`,
+    `gradle/libs.versions.toml`
+  - `app/build.gradle.kts`, `app/proguard-rules.pro`
+  - `app/src/main/AndroidManifest.xml` (LAUNCHER intent-filter always; VIEW
+    intent-filter per `deepLink.schemes` entry)
+  - `app/src/main/kotlin/<applicationId-as-path>/{MainActivity.kt, KalsaeJNI.kt,
+    WebAppInterface.kt}` (WebView + `@JavascriptInterface postMessage` bridge)
+  - `app/src/main/res/values/{strings.xml, themes.xml}` +
+    `mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher.png`
+  - `app/src/main/assets/Kalsae.json` (rewritten with `frontendDist="."` and
+    `security.devtools=false`) + frontend dist contents
+  - `app/src/main/jniLibs/arm64-v8a/libKalsaePlatformAndroid.so`
+  - `README.md` with `gradle wrapper ; ./gradlew assembleRelease` instructions
+- **No binary template files** are committed — every emitted file (including
+  Gradle scripts and Kotlin sources) is generated from Swift string literals.
+  The Gradle wrapper JAR/scripts are produced by the user's local Gradle
+  install (`gradle wrapper`) or Android Studio import.
+- **Validation** (all `KSError(.configInvalid)`):
+  - `--android-native-lib` must exist on disk.
+  - `--android-application-id` must match `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`.
+  - `--android-min-sdk` must be ≥ 26; `--android-target-sdk` must be ≥ min-sdk.
+- **Architecture:** currently `arm64-v8a` only. `--arch` values other than
+  `arm64` (or the default `x64`) emit a warning and are still treated as arm64.
+- **Icon resizing:** on macOS/iOS hosts (where CoreGraphics + ImageIO +
+  UniformTypeIdentifiers are importable) `--android-icon` is resized per
+  density; on Windows/Linux the original PNG is copied unchanged to all five
+  mipmap densities and Android selects the appropriate density at runtime.
+- See [RFC-007](RFCs/RFC-007-android-release.md) for the full design and
+  the deferred phases (PAL JNI stabilization, CI, README updates).
 
 **Code signing (Windows)**:
 

@@ -23,7 +23,7 @@ Tauri는 `tauri-plugin-updater`를 통해 GitHub Releases / 임의 URL에서 서
 
 ### 목표
 - **서명 검증**: 다운로드된 패키지의 무결성을 공개 키 서명으로 보장한다.
-- **플랫폼 지원**: Windows(NSIS/MSI 인스톨러), macOS(`.app` DMG), Linux(AppImage / `.deb`)
+- **플랫폼 지원**: Windows(NSIS/MSI 인스톨러), macOS(`.app` DMG), Linux(AppImage / `.deb` / `.rpm`)
 - **채널 지원**: 고정 URL, GitHub Releases, 임의 JSON 매니페스트 엔드포인트
 - **IPC 통합**: JS frontend가 진행률 이벤트를 받고 업데이트를 시작·취소할 수 있다.
 - **자동/수동 모드**: 백그라운드 polling 또는 앱이 직접 호출하는 명시적 검사
@@ -33,6 +33,11 @@ Tauri는 `tauri-plugin-updater`를 통해 GitHub Releases / 임의 URL에서 서
 - **macOS Sparkle 통합**: 네이티브 Sparkle 라이브러리 래핑은 v2에서 별도 고려.
 - **인앱 패치(binary diff)**: 차분 패치는 v2 RFC에서 다룬다 (§8 참조).
 - **루트 권한 설치**: per-user 설치 경로(AppData, ~/Applications)만 지원.
+- **모바일 자체 업데이트(iOS / Android)**: 모바일 앱 업데이트는 각 스토어(App Store,
+  Google Play)의 업데이트 메커니즘에 위임한다. 자체 IPA/APK 교체는 스토어 정책 위반
+  이므로 지원하지 않는다. `makeInstaller`는 iOS/Android에서 `KSError(.unsupportedPlatform)`
+  을 throw하며, 매니페스트의 `playstore` / `appstore` installerType은 사용자 안내용
+  메타데이터로만 기능한다 (RFC-007 §3.5 참조).
 
 ---
 
@@ -173,13 +178,30 @@ interface KSUpdateInfo {
       "sha256": "jkl012...",
       "signature": "BASE64_ED25519_SIG",
       "installerType": "appimage"
+    },
+    "android-aarch64": {
+      "url": "https://play.google.com/store/apps/details?id=com.example.myapp",
+      "installerType": "playstore"
+    },
+    "ios-aarch64": {
+      "url": "https://apps.apple.com/app/id1234567890",
+      "installerType": "appstore"
     }
   }
 }
 ```
 
 ### 플랫폼 키 규칙
-`{os}-{arch}` 형식. `os`: `windows` / `macos` / `linux`. `arch`: `x86_64` / `aarch64`.
+`{os}-{arch}` 형식. `os`: `windows` / `macos` / `linux` / `android` / `ios`. `arch`: `x86_64` / `aarch64`.
+
+### `playstore` / `appstore` installerType (check-only)
+모바일 플랫폼은 자체 업데이트가 스토어 정책 위반이므로 다음 규칙을 따른다:
+- `url`은 스토어 페이지를 가리키는 안내 링크다 (실제 다운로드 아님).
+- `size` / `sha256` / `signature` / `installerType=playstore|appstore`는 **선택 사항** — 누락되어도 매니페스트 파싱은 성공한다.
+- 플러그인은 버전 비교까지만 수행하고 (`checkForUpdate` 결과에 새 버전을 보고함), `downloadUpdate`/`installUpdate`는 `KSError(.unsupportedPlatform)`을 throw한다.
+- 호출자는 `KSUpdateInfo.installerType`을 확인해 스토어 링크로 사용자를 안내해야 한다.
+
+RFC-007 §3.5 참조.
 
 ### GitHub Releases 어댑터
 `manifestURL`이 `https://api.github.com/repos/{owner}/{repo}/releases/latest` 형태이면

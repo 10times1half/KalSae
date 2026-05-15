@@ -260,6 +260,48 @@ struct BuildCommand: ParsableCommand {
     )
     var msixSigntoolCmd: String? = nil
 
+    // MARK: - Android (RFC-007)
+
+    @Flag(
+        name: .long,
+        help:
+            "Emit an Android Gradle project (RFC-007). Skips the host's normal Win/Mac/Linux packager. Requires --android-native-lib pointing at libKalsaePlatformAndroid.so."
+    )
+    var android: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Android: path to libKalsaePlatformAndroid.so (built via `swift build --swift-sdk aarch64-unknown-linux-android26 -c release`). Required with --android."
+    )
+    var androidNativeLib: String? = nil
+
+    @Option(
+        name: .long,
+        help: "Android: applicationId (e.g. 'com.example.myapp'). Default: Kalsae.json app.identifier."
+    )
+    var androidApplicationId: String? = nil
+
+    @Option(
+        name: .long,
+        help: "Android: integer versionCode (must increase per release). Default: 1.")
+    var androidVersionCode: Int = 1
+
+    @Option(
+        name: .long,
+        help: "Android: minSdk API level (>= 26). Default: 26.")
+    var androidMinSdk: Int = 26
+
+    @Option(
+        name: .long,
+        help: "Android: targetSdk API level (>= minSdk). Default: 35.")
+    var androidTargetSdk: Int = 35
+
+    @Option(
+        name: .long,
+        help: "Android: path to 1024x1024 launcher icon PNG. If absent, a placeholder is used.")
+    var androidIcon: String? = nil
+
     func validate() throws {
         if let jobs, jobs < 1 {
             throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
@@ -502,6 +544,13 @@ struct BuildCommand: ParsableCommand {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
         let info = parseAppInfo(config: config)
+
+        // RFC-007: --android short-circuits host packagers entirely.
+        if android {
+            try runPackageAndroid(config: config, info: info, cwd: cwd, fm: fm)
+            return
+        }
+
         let target = resolveDistributionTarget(config: config)
         if target != .developer {
             print("📦  Distribution target: \(target.rawValue) (\(target.shortName))")
@@ -1018,6 +1067,65 @@ struct BuildCommand: ParsableCommand {
             for w in warnings { print("⚠  \(w)") }
         }
     #endif
+
+    /// Android Gradle 프로젝트 생성 (RFC-007). 호스트 OS 무관 (순수 파일 emit).
+    /// 실제 APK 빌드는 호출자가 산출 디렉터리에서 `gradle wrapper` →
+    /// `./gradlew assembleRelease` 로 수행한다.
+    private func runPackageAndroid(
+        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
+    ) throws {
+        guard let libArg = androidNativeLib else {
+            throw ValidationError(
+                "--android requires --android-native-lib <path to libKalsaePlatformAndroid.so>. "
+                    + "Build it first with: "
+                    + "swift build --swift-sdk aarch64-unknown-linux-android\(androidMinSdk) "
+                    + "-c release --product KalsaePlatformAndroid")
+        }
+        // Android 는 현재 arm64-v8a 만 지원한다. default(x64) 는 조용히 arm64 로 치환하고,
+        // 사용자가 명시적으로 다른 값(`--arch arm64` 이외)을 지정한 경우에만 경고를 띄운다.
+        if arch != "arm64" && arch != "x64" {
+            print("⚠  --arch \(arch): Android currently supports only 'arm64' (arm64-v8a). Overriding to arm64.")
+        }
+
+        let libURL = URL(fileURLWithPath: libArg, relativeTo: cwd)
+        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+            ?? cwd.appendingPathComponent("dist/android-\(info.appName)-\(info.version)")
+
+        let applicationId = androidApplicationId ?? info.identifier
+        let iconURL: URL? = androidIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let frontendDistURL: URL? = {
+            if let raw = dist, !raw.isEmpty {
+                return URL(fileURLWithPath: raw, relativeTo: cwd)
+            }
+            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
+            return fm.fileExists(atPath: fallback.path) ? fallback : nil
+        }()
+        let deepLinkSchemes = config.deepLink?.schemes ?? []
+
+        let opts = KSPackager.AndroidOptions(
+            nativeLibPath: libURL,
+            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
+            frontendDist: frontendDistURL,
+            output: outputDir,
+            appName: info.appName,
+            version: info.version,
+            identifier: applicationId,
+            versionCode: androidVersionCode,
+            minimumAPILevel: androidMinSdk,
+            targetAPILevel: androidTargetSdk,
+            architecture: .arm64,
+            iconPath: iconURL,
+            deepLinkSchemes: deepLinkSchemes)
+
+        print("📦  Packaging \(info.appName) Android Gradle project v\(info.version) → \(outputDir.path)")
+        if dryrun {
+            print("   (dry-run: skipping file emission)")
+            return
+        }
+        let report = try KSPackager.runAndroid(opts)
+        print(report.description)
+        print("ℹ  Next steps: cd '\(outputDir.path)' ; gradle wrapper ; ./gradlew assembleRelease")
+    }
 
     private struct AppInfo {
         let appName: String

@@ -56,6 +56,13 @@
                 identifier: Bundle.main.bundleIdentifier ?? "kalsae")
         }
 
+        /// 등록된 JNI 훅을 사용하는 기본 다이얼로그 핸들러를 설치한다.
+        /// `KS_android_startup` 에서 호출되며, 명시 핸들러를 주입하려는 호스트는
+        /// 그 후에 `components.dialogs?.onOpenFile = ...` 식으로 덮어쓸 수 있다.
+        func installJNIDialogDefaults() {
+            _dialogs.installJNIDefaults()
+        }
+
         public func run(
             config: KSConfig,
             configure: @Sendable (any KSPlatform) async throws(KSError) -> Void

@@ -1,0 +1,92 @@
+name: Android Packager (RFC-007)
+
+# RFC-007 Phase C-3/5 — host-OS-agnostic Android Gradle project emitter.
+# Verifies that `PackagerAndroid` (pure Swift string emission, no template
+# binaries) builds and that the emitted Gradle project is structurally valid.
+#
+# Native APK assembly via `./gradlew assembleDebug` is NOT run here because
+# the test harness uses a stub `libKalsaePlatformAndroid.so` (a zero-byte
+# placeholder), and Gradle would reject it at link time. Real cross-compile +
+# Gradle assembly is deferred to RFC-007 Phase 4 follow-up.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
+      - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Tests/KalsaeCLITests/PackagerAndroidTests.swift'
+      - '.github/workflows/android-packager.yml'
+  pull_request:
+    paths:
+      - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
+      - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Tests/KalsaeCLITests/PackagerAndroidTests.swift'
+      - '.github/workflows/android-packager.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packager:
+    name: Packager (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            setup-swift: true
+            swift-version: swift-6.3.1-release
+            swift-build: 6.3.1-RELEASE
+          # macOS verifies the CoreGraphics/ImageIO icon-resize path.
+          # Intentionally commented out to mirror ci.yml's matrix; uncomment
+          # when macOS runners are re-enabled for the repo.
+          # - name: macOS
+          #   os: macos-14
+          #   setup-swift: true
+          #   swift-version: swift-6.3.1-release
+          #   swift-build: 6.3.1-RELEASE
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        if: matrix.setup-swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: ${{ matrix.swift-version }}
+          swift-build: ${{ matrix.swift-build }}
+
+      - name: Show Swift Version
+        run: swift --version
+
+      - name: Fetch WebView2 SDK (Windows host only — needed to build kalsae CLI)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Scripts/fetch-webview2.ps1
+
+      - name: Cache SwiftPM Build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-android-packager-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-android-packager-
+
+      - name: Build kalsae CLI
+        run: swift build --product kalsae -Xswiftc -warnings-as-errors
+
+      - name: Run PackagerAndroid unit tests
+        run: swift test --filter "PackagerAndroid" -Xswiftc -warnings-as-errors
+
+      # 풀 `kalsae build --android` 스모크는 `swift build` 전체를 호출하여 비용이
+      # 크므로 별도 잡으로 분리한다. 현재 유닛 테스트(12종)는 emit 결과의
+      # 디렉터리 구조, Gradle 토큰 치환, AndroidManifest intent-filter, Kalsae.json
+      # rewrite, validation 규칙(applicationId/minSdk/targetSdk/missing-lib)을
+      # 모두 커버한다.

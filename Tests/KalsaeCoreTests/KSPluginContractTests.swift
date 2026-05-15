@@ -74,6 +74,19 @@ struct KSPluginContractTests {
         await plugin.teardown(ctx)
         #expect(await registry.registered().isEmpty)
     }
+
+    // MARK: - 4. KSPluginContext.quit() 표면
+
+    @Test("플러그인이 ctx.quit()를 호출하면 호스트로 라우팅된다")
+    func pluginQuitRoutesToContext() async throws {
+        let registry = KSCommandRegistry()
+        let ctx = SpyPluginContext(registry: registry)
+        let plugin = QuittingPlugin()
+
+        #expect(ctx.quitCount == 0)
+        try await plugin.setup(ctx)
+        #expect(ctx.quitCount == 1)
+    }
 }
 
 // MARK: - 테스트 헬퍼
@@ -91,12 +104,37 @@ private struct SpyPlugin: KSPlugin {
     // teardown은 기본 구현(no-op) 사용
 }
 
+/// `ctx.quit()` 라우팅을 검증하기 위한 플러그인 — `setup` 중 종료를 요청한다.
+private struct QuittingPlugin: KSPlugin {
+    static let namespace = "spy.quitter"
+
+    func setup(_ ctx: any KSPluginContext) async throws(KSError) {
+        ctx.quit()
+    }
+}
+
 /// 테스트용 최소 KSPluginContext 구현.
-private struct SpyPluginContext: KSPluginContext {
+private final class SpyPluginContext: KSPluginContext, @unchecked Sendable {
     let registry: KSCommandRegistry
     var platform: any KSPlatform { SpyPlatform() }
 
+    private let lock = NSLock()
+    private var _quitCount: Int = 0
+    var quitCount: Int {
+        lock.lock(); defer { lock.unlock() }
+        return _quitCount
+    }
+
+    init(registry: KSCommandRegistry) {
+        self.registry = registry
+    }
+
     func emit(_ event: String, payload: sending any Encodable) async throws(KSError) {}
+
+    func quit() {
+        lock.lock(); defer { lock.unlock() }
+        _quitCount += 1
+    }
 }
 
 /// 테스트용 최소 KSPlatform 구현.

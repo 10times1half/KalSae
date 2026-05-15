@@ -97,4 +97,8 @@ internal struct DefaultPluginContext: KSPluginContext {
             throw KSError(code: .internal, message: error.localizedDescription)
         }
     }
+
+    func quit() {
+        app.quit()
+    }
 }

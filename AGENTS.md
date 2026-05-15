@@ -229,6 +229,12 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - **Permanently unsupported:** `KSAndroidPlatform.run()` always throws `unsupportedPlatform`
   by design — Android lifecycle is JVM/Activity-controlled. Use `KSApp.boot()` +
   `KSAndroidDemoHost` with Kotlin host instead.
+- **Packaging (RFC-007 Phase 2·3):** `kalsae build --android --android-native-lib <libKalsaePlatformAndroid.so>`
+  emits a complete Gradle project (root + `app/` + Kotlin sources + manifest +
+  5 mipmap densities + `jniLibs/arm64-v8a/`) under `dist/android-<App>-<ver>/`.
+  The host OS is irrelevant — emission is pure Swift string output. After emit,
+  run `gradle wrapper ; ./gradlew assembleRelease` (or import in Android Studio).
+  Source: [PackagerAndroid.swift](Sources/KalsaeCLI/Support/PackagerAndroid.swift).
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
 _🇰🇷 Windows = 풍 PAL. macOS = 풍 PAL (보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = PAL 구현됨, `run()` 영구 미지원(JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._

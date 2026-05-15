@@ -235,7 +235,7 @@
     public final class KSLinuxDemoHost: KSDemoHost {
         public let registry: KSCommandRegistry
         nonisolated private let webview: GtkWebViewHost
-        public let bridge: GtkBridge
+        public let bridge: any KSBridge
         private let windowConfig: KSWindowConfig
 
         /// 대기 중인 초기 탐색 + devtools 플래그.

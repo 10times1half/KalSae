@@ -2,10 +2,25 @@
 
 | 항목 | 내용 |
 |------|------|
-| 상태 | 초안 (Draft) |
-| 날짜 | 2026-05-09 |
+| 상태 | 부분 구현 (Partial — Phase 1·2·3·6·CI 완료, Phase 4 Dialog 완료/Menu 후속, Phase 5·7 부분) |
+| 날짜 | 2026-05-09 (초안) · 2026-05-15 (Phase 1·2·3·6 반영) · 2026-05-16 (Phase 4 Dialog 브리지 + CI) |
 | 영향 범위 | `KalsaePlatformAndroid`, `KalsaeCLI` (PackagerAndroid, BuildCommand), `Kalsae` (KSApp) |
 | 관련 | RFC-005 (ios-release), RFC-001 (updater), RFC-003 (updater-linux-parity), `PackagerMac.swift`, `BuildCommand.swift` |
+
+### 진행 현황 스냅샷 (2026-05-15)
+
+| Phase | 항목 | 상태 |
+|---|---|---|
+| 1 | `KSPluginContext.quit()` + RFC 비목표 명시 | ✅ 완료 |
+| 2 | `PackagerAndroid.swift` (인라인 Gradle 프로젝트 emit) + `KSIconResizer` | ✅ 완료 |
+| 3 | `kalsae build --android` 분기 + `--android-*` 플래그 7종 | ✅ 완료 |
+| 4 | Android PAL 안정화 (Dialog/Menu 기본 JNI) | 🟡 Dialog 브리지 완료 (register 진입점 5개 + `KS_android_on_dialog_result` + request-id↔continuation 맵 + Dialog 기본 핸들러 자동 설치). Menu(PopupMenu) 기본 핸들러는 후속 |
+| 5 | 업데이터 Android 가드 (RFC-001 §4 갱신만 완료) | 부분 (문서만) |
+| 6 | `PackagerAndroidTests.swift` (12 케이스) | ✅ 완료 |
+| 7 | README/AGENTS/CLI.md 갱신 | 일부 (AGENTS.md §5 + CLI.md 아이디아든로이드 섹션 추가, README.md 보류) |
+| CI | `.github/workflows/android-packager.yml` (CLI 빌드 + Packager 테스트) | ✅ 완료 |
+
+> 구현 노트: 패키저는 Gradle wrapper JAR 같은 바이너리를 커밋하지 않기 위해 **모든 파일을 Swift 문자열 리터럴로 인라인 emit**한다. 산출 디렉터리에서 사용자가 `gradle wrapper` 를 한 번 실행하거나 Android Studio 로 import 하면 wrapper 가 생성된다. 아이콘 리사이즈는 CoreGraphics/ImageIO 가 임포트 가능한 호스트(macOS/iOS)에서만 수행하고, 그 외 호스트는 원본 PNG 를 5개 mipmap 디렉터리에 동일하게 복사한다 (Android 런타임이 밀도를 선택).
 
 ---
 
@@ -629,7 +644,7 @@ public func showContextMenu(
 RFC-003 검토 결과, Android에서 자체 업데이트가 불가능한 이유:
 
 | 항목 | Desktop (Win/Mac/Linux) | Android |
-|------|------------------------|---------|  
+|------|------------------------|---------|
 | 앱 설치 | 파일 복사 / 인스톨러 실행 | Google Play / PackageInstaller API |
 | 자체 업데이트 | 실행 파일 교체 가능 | **Play Store 정책 위반** |
 | 권한 상승 | sudo / pkexec / UAC | **불가** (non-root, su 없음) |

@@ -230,7 +230,7 @@
         public let registry: KSCommandRegistry
         nonisolated private let window: KSMacWindow
         private let webview: WKWebViewHost
-        public let bridge: WKBridge
+        public let bridge: any KSBridge
         private var onSuspendSwift: (@MainActor () -> Void)?
         private var onResumeSwift: (@MainActor () -> Void)?
         private var workspaceObservers: [any NSObjectProtocol] = []

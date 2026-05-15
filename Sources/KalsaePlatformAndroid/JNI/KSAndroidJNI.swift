@@ -39,6 +39,78 @@
         _hooksLock.withLock { _jniLoadURL = fn }
     }
 
+    // RFC-007 Phase 4 (scaffolding) — Dialog/Menu register entry points.
+    // Kotlin host can install C function pointers here; the Swift PAL backends
+    // (KSAndroidDialogBackend, KSAndroidMenuBackend) do not consume them yet
+    // (the request-id ↔ continuation bridge is deferred to a future session).
+    // Until consumed, current handler-injection behavior is preserved unchanged.
+
+    /// Registers a Kotlin-side `AlertDialog` presenter. Kotlin replies via
+    /// `KS_android_on_dialog_result(requestId, resultJson)` (to be added).
+    @_cdecl("KS_android_register_show_alert")
+    public func KS_android_register_show_alert(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniShowAlert = fn }
+    }
+
+    /// Registers a Kotlin-side file-open launcher (SAF).
+    @_cdecl("KS_android_register_pick_file")
+    public func KS_android_register_pick_file(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniPickFile = fn }
+    }
+
+    /// Registers a Kotlin-side file-save launcher (SAF).
+    @_cdecl("KS_android_register_save_file")
+    public func KS_android_register_save_file(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniSaveFile = fn }
+    }
+
+    /// Registers a Kotlin-side folder-select launcher (SAF).
+    @_cdecl("KS_android_register_select_folder")
+    public func KS_android_register_select_folder(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniSelectFolder = fn }
+    }
+
+    /// Registers a Kotlin-side `PopupMenu` presenter.
+    @_cdecl("KS_android_register_show_context_menu")
+    public func KS_android_register_show_context_menu(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>, Int32, Int32) -> Void
+    ) {
+        _hooksLock.withLock { _jniShowContextMenu = fn }
+    }
+
+    // MARK: - 다이얼로그 결과 콜백
+
+    /// Kotlin 호스트가 비동기 UI 응답을 Swift 로 되돌릴 때 호출한다.
+    ///
+    /// 페어링 흐름: `KSAndroidDialogBackend` 가 `KSAndroidJNIRegistry.register`
+    /// 로 발급한 requestId 를 `_jniShowAlert` / `_jniPickFile` 등으로 Kotlin 에
+    /// 전달하면, Kotlin 은 사용자 응답을 받은 직후
+    /// `KalsaeJNI.onDialogResult(requestId, resultJson)` 를 호출한다.
+    ///
+    /// 결과 JSON 형태 (호출자가 등록한 continuation 이 디코딩):
+    /// - `openFile`     : `{"urls": ["file:///..."]}` (취소 시 빈 배열 또는 빠짐)
+    /// - `saveFile`     : `{"url": "file:///..."}`   (취소 시 null 또는 빠짐)
+    /// - `selectFolder` : `{"url": "file:///..."}`   (취소 시 null 또는 빠짐)
+    /// - `message`      : `{"result": "ok"|"cancel"|"yes"|"no"}`
+    ///
+    /// 알 수 없거나 만료된 requestId 는 조용히 무시된다.
+    @_cdecl("KS_android_on_dialog_result")
+    public func KS_android_on_dialog_result(
+        _ requestId: Int32,
+        _ resultJSON: UnsafePointer<CChar>
+    ) {
+        let json = String(cString: resultJSON)
+        KSAndroidJNIRegistry.shared.deliver(requestId, json: json)
+    }
+
     // MARK: - 시작
 
     /// 기본 단일 윈도우 설정으로 Kalsae Android 런타임을 초기화한다.
@@ -61,6 +133,11 @@
                 registry: platform.commandRegistry)
             _sharedPlatform = platform
             _sharedHost = host
+            // Kotlin 측 register* 진입점으로 등록된 훅이 있으면 다이얼로그
+            // 백엔드의 기본 핸들러가 자동으로 그쪽을 호출하도록 위임한다.
+            // 등록된 훅이 없으면 백엔드는 기존처럼 `unsupportedPlatform` 을
+            // throw 한다(설치 전 호출 보호).
+            platform.installJNIDialogDefaults()
             Task { @MainActor in
                 wireJNIHooks(into: host.webViewHost)
             }

@@ -22,7 +22,7 @@
 
         let windowConfig: KSWindowConfig  // 패키지 내부 — KSiOSAppDelegate가 읽음
         let webViewHost: KSiOSWebViewHost  // 패키지 내부 — KSiOSAppDelegate가 읽음
-        private let bridge: KSiOSBridge
+        public let bridge: any KSBridge
 
         private var _mainHandle: KSWindowHandle
         private var _pendingURL: String?

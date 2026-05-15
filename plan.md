@@ -2,7 +2,7 @@
 
 > 작성일: 2026-05-09
 > 분석자: Cline (Architecture Review)
-> 최종 업데이트: 2026-05-09 — 완료 항목 제거
+> 최종 업데이트: 2026-05-15 — 문제 5(KSBridge) 완료 반영, 모든 1차 리팩터링 항목 해결
 
 ---
 
@@ -16,91 +16,30 @@
 | 4 | AnyPlatformHost의 조건부 컴파일 누수 | [Sources/Kalsae/KSDemoHostFactory.swift](Sources/Kalsae/KSDemoHostFactory.swift) — 호스트 생성 팩토리 |
 | 1 | 부팅 로직의 플랫폼별 중복 | [Sources/KalsaeCore/PAL/KSBootOrchestrator.swift](Sources/KalsaeCore/PAL/KSBootOrchestrator.swift) — 5플랫폼 공통 결정 로직 단일화 |
 | — | **Phase 1.3** — DemoHost 프로토콜 채택 + `AnyPlatformHost` 제거 | 5 호스트 모두 `: KSDemoHost` 채택, `KSApp.host`를 `any KSDemoHost`로 단순화, `AnyPlatformHost.swift` 삭제 |
+| 3 | **KSPlatform Store-Through Property 중복** (Boilerplate) | [Sources/KalsaeCore/PAL/KSPlatformComponents.swift](Sources/KalsaeCore/PAL/KSPlatformComponents.swift) — `KSPlatformComponents` 구조체 + `KSPlatformComponentsProvider` 프로토콜로 5개 플랫폼 모두 10개 백엔드 프로퍼티 자동 위임 |
+| — | **KSPluginContext.quit()** (RFC-007 Phase 1) | [Sources/KalsaeCore/Plugin/KSPlugin.swift](Sources/KalsaeCore/Plugin/KSPlugin.swift) — 프로토콜에 `func quit()` 추가, `DefaultPluginContext`가 `KSApp.quit()`에 위임 |
+| 5 | **IPC 브리지 프로토콜 추상화** | [Sources/KalsaeCore/PAL/KSBridge.swift](Sources/KalsaeCore/PAL/KSBridge.swift) — `@MainActor public protocol KSBridge` 정의 (windowLabel / onEvent / install / emit), 5개 플랫폼 브리지(`WebView2Bridge`, `WKBridge`, `GtkBridge`, `KSiOSBridge`, `KSAndroidBridge`) 모두 채택, `KSDemoHost.bridge: any KSBridge` 노출 |
 
 > ✅ Phase 1.3 완료: `KSApp.init` 의 5-case switch 제거, `quit()` 단일화, `KSDemoHostFactory` 가 `any KSDemoHost` 반환.
 
 ### ❌ 미완료 작업 — 본 문서의 대상
 
-| # | 문제 | 심각도 | 영향 범위 |
-|---|------|--------|-----------|
-| 3 | **KSPlatform의 Store-Through Property 중복** (Boilerplate) | 🟡 Medium | 5개 플랫폼 × 10개 백엔드 |
-| 5 | **IPC 브리지 생성 패턴의 플랫폼별 분산** (Scattered Construction) | 🟢 Low | 각 플랫폼의 Bridge/WKWebViewHost/GtkBridge 등 |
+_없음. 본 문서가 다루던 1차 아키텍처 리팩터링은 모두 완료되었다. 신규 잔여 작업은 RFC-001(Updater), RFC-007(Android 안정화), RFC-008(스토어 배포) 등 RFC 문서를 참조한다._
 
 ---
 
 ## 1. 상세 분석
 
-###  문제 3: KSPlatform의 Store-Through Property 중복 (Boilerplate)
+### 🟢 문제 5: IPC 브리지 프로토콜 추상화 — ✅ 완료
 
-**현황:**
-5개 플랫폼 모두 `KSPlatform` 프로토콜을 채택하면서 다음과 같은 패턴이 반복됨:
+**해결책:**
+`Sources/KalsaeCore/PAL/KSBridge.swift`에 `@MainActor public protocol KSBridge: AnyObject, Sendable` 정의:
+- `var windowLabel: String { get }`
+- `var onEvent: (@MainActor (String, Data?) -> Void)? { get set }`
+- `func install() throws(KSError)`
+- `func emit(event:payload:) throws(KSError)`
 
-```swift
-// KSMacPlatform.swift
-public var windows: any KSWindowBackend { _windows }
-public var dialogs: any KSDialogBackend { _dialogs }
-public var tray: (any KSTrayBackend)? { _tray }
-public var menus: any KSMenuBackend { _menus }
-// ... 10개 백엔드 × 5개 플랫폼 = 50줄의 순수 보일러플레이트
-
-private let _windows: KSMacWindowBackend
-private let _dialogs: KSMacDialogBackend
-// ... 또 10줄
-
-// init()에서 또 10줄 할당
-```
-
-**영향:**
-- 신규 플랫폼 추가 시 30~40라인의 단순 반복 코드 작성 필요
-- 백엔드 타입이 변경되면 5개 파일 수정 필요
-- `nonisolated(unsafe) var _autostart` / `_deepLink` 패턴이 플랫폼마다 제각각
-
-**권장 리팩터:**
-```swift
-// KalsaeCore/PAL/ KSPlatformComponents.swift
-public struct KSPlatformComponents: Sendable {
-    public var windows: any KSWindowBackend
-    public var dialogs: any KSDialogBackend
-    public var tray: (any KSTrayBackend)?
-    public var menus: any KSMenuBackend
-    public var notifications: any KSNotificationBackend
-    public var shell: (any KSShellBackend)?
-    public var clipboard: (any KSClipboardBackend)?
-    public var accelerators: (any KSAcceleratorBackend)?
-    public var autostart: (any KSAutostartBackend)?
-    public var deepLink: (any KSDeepLinkBackend)?
-
-    public init(
-        windows: any KSWindowBackend,
-        dialogs: any KSDialogBackend,
-        tray: (any KSTrayBackend)? = nil,
-        // ...
-    ) { ... }
-}
-
-// 플랫폼 구현:
-public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
-    public let components: KSPlatformComponents
-    public var windows: any KSWindowBackend { components.windows }
-    // ... 자동 생성 가능 (Sourcery / macro)
-}
-```
-
----
-
-### 🟢 문제 5: IPC 브리지 생성 패턴의 플랫폼별 분산
-
-**현황:**
-각 플랫폼의 DemoHost가 IPC 브리지를 생성하는 방식이 제각각:
-- `WebView2Bridge` (Windows) — C++ shim + Swift 콜백
-- `WKBridge` (macOS/iOS) — WKUserContentController message handler
-- `GtkBridge` (Linux) — JavaScriptCore evaluation
-- `KSAndroidBridge` (Android) — JNI bridge
-
-**영향:**
-- 브리지 생성 로직이 DemoHost init에 하드코딩됨
-- 브리지 타입이 `associatedtype`으로 추상화되지 않음
-- `AnyPlatformHost`가 브리지에 접근할 방법이 없음
+5개 플랫폼 브리지(`WebView2Bridge`, `WKBridge`, `GtkBridge`, `KSiOSBridge`, `KSAndroidBridge`)가 모두 채택하며 `windowLabel`을 `public`으로 노출한다. `KSDemoHost` 프로토콜에 `var bridge: any KSBridge { get }`를 추가하여 KalsaeCore 레벨 코드가 플랫폼 분기 없이 브리지에 접근할 수 있다.
 
 ---
 
@@ -126,17 +65,16 @@ KS{Mac,Linux,iOS,Windows,Android}Platform.runOnMain()
 
 ## 3. 우선순위 및 권장 작업 순서
 
-| 순위 | 작업 | 예상 공수 | 리스크 |
-|------|------|-----------|--------|
-| 1 | **KSPlatformComponents 도입** (문제 3) | 1-2일 | 낮음 — Store-through property 제거 |
-| 2 | **IPC 브리지 프로토콜 추상화** (문제 5) | 2-3일 | 중간 — `KSBridge` 프로토콜 정의 |
+_본 문서가 다루던 1차 아키텍처 리팩터링은 모두 완료되었다. 다음 단계 작업은 RFC 문서를 참조:_
+- [Docs/RFCs/RFC-001-updater.md](Docs/RFCs/RFC-001-updater.md) — 데스크톱 자동 업데이트
+- [Docs/RFCs/RFC-007-android-release.md](Docs/RFCs/RFC-007-android-release.md) — Android preview → stable
+- [Docs/RFCs/RFC-008-store-distribution.md](Docs/RFCs/RFC-008-store-distribution.md) — 스토어 배포
 
 ---
 
 ## 4. 결론
 
-Kalsae는 **레이어드 아키텍처 원칙**을 잘 지키고 있으며, 모듈 간 의존성 방향도 올바르다. 1차 리팩터링(KSDemoHostFactory + KSDemoHost 프로토콜 + KSBootOrchestrator)으로 **신규 플랫폼 온보딩의 인터페이스 모호성, 호스트 생성 분산, 부팅 로직 중복 문제**는 해결되었다.
+Kalsae는 **레이어드 아키텍처 원칙**을 잘 지키고 있으며, 모듈 간 의존성 방향도 올바르다. 1차 리팩터링(KSDemoHostFactory + KSDemoHost 프로토콜 + KSBootOrchestrator + KSPlatformComponents + KSBridge)으로 **신규 플랫폼 온보딩의 인터페이스 모호성, 호스트 생성 분산, 부팅 로직 중복, 백엔드 보일러플레이트, IPC 브리지 추상화 부재** 문제는 모두 해결되었다.
 
 **남은 개선:**
-1. **KSPlatformComponents 도입** — 백엔드 보일러플레이트 감소
-2. **IPC 브리지 프로토콜 추상화** — `KSBridge` 프로토콜로 명시화
+1. **IPC 브리지 프로토콜 추상화** — `KSBridge` 프로토콜로 명시화

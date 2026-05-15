@@ -7,10 +7,10 @@
     /// macOS 플랫폼의 `WKBridge`를 미러링 — `KSIPCBridgeCore`의 업은 래퍼.
     /// UIKit 런 루프가 `MainActor` 실행기를 펀프하므로 평범한 `Task { @MainActor }` 홈으로 충분하다.
     @MainActor
-    public final class KSiOSBridge {
+    public final class KSiOSBridge: KSBridge {
         private let host: KSiOSWebViewHost
         private let core: KSIPCBridgeCore
-        internal let windowLabel: String
+        public let windowLabel: String
 
         public var onEvent: (@MainActor (String, Data?) -> Void)? {
             get { core.onEvent }

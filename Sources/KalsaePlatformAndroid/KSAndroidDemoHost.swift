@@ -17,7 +17,7 @@
         /// `KS_android_register_load_url` 를 통해 노출됨 (`KSAndroidJNI.swift` 참조).
         /// Kotlin 측은 `Samples/KalsaeAndroidSample/`에 예시가 있다.
         public let webViewHost: KSAndroidWebViewHost
-        private let bridge: KSAndroidBridge
+        public let bridge: any KSBridge
 
         private let windowConfig: KSWindowConfig
         private var _pendingDevtools: Bool = false

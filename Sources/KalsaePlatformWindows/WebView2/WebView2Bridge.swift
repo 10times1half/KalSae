@@ -7,10 +7,10 @@
     /// and cross-window events). Thin wrapper over `KSIPCBridgeCore`; only
     /// the WebView2-specific plumbing lives here.
     @MainActor
-    public final class WebView2Bridge {
+    public final class WebView2Bridge: KSBridge {
         private let host: WebView2Host
         private let core: KSIPCBridgeCore
-        internal let windowLabel: String
+        public let windowLabel: String
 
         /// Sink for `emit` messages from JS. Subscribing here is the Swift
         /// side of `window.__KS_.listen`.
@@ -46,7 +46,7 @@
             }
         }
 
-        internal func install() throws(KSError) {
+        public func install() throws(KSError) {
             try host.onMessage { [weak self] text in
                 self?.core.handleInbound(text)
             }

@@ -267,6 +267,10 @@ private final class TestPluginContext: KSPluginContext, @unchecked Sendable {
             }
         }
     }
+
+    func quit() {
+        // 테스트 컨텍스트는 종료 요청을 무시한다.
+    }
 }
 
 /// 테스트용 최소 KSPlatform 구현.
