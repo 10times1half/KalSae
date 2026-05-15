@@ -326,12 +326,19 @@
         }
 
         public func navigate(url: String) throws(KSError) {
+            lock.withLock { _lastNavigatedURL = url }
             if let handler = lock.withLock({ _onLoadURL }) {
                 handler(url)
             } else {
                 lock.withLock { _pendingURL = url }
             }
         }
+
+        /// 가장 최근 `navigate(url:)` 호출 URL. IPC origin 평가용으로 사용된다.
+        public var lastNavigatedURL: String? {
+            lock.withLock { _lastNavigatedURL }
+        }
+        private var _lastNavigatedURL: String?
 
         /// Flushes a pending URL to the WebView once the Activity is ready.
         public func flushPendingURL() {

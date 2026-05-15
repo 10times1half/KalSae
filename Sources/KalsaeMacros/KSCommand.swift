@@ -20,6 +20,15 @@
 // 속성은 레지스트리 이름을 문자열 리터럴로 받을 수 있다:
 // `@KSCommand("user.greet")`. 생략하면 Swift 식별자가 쓰인다.
 //
+// 권한 선언 (capability/permission)
+// ---------------------------------
+// `permission:` 파라미터로 이 명령이 필요로 하는 권한 식별자를
+// 선언할 수 있다 (예: `@KSCommand("fs.readFile", permission: "fs:read")`).
+// 런타임 게이팅은 `KSPolicyEvaluator`가 capability 설정으로 수행하므로
+// 이 값 자체로 차단이 일어나지는 않는다 — 메타데이터로만 보관되어
+// CLI `CapabilityValidator`와 BindingsGenerator(JSDoc) 등에서 정적으로
+// 활용된다.
+//
 // 지원하는 시그니처
 // --------------------
 // - `Decodable` 타입의 매개변수 개수 제한 없음. 각 매개변수의 인자 레이블
@@ -30,6 +39,6 @@
 // - `-> Void` 반환: 빈 JSON 객체 `{}`가 돌아간다.
 // - 임의의 `Encodable` 반환 타입.
 @attached(peer, names: prefixed(_ksRegister_), prefixed(__KSArgs_))
-public macro KSCommand(_ name: String? = nil) =
+public macro KSCommand(_ name: String? = nil, permission: String? = nil) =
     #externalMacro(
         module: "KalsaeMacrosPlugin", type: "KSCommandMacro")

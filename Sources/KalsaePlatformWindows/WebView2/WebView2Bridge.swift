@@ -34,6 +34,12 @@
                 hop: { [weak host] block in
                     host?.postJob(block)
                 })
+            // origin 해석기: 마지막으로 navigate된 URL을 정책 평가기에 전달.
+            // 향후 ICoreWebView2::get_Source 바인딩이 추가되면 더 정확해진다.
+            self.core.originResolver = { [weak host] in
+                guard let s = host?.lastNavigatedURL else { return nil }
+                return KSOrigin.string(fromString: s)
+            }
             KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
                 guard let self else { return }
                 try self.emit(event: event, payload: payload)

@@ -3,9 +3,9 @@
     internal import KalsaeCore
     internal import Foundation
 
-    /// Routes menu / tray commands back to subscribers. The platform layer
-    /// (or the demo) installs a single sink that forwards to the JS bridge,
-    /// the command registry, or both.
+    /// 메뉴 / 트레이 명령을 구독자(subscriber)로 라우팅한다. 플랫폼 계층
+    /// (또는 데모)이 단일 sink를 설치해 JS 브리지, 명령 레지스트리, 또는
+    /// 둘 다로 전달한다.
     @MainActor
     public final class KSWindowsCommandRouter {
         public static let shared = KSWindowsCommandRouter()
@@ -15,8 +15,8 @@
 
         private init() {}
 
-        /// Adds a command subscriber. Called for every menu / tray click that
-        /// has a non-`nil` `KSMenuItem.command`.
+        /// 명령 구독자를 추가한다. `KSMenuItem.command`가 `nil`이 아닌 모든
+        /// 메뉴 / 트레이 클릭마다 호출된다.
         public func subscribe(_ sink: @escaping Sink) {
             sinks.append(sink)
         }

@@ -31,6 +31,11 @@
                 hop: { block in
                     Task { @MainActor in block() }
                 })
+            // origin 해석기: 마지막 navigate URL을 정책 평가기에 전달.
+            self.core.originResolver = { [weak host] in
+                guard let s = host?.lastNavigatedURL else { return nil }
+                return KSOrigin.string(fromString: s)
+            }
             KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
                 guard let self else { return }
                 try self.emit(event: event, payload: payload)

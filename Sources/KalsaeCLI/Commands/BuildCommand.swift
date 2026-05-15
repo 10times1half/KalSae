@@ -110,6 +110,11 @@ struct BuildCommand: ParsableCommand {
     @Flag(name: .long, help: "Skip running build.buildCommand (frontend build).")
     var skipFrontend: Bool = false
 
+    @Option(
+        name: .long,
+        help: "Capability/permission validation mode: strict | warn | off (default: warn).")
+    var capabilityCheck: String = "warn"
+
     @Flag(name: .long, help: "Print the build/package commands without executing them.")
     var dryrun: Bool = false
 
@@ -285,6 +290,10 @@ struct BuildCommand: ParsableCommand {
         }
         let config = try timer.measure("config-load") {
             try loadConfig(configURL: configURL)
+        }
+
+        try timer.measure("capability-check") {
+            try runCapabilityValidation(config: config, cwd: cwd)
         }
 
         if clean {
@@ -1037,6 +1046,33 @@ struct BuildCommand: ParsableCommand {
         } catch {
             throw ValidationError(
                 "Failed to load \(configURL.lastPathComponent): \(error)")
+        }
+    }
+
+    private func runCapabilityValidation(config: KSConfig, cwd: URL) throws {
+        guard let mode = KSCapabilityValidator.Mode(rawValue: capabilityCheck) else {
+            throw ValidationError(
+                "--capability-check must be one of: strict | warn | off. Got '\(capabilityCheck)'.")
+        }
+        if mode == .off { return }
+
+        let sources = KSBindingsGenerator.discoverSwiftFiles(
+            under: cwd.appendingPathComponent("Sources"))
+        let commands = KSBindingsGenerator.scanCommands(in: sources)
+        let report = KSCapabilityValidator.validate(
+            capabilities: config.capabilities, commands: commands)
+
+        if report.findings.isEmpty {
+            return
+        }
+        print("🛡  capability validator findings:")
+        for f in report.findings {
+            print("   \(f.description)")
+        }
+        if report.shouldFail(in: mode) {
+            throw ValidationError(
+                "Capability validation failed (mode: \(mode.rawValue)). "
+                    + "Fix the errors above or rerun with --capability-check off.")
         }
     }
 

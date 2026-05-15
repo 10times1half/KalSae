@@ -12,6 +12,9 @@ enum KSCommandDiagnostic: String, DiagnosticMessage {
     case inoutParameter = "ksmacro.inout_parameter"
     case variadicParameter = "ksmacro.variadic_parameter"
     case staticOnNonType = "ksmacro.static_on_non_type"
+    case nonLiteralPermission = "ksmacro.non_literal_permission"
+    case emptyPermission = "ksmacro.empty_permission"
+    case unknownArgumentLabel = "ksmacro.unknown_argument_label"
 
     var diagnosticID: MessageID {
         MessageID(domain: "Kalsae.Macro.KSCommand", id: rawValue)
@@ -36,6 +39,12 @@ enum KSCommandDiagnostic: String, DiagnosticMessage {
         case .staticOnNonType:
             return
                 "@KSCommand may only annotate free or static functions; instance methods need an explicit registry binding."
+        case .nonLiteralPermission:
+            return "@KSCommand `permission:` argument requires a plain string literal (no interpolation)."
+        case .emptyPermission:
+            return "@KSCommand `permission:` argument must not be an empty string."
+        case .unknownArgumentLabel:
+            return "@KSCommand accepts only the unlabeled name argument and `permission:`; unknown argument labels are rejected."
         }
     }
 }

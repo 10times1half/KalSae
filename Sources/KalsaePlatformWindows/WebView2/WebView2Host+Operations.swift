@@ -38,6 +38,7 @@
                 hr = KSWV2_Navigate(webview, ptr)
             }
             try KSHRESULT(hr).throwIfFailed(.webviewInitFailed, "Navigate(\(url))")
+            self.recordNavigated(url: url)
         }
 
         func postJSON(_ json: String) throws(KSError) {

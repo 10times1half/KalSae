@@ -7,7 +7,7 @@
     // 크로스 컴파일 타겟: aarch64-unknown-linux-android26 (또는 에뮬레이터용 x86_64-linux-android26).
     // JNI 진입점은 Sources/KalsaePlatformAndroid/JNI/에 위치한다.
     // @unchecked: NSLock-guarded mutable state — actor unsuitable for platform backend
-    public final class KSAndroidPlatform: KSPlatform, @unchecked Sendable {
+    public final class KSAndroidPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
         /// 지원하는 최소 Android API 레벨 (minSdk 26 = Android 8 Oreo).
         public static let minimumAPILevel: Int = 26
         /// 타겟 Android API 레벨 (targetSdk 35 = Android 15).
@@ -17,16 +17,22 @@
 
         public let commandRegistry: KSCommandRegistry
 
-        public var windows: any KSWindowBackend { _windows }
-        public var dialogs: any KSDialogBackend { _dialogs }
-        public var tray: (any KSTrayBackend)? { nil }
-        public var menus: any KSMenuBackend { _menus }
-        public var notifications: any KSNotificationBackend { _notifications }
-        public var shell: (any KSShellBackend)? { _shell }
-        public var clipboard: (any KSClipboardBackend)? { _clipboard }
-        public var accelerators: (any KSAcceleratorBackend)? { nil }
-        public var autostart: (any KSAutostartBackend)? { _autostart }
-        public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
+        // `KSPlatform`의 10개 백엔드는 `KSPlatformComponentsProvider`가
+        // `components` 위임으로 자동 제공한다. Android는 트레이/액셀러레이터를
+        // 지원하지 않으므로 nil로 노출한다.
+        public var components: KSPlatformComponents {
+            KSPlatformComponents(
+                windows: _windows,
+                dialogs: _dialogs,
+                menus: _menus,
+                notifications: _notifications,
+                tray: nil,
+                shell: _shell,
+                clipboard: _clipboard,
+                accelerators: nil,
+                autostart: _autostart,
+                deepLink: _deepLink)
+        }
 
         private let _windows: KSAndroidWindowBackend
         private let _dialogs: KSAndroidDialogBackend

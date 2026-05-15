@@ -300,6 +300,10 @@
         private let log: Logger = KSLog.logger("platform.linux.webview")
         private var inbound: ((String) -> Void)?
 
+        /// 가장 최근 `navigate(url:)` 호출의 URL. IPC origin 평가용으로 사용된다.
+        /// WebKitGTK 의 `webkit_web_view_get_uri` 바인딩이 추가되면 정확도가 향상된다.
+        public private(set) var lastNavigatedURL: String?
+
         /// C 콜백 트램폴린에 self를 전달하기 위한 힙 할당 홀더.
         /// Swift의 약한 참조를 통해 retain cycle을 방지한다.
         private var selfBox: SelfBox?
@@ -337,6 +341,7 @@
 
         public func navigate(url: String) throws(KSError) {
             ks_gtk_host_load_uri(hostPtr, url)
+            self.lastNavigatedURL = url
         }
 
         public func postJSON(_ json: String) throws(KSError) {

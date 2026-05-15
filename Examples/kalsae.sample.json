@@ -145,5 +145,48 @@
     "photoLibrary": false,
     "location": false,
     "networkServer": false
+  },
+  "capabilities": {
+    "permissions": [
+      {
+        "identifier": "fs:read",
+        "description": "Read project files under $DOCS/kalsaeDemo",
+        "commandsAllow": ["fs.readFile", "fs.exists", "fs.listDir"]
+      },
+      {
+        "identifier": "fs:write",
+        "description": "Write to user documents",
+        "commandsAllow": ["fs.writeFile", "fs.deleteFile"],
+        "commandsDeny": ["fs.writeFile.system"]
+      },
+      {
+        "identifier": "app:basic",
+        "commandsAllow": ["app.*", "window.*"]
+      }
+    ],
+    "capabilities": [
+      {
+        "identifier": "main-window",
+        "description": "Capabilities available to the main window on desktop platforms",
+        "windows": ["main"],
+        "permissions": ["fs:read", "fs:write", "app:basic"],
+        "platforms": ["windows", "macOS", "linux"]
+      },
+      {
+        "identifier": "settings-window",
+        "windows": ["settings-*"],
+        "permissions": ["app:basic"]
+      },
+      {
+        "identifier": "trusted-remote",
+        "description": "Allow a curated set of trusted https origins to use app:basic",
+        "windows": ["main"],
+        "permissions": ["app:basic"],
+        "local": false,
+        "remote": {
+          "urls": ["https://*.example.com", "https://docs.example.org"]
+        }
+      }
+    ]
   }
 }

@@ -44,6 +44,11 @@ public final class KSIPCBridgeCore {
     private let log: Logger
     private let windowLabel: String?
 
+    /// 현재 호출 origin을 해석하는 옵셔널 해석기. PAL 브리지가
+    /// WebView의 현재 URL(또는 메시지 frame URL)을 노출하기 위해 설정한다.
+    /// 메인 액터에서 호출되며 매 인바운드 invoke마다 1회 호출된다.
+    public var originResolver: (@MainActor () -> String?)?
+
     /// JS로부터의 `emit` 메시지 싱크.
     public var onEvent: (@MainActor (String, Data?) -> Void)?
 
@@ -103,13 +108,17 @@ public final class KSIPCBridgeCore {
             let hop = self.hop
             let log = self.log
             let wl = self.windowLabel
+            // origin 은 메인 액터에서 1회 평가해 TaskLocal로 주입한다.
+            let origin = self.originResolver?()
             // 디스패치는 `Task.detached`로 백그라운드에서 수행한 뒤 hop을
             // 통해 UI 스레드로 복귀해 응답을 송신한다.
-            // KSInvocationContext.windowLabel을 TaskLocal로 주입해
-            // 명령 핸들러가 어느 창에서 호출됐는지 확인할 수 있도록 한다.
+            // KSInvocationContext.windowLabel / origin 을 TaskLocal로 주입해
+            // 명령 핸들러 / 정책 평가기가 호출 컨텍스트를 확인할 수 있도록 한다.
             Task.detached { [weak self] in
                 let result = await KSInvocationContext.$windowLabel.withValue(wl) {
-                    await registry.dispatch(name: name, args: args)
+                    await KSInvocationContext.$origin.withValue(origin) {
+                        await registry.dispatch(name: name, args: args)
+                    }
                 }
                 hop {
                     guard let self else {

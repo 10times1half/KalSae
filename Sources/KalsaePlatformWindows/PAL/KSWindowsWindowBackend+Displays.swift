@@ -3,14 +3,20 @@
     public import KalsaeCore
     import Foundation
 
-    // MARK: - KSWindowsWindowBackend + Display enumeration
+    // MARK: - KSWindowsWindowBackend + Display 열거 / 조회
 
     extension KSWindowsWindowBackend {
 
-        // MARK: listDisplays
+        // MARK: listDisplays — 모든 모니터 정보 열거
 
+        /// 연결된 모든 모니터의 `KSDisplayInfo`를 반환한다.
+        /// 내부적으로 `EnumDisplayMonitors` + `GetMonitorInfoW` +
+        /// `GetDpiForMonitor`로 각 모니터의 bounds, workArea, scale,
+        /// refreshRate, primary 여부를 수집한다.
         public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
             let result: Result<[KSDisplayInfo], KSError> = await MainActor.run {
+                // `EnumDisplayMonitors` 콜백 컨텍스트용 박스 — 콜백 스택에서
+                // 비격리 컨텍스트로 결과를 누적한다.
                 final class DisplayBox { var displays: [KSDisplayInfo] = [] }
                 let box = DisplayBox()
                 let lpParam = LPARAM(Int(bitPattern: Unmanaged.passUnretained(box).toOpaque()))
@@ -81,8 +87,11 @@
             }
         }
 
-        // MARK: currentDisplay
+        // MARK: currentDisplay — 특정 윈도우가 위치한 모니터 조회
 
+        /// 주어진 `KSWindowHandle`이 현재 위치한 모니터의 `KSDisplayInfo`를
+        /// 반환한다. `MonitorFromWindow`로 가장 가까운 모니터를 찾고,
+        /// `listDisplays`와 동일한 방식으로 정보를 채운다.
         public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
             let result: Result<KSDisplayInfo, KSError> = await MainActor.run {
                 do {

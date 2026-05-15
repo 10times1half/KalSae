@@ -39,6 +39,14 @@ let package = Package(
         .target(
             name: "CKalsaeWV2",
             path: "Sources/CKalsaeWV2",
+            exclude: [
+                // Legacy sources superseded by kswv2_image.cpp / kswv2_visual.cpp
+                // (commit 4a6497d "problem fix" replaced these). Keep on disk
+                // for reference but exclude from the build to avoid duplicate
+                // symbol link errors.
+                "src/ksimage.cpp",
+                "src/kswv2_capture.cpp",
+            ],
             publicHeadersPath: "include",
             cxxSettings: [
                 .headerSearchPath("Vendor/WebView2/build/native/include"),

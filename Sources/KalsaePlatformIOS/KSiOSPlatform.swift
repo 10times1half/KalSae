@@ -5,21 +5,27 @@
     public import Foundation
 
     // @unchecked: UIKit main thread confinement — actor unsuitable for @UIApplicationMain binding
-    public final class KSiOSPlatform: KSPlatform, @unchecked Sendable {
+    public final class KSiOSPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
         public var name: String { "iOS (UIKit + WKWebView)" }
 
         public let commandRegistry: KSCommandRegistry
 
-        public var windows: any KSWindowBackend { _windows }
-        public var dialogs: any KSDialogBackend { _dialogs }
-        public var tray: (any KSTrayBackend)? { nil }
-        public var menus: any KSMenuBackend { _menus }
-        public var notifications: any KSNotificationBackend { _notifications }
-        public var shell: (any KSShellBackend)? { _shell }
-        public var clipboard: (any KSClipboardBackend)? { _clipboard }
-        public var accelerators: (any KSAcceleratorBackend)? { nil }
-        public var autostart: (any KSAutostartBackend)? { _autostart }
-        public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
+        // `KSPlatform`의 10개 백엔드는 `KSPlatformComponentsProvider`가
+        // `components` 위임으로 자동 제공한다. iOS는 트레이/액셀러레이터를
+        // 지원하지 않으므로 nil로 노출한다.
+        public var components: KSPlatformComponents {
+            KSPlatformComponents(
+                windows: _windows,
+                dialogs: _dialogs,
+                menus: _menus,
+                notifications: _notifications,
+                tray: nil,
+                shell: _shell,
+                clipboard: _clipboard,
+                accelerators: nil,
+                autostart: _autostart,
+                deepLink: _deepLink)
+        }
 
         private let _windows: KSiOSWindowBackend
         private let _dialogs: KSiOSDialogBackend

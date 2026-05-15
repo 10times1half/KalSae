@@ -124,9 +124,9 @@ extern "C" int32_t KSWV2_AddServerCertificateErrorHandler(
     HRESULT hr = KSWV2_AsWebView(webview)->QueryInterface(IID_PPV_ARGS(&wv14));
     if (FAILED(hr) || !wv14) return static_cast<int32_t>(hr);
 
-    auto handler = Callback<ICoreWebView2ServerCertificateErrorEventHandler>(
+    auto handler = Callback<ICoreWebView2ServerCertificateErrorDetectedEventHandler>(
         [user, cb](ICoreWebView2 *,
-                   ICoreWebView2ServerCertificateErrorEventArgs *args) -> HRESULT {
+                   ICoreWebView2ServerCertificateErrorDetectedEventArgs *args) -> HRESULT {
             int32_t action = cb(user);
             if (action == 0) {
                 args->put_Action(
@@ -139,7 +139,7 @@ extern "C" int32_t KSWV2_AddServerCertificateErrorHandler(
         });
 
     EventRegistrationToken token{};
-    hr = wv14->add_ServerCertificateError(handler.Get(), &token);
+    hr = wv14->add_ServerCertificateErrorDetected(handler.Get(), &token);
     wv14->Release();
     return static_cast<int32_t>(hr);
 }

@@ -15,6 +15,9 @@ extension KSBindingsGenerator {
         let returnType: String?
         let isThrowing: Bool
         let isAsync: Bool
+        /// `@KSCommand(permission: "fs:read")`로 선언된 권한 식별자.
+        /// 선언되지 않은 경우 `nil`.
+        let permission: String?
     }
 
     /// 함수 매개변수 — `label`은 JS가 인수 객체에서 전달할 내용과 일치하며;

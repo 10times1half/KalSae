@@ -55,6 +55,14 @@ public protocol KSPlugin: Sendable {
     /// 빈 문자열, 공백 포함, `__ks.` prefix는 금지된다.
     static var namespace: String { get }
 
+    /// 플러그인이 제공하는 권한 카탈로그. 기본 구현은 빈 배열.
+    ///
+    /// 각 권한의 `identifier`는 `"<namespace>:<name>"` 형식이어야 하며,
+    /// 그렇지 않은 경우 `KSApp.install(_:)`이 검증 시점에서 에러를 throw한다.
+    /// 이 카탈로그는 `KSApp` 부팅 시 `KSCapabilitiesConfig.permissions`에
+    /// 자동 합쳐진다 (사용자 카탈로그가 우선; 동일 식별자는 중복 정의로 거부).
+    static var permissions: [KSPermission] { get }
+
     /// 부팅 완료 후 1회 호출된다. `registry`에 명령을 등록하거나
     /// `platform`에 접근해 PAL을 읽는다.
     func setup(_ ctx: any KSPluginContext) async throws(KSError)
@@ -65,6 +73,7 @@ public protocol KSPlugin: Sendable {
 }
 
 extension KSPlugin {
+    public static var permissions: [KSPermission] { [] }
     public func teardown(_ ctx: any KSPluginContext) async {}
 }
 
@@ -85,5 +94,25 @@ public func ksValidatePluginNamespace(_ namespace: String) throws(KSError) {
     guard !namespace.hasPrefix("__ks.") else {
         throw KSError.configInvalid(
             "plugin namespace '\(namespace)' must not start with '__ks.' (reserved)")
+    }
+}
+
+/// 플러그인이 제공하는 권한 식별자가 `"<namespace>:<name>"` 형식인지 검증한다.
+///
+/// 위반 시 `KSError(code: .configInvalid, ...)`를 throw한다. `KSApp.install(_:)`이
+/// 내부적으로 호출하며, 플러그인은 외부 네임스페이스의 권한을 등록할 수 없다.
+public func ksValidatePluginPermissionIdentifier(
+    _ identifier: String, namespace: String
+) throws(KSError) {
+    let prefix = namespace + ":"
+    guard identifier.hasPrefix(prefix) else {
+        throw KSError.configInvalid(
+            "plugin permission '\(identifier)' must be prefixed with '\(prefix)' "
+                + "to match its declaring namespace '\(namespace)'.")
+    }
+    let suffix = identifier.dropFirst(prefix.count)
+    guard !suffix.isEmpty else {
+        throw KSError.configInvalid(
+            "plugin permission '\(identifier)' must have a non-empty name after '\(prefix)'.")
     }
 }

@@ -32,6 +32,13 @@ public struct KSConfig: Codable, Sendable, Equatable {
     /// 선택적 OS 권한 요구사항 (RFC-008).
     /// 생략 시 모든 권한 거부 (`KSPermissionsConfig.denied`).
     public var permissions: KSPermissionsConfig
+    /// 선택적 Tauri 스타일 capability/permission 정책 (v1).
+    ///
+    /// `nil` 또는 빈 값이면 기존 `security.commandAllowlist` / scope
+    /// 레거시 정책이 그대로 적용된다. 설정되어 있으면 capability
+    /// 평가기가 우선하며, 레거시 필드 존재 시 경고가 로그되는 후
+    /// 자동 다단 합성된다.
+    public var capabilities: KSCapabilitiesConfig?
 
     public init(
         app: KSAppInfo,
@@ -44,7 +51,8 @@ public struct KSConfig: Codable, Sendable, Equatable {
         autostart: KSAutostartConfig? = nil,
         deepLink: KSDeepLinkConfig? = nil,
         distribution: KSDistributionConfig = .default,
-        permissions: KSPermissionsConfig = .denied
+        permissions: KSPermissionsConfig = .denied,
+        capabilities: KSCapabilitiesConfig? = nil
     ) {
         self.app = app
         self.build = build
@@ -57,6 +65,7 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.deepLink = deepLink
         self.distribution = distribution
         self.permissions = permissions
+        self.capabilities = capabilities
     }
 
     // `security` 등 필수가 아닌 섹션은 JSON에서 생략 가능하도록 custom init을 제공한다.
@@ -76,6 +85,8 @@ public struct KSConfig: Codable, Sendable, Equatable {
             try c.decodeIfPresent(KSDistributionConfig.self, forKey: .distribution) ?? .default
         self.permissions =
             try c.decodeIfPresent(KSPermissionsConfig.self, forKey: .permissions) ?? .denied
+        self.capabilities =
+            try c.decodeIfPresent(KSCapabilitiesConfig.self, forKey: .capabilities)
     }
 }
 public struct KSAppInfo: Codable, Sendable, Equatable {

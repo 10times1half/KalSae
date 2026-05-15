@@ -8,21 +8,26 @@
     /// 알림, 자동시작, 딥링크)이 동작 중이다. 트레이는 AppIndicator3이
     /// 필요하여 스터브로 남아 있다; 단일 인스턴스는 `KSLinuxSingleInstance`를 통해 노출된다.
     // @unchecked: GTK main thread confinement — actor unsuitable for OS main-loop binding
-    public final class KSLinuxPlatform: KSPlatform, @unchecked Sendable {
+    public final class KSLinuxPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
         public var name: String { "Linux (GTK4 + WebKitGTK 6.0)" }
 
         public let commandRegistry: KSCommandRegistry
 
-        public var windows: any KSWindowBackend { _windows }
-        public var dialogs: any KSDialogBackend { _dialogs }
-        public var tray: (any KSTrayBackend)? { _tray }
-        public var menus: any KSMenuBackend { _menus }
-        public var notifications: any KSNotificationBackend { _notifications }
-        public var shell: (any KSShellBackend)? { _shell }
-        public var clipboard: (any KSClipboardBackend)? { _clipboard }
-        public var accelerators: (any KSAcceleratorBackend)? { _accelerators }
-        public var autostart: (any KSAutostartBackend)? { _autostart }
-        public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
+        // `KSPlatform`의 10개 백엔드는 `KSPlatformComponentsProvider`가
+        // `components` 위임으로 자동 제공한다.
+        public var components: KSPlatformComponents {
+            KSPlatformComponents(
+                windows: _windows,
+                dialogs: _dialogs,
+                menus: _menus,
+                notifications: _notifications,
+                tray: _tray,
+                shell: _shell,
+                clipboard: _clipboard,
+                accelerators: _accelerators,
+                autostart: _autostart,
+                deepLink: _deepLink)
+        }
 
         private let _windows: KSLinuxWindowBackend
         private let _dialogs: KSLinuxDialogBackend

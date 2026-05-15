@@ -205,6 +205,17 @@ public final class KSApp {
         let registry = KSCommandRegistry()
         await registry.setAllowlist(config.security.commandAllowlist)
 
+        // 2a. Tauri-style capabilities — `config.capabilities`가 비어 있지 않으면
+        //     정책 평가기를 설치한다. allowlist와 capabilities가 동시에 지정된
+        //     경우 둘 다 적용되며(allowlist가 먼저 평가됨), capabilities는
+        //     세분화된 (window, command) 매칭을 추가로 강제한다.
+        if let caps = config.capabilities, !caps.isEmpty {
+            let evaluator = KSPolicyEvaluator(
+                config: caps,
+                platform: KSPolicyEvaluator.hostPlatform)
+            await registry.setPolicyEvaluator(evaluator)
+        }
+
         // 3. 사용자 등록 블록 실행. 시그니처가 `throws(KSError)`이므로 추가
         //    `as?` 분기 없이 그대로 전파한다.
         try await configure(registry)

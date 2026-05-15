@@ -102,6 +102,7 @@ public struct KSError: Error, Codable, Sendable, Equatable, CustomStringConverti
         case commandEncodeFailed
         case commandExecutionFailed
         case rateLimited
+        case permissionDenied
 
         // 파일 시스템 / 보안
         case fsScopeDenied
@@ -206,6 +207,24 @@ extension KSError {
             code: .commandNotFound,
             message: "Command '\(name)' is not registered.",
             data: .string(name))
+    }
+
+    /// 권한(Capability) 정책 거부 — 명령 자체는 등록되어 있으나
+    /// 현재 호출 컨텍스트(윈도우/출처)가 해당 명령을 호출할 권한이 없음을 나타낸다.
+    public static func permissionDenied(
+        command: String,
+        reason: String,
+        capability: String? = nil
+    ) -> KSError {
+        var dict: [String: Payload] = [
+            "command": .string(command),
+            "reason": .string(reason),
+        ]
+        if let capability { dict["capability"] = .string(capability) }
+        return KSError(
+            code: .permissionDenied,
+            message: "Permission denied for '\(command)': \(reason)",
+            data: .dict(dict))
     }
 
     public static func `internal`(

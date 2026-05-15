@@ -7,10 +7,14 @@
     private let _wv2KSPostEncoder = JSONEncoder()
     @MainActor
     extension WebView2Host: KSWebViewBackend {
+        /// URL을 WebView2로 로드한다.
         public func load(url: URL) async throws(KSError) {
             try navigate(url: url.absoluteString)
         }
 
+        /// JavaScript 문자열을 WebView2에서 동기로 실행한다.
+        /// 반환값(Data?)은 WebView2의 ExecuteScript 완료 콜백을 통해
+        /// 비동기로 돌아오지만, 현재 구현은 콜백을 기다리지 않는다.
         @discardableResult
         public func evaluateJavaScript(_ source: String) async throws(KSError) -> Data? {
             guard let webview = webviewPtr else {
@@ -26,6 +30,7 @@
             return nil
         }
 
+        /// `KSIPCMessage`를 JSON으로 인코딩해 WebView2 JS 측에 포스트한다.
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
             let data: Data
             do {
@@ -41,6 +46,8 @@
             try postJSON(json)
         }
 
+        /// WebView2의 `WebMessageReceived` 이벤트를 수신해
+        /// JSON → `KSIPCMessage`로 디코딩한 후 `handler`로 전달한다.
         public func setMessageHandler(
             _ handler: @Sendable @escaping (KSIPCMessage) async -> Void
         ) async {
@@ -59,10 +66,15 @@
             }
         }
 
+        /// CSP 문자열을 `<meta http-equiv="Content-Security-Policy">` 태그로
+        /// 문서 시작 시점에 주입한다.
         public func setContentSecurityPolicy(_ csp: String) async throws(KSError) {
             try addDocumentCreatedScript(Self.cspInjectionScript(csp))
         }
 
+        /// CSP `<meta>` 태그 주입용 JavaScript 문자열을 생성한다.
+        /// 특수 문자 (역슬래시, 따옴표, 개행 등)를 JS 문자열 리터럴에
+        /// 안전하게 이스케이프한다.
         private static func cspInjectionScript(_ csp: String) -> String {
             var escaped = ""
             escaped.reserveCapacity(csp.count + 8)

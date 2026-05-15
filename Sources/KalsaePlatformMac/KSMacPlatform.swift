@@ -8,21 +8,26 @@
     /// `WKWebView`에 대한 Phase 1의 IPC 계약을 검증할 수 있는
     /// 기본 기능을 부팅한다. 전체 PAL 커버리지(다이얼로그, 트레이, 메뉴, 알림)는
     /// 이후 단계에서 추가될 예정이다.
-    public final class KSMacPlatform: KSPlatform, @unchecked Sendable {
+    public final class KSMacPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
         public var name: String { "macOS (AppKit + WKWebView)" }
 
         public let commandRegistry: KSCommandRegistry
 
-        public var windows: any KSWindowBackend { _windows }
-        public var dialogs: any KSDialogBackend { _dialogs }
-        public var tray: (any KSTrayBackend)? { _tray }
-        public var menus: any KSMenuBackend { _menus }
-        public var notifications: any KSNotificationBackend { _notifications }
-        public var shell: (any KSShellBackend)? { _shell }
-        public var clipboard: (any KSClipboardBackend)? { _clipboard }
-        public var accelerators: (any KSAcceleratorBackend)? { _accelerators }
-        public var autostart: (any KSAutostartBackend)? { _autostart }
-        public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
+        // `KSPlatform`이 노출하는 10개 백엔드는 `KSPlatformComponentsProvider`
+        // 의 기본 구현이 `components`에 위임해 자동으로 채워준다.
+        public var components: KSPlatformComponents {
+            KSPlatformComponents(
+                windows: _windows,
+                dialogs: _dialogs,
+                menus: _menus,
+                notifications: _notifications,
+                tray: _tray,
+                shell: _shell,
+                clipboard: _clipboard,
+                accelerators: _accelerators,
+                autostart: _autostart,
+                deepLink: _deepLink)
+        }
 
         private let _windows: KSMacWindowBackend
         private let _dialogs: KSMacDialogBackend

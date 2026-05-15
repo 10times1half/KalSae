@@ -34,6 +34,11 @@
                 hop: { block in
                     Task { @MainActor in block() }
                 })
+            // origin 해석기: 현재 WKWebView 의 top-frame URL을 정책 평가기에 전달.
+            self.core.originResolver = { [weak host] in
+                guard let url = host?.webView.url else { return nil }
+                return KSOrigin.string(from: url)
+            }
             KSWindowEmitHub.shared.register(label: windowLabel) { [weak self] event, payload throws(KSError) in
                 guard let self else { return }
                 try self.emit(event: event, payload: payload)

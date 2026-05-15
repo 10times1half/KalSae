@@ -20,7 +20,7 @@ extension KSBindingsGenerator {
                 return .visitChildren
             }
             let funcName = node.name.text
-            let commandName = attr.isEmpty ? funcName : attr
+            let commandName = attr.name.isEmpty ? funcName : attr.name
             let params: [Param] = node.signature.parameterClause.parameters.map { p in
                 let label =
                     (p.firstName.text == "_")
@@ -40,7 +40,8 @@ extension KSBindingsGenerator {
                     params: params,
                     returnType: ret,
                     isThrowing: isThrowing,
-                    isAsync: isAsync))
+                    isAsync: isAsync,
+                    permission: attr.permission))
             return .visitChildren
         }
 
@@ -133,23 +134,30 @@ extension KSBindingsGenerator {
 
         // MARK: 헬퍼
 
-        /// 속성이 있는 리터럴 명령 이름 인수를 반환한다
-        /// (`@KSCommand("foo.bar")` → `"foo.bar"`), 속성이 없는 경우는 빈 문자열
-        /// (`@KSCommand`), 함수에 `@KSCommand` 속성이 없으면 `nil`을 반환한다.
-        private func ksCommandAttribute(_ attrs: AttributeListSyntax) -> String? {
+        /// `@KSCommand` 속성의 이름/권한 인수를 파싱한다.
+        /// 속성이 없으면 nil; 있으면 `(name: String, permission: String?)`
+        /// 구조체를 반환한다 (name은 `""` 가능).
+        private func ksCommandAttribute(_ attrs: AttributeListSyntax) -> (name: String, permission: String?)? {
             for entry in attrs {
                 guard let a = entry.as(AttributeSyntax.self) else { continue }
-                let name = a.attributeName.trimmedDescription
-                if name != "KSCommand" { continue }
+                let attrName = a.attributeName.trimmedDescription
+                if attrName != "KSCommand" { continue }
+                var name = ""
+                var permission: String? = nil
                 if case .argumentList(let args) = a.arguments {
                     for arg in args {
-                        if let s = arg.expression.as(StringLiteralExprSyntax.self) {
-                            return s.segments.first?.as(StringSegmentSyntax.self)?
-                                .content.text
+                        guard let lit = arg.expression.as(StringLiteralExprSyntax.self)
+                        else { continue }
+                        let raw = lit.segments.first?.as(StringSegmentSyntax.self)?
+                            .content.text ?? ""
+                        if arg.label?.text == "permission" {
+                            permission = raw.isEmpty ? nil : raw
+                        } else if arg.label == nil {
+                            name = raw
                         }
                     }
                 }
-                return ""
+                return (name: name, permission: permission)
             }
             return nil
         }

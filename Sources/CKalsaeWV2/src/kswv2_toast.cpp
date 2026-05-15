@@ -61,18 +61,22 @@ extern "C" int32_t KSWV2_ShowToast(
     }
 
     // XML 템플릿 생성: <toast><visual><binding template="ToastGeneric">...</binding></visual></toast>
-    // Windows.UI.Notifications.ToastNotificationManager.GetTemplateContent 사용
-    // IToastNotificationManagerStatics2 = Statics + CreateToastNotifierWithId + get_History
-    ComPtr<IToastNotificationManagerStatics2> toastManager;
+    // Windows.UI.Notifications.ToastNotificationManager.GetTemplateContent 사용.
+    // CreateToastNotifierWithId / GetTemplateContent는 base `IToastNotificationManagerStatics`
+    // 의 메서드이다 (Statics2는 History/GetForUser 등이다).
+    ComPtr<IToastNotificationManagerStatics> toastManager;
     hr = RoGetActivationFactory(
         HStringReference(L"Windows.UI.Notifications.ToastNotificationManager").Get(),
         IID_PPV_ARGS(&toastManager));
     if (FAILED(hr)) return static_cast<int32_t>(hr);
 
-    // ToastGeneric 템플릿 XML 가져오기
+    // ToastGeneric 템플릿 XML 가져오기.
+    // 열거값 7 = ToastTemplateType::ToastGeneric (WinRT 스펙).
+    // 일부 SDK 헤더버전은 `ToastTemplateType_ToastGeneric` 식별자를
+    // 노출하지 않아 정수 캐스팅으로 폴백한다.
     ComPtr<IXmlDocument> xmlDoc;
     hr = toastManager->GetTemplateContent(
-        ToastTemplateType_ToastGeneric, &xmlDoc);
+        static_cast<ToastTemplateType>(7), &xmlDoc);
     if (FAILED(hr) || !xmlDoc) return static_cast<int32_t>(hr);
 
     // XML 조작: title/body <text> 요소 추가
@@ -147,7 +151,7 @@ extern "C" int32_t KSWV2_ShowToast(
     hr = MakeHString(aumid, &aumidH);
     if (FAILED(hr)) return static_cast<int32_t>(hr);
 
-    // IToastNotifier 생성 (CreateToastNotifierWithId는 Statics2의 메서드)
+    // IToastNotifier 생성 (CreateToastNotifierWithId는 Statics 베이스의 메서드)
     ComPtr<IToastNotifier> notifier;
     hr = toastManager->CreateToastNotifierWithId(aumidH, &notifier);
     WindowsDeleteString(aumidH);

@@ -10,22 +10,27 @@
     /// 클립보드, 셸, 액셀러레이터, 자동시작, 딥링크, 단일 인스턴스,
     /// 윈도우 상태 영속화. 모든 PAL 서비스가 Win32에 완전히 연결되어 있다.
     // @unchecked: Win32 thread confinement (HWND affinity) — actor cannot model OS thread binding
-    public final class KSWindowsPlatform: KSPlatform, @unchecked Sendable {
+    public final class KSWindowsPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
         public var name: String { "Windows (Win32 + WebView2)" }
 
         public let commandRegistry: KSCommandRegistry
 
         /// Windows PAL 백엔드. 모든 PAL 서비스가 Win32에 완전히 연결되어 있다.
-        public var windows: any KSWindowBackend { _windows }
-        public var dialogs: any KSDialogBackend { _dialogs }
-        public var tray: (any KSTrayBackend)? { _tray }
-        public var menus: any KSMenuBackend { _menus }
-        public var notifications: any KSNotificationBackend { _notifications }
-        public var shell: (any KSShellBackend)? { _shell }
-        public var clipboard: (any KSClipboardBackend)? { _clipboard }
-        public var accelerators: (any KSAcceleratorBackend)? { _accelerators }
-        public var autostart: (any KSAutostartBackend)? { _autostart }
-        public var deepLink: (any KSDeepLinkBackend)? { _deepLink }
+        /// `KSPlatform`의 10개 백엔드는 `KSPlatformComponentsProvider`가
+        /// `components` 위임으로 자동 제공한다.
+        public var components: KSPlatformComponents {
+            KSPlatformComponents(
+                windows: _windows,
+                dialogs: _dialogs,
+                menus: _menus,
+                notifications: _notifications,
+                tray: _tray,
+                shell: _shell,
+                clipboard: _clipboard,
+                accelerators: _accelerators,
+                autostart: _autostart,
+                deepLink: _deepLink)
+        }
 
         private let _windows: KSWindowsWindowBackend
         private let _dialogs: KSWindowsDialogBackend

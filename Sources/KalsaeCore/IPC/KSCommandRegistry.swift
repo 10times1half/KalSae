@@ -11,6 +11,8 @@ public actor KSCommandRegistry {
 
     private var handlers: [String: Handler] = [:]
     private var allowlist: Set<String>? = nil
+    private var policyEvaluator: KSPolicyEvaluator? = nil
+    private var metadata: [String: KSCommandMetadata] = [:]
 
     // MARK: - Token-bucket rate limiter
 
@@ -56,9 +58,38 @@ public actor KSCommandRegistry {
         allowlist = names.map(Set.init)
     }
 
+    /// Tauri 스타일 capability/permission 정책 평가기를 설정한다.
+    /// `nil`이면 capability 계층은 비활성화되고 기존 `allowlist`/레거시
+    /// 정책만 적용된다 (기본값, 완전 하위 호환).
+    public func setPolicyEvaluator(_ evaluator: KSPolicyEvaluator?) {
+        policyEvaluator = evaluator
+    }
+
     /// `name`에 대한 핸들러를 등록(또는 교체)한다.
     public func register(_ name: String, handler: @escaping Handler) {
         handlers[name] = handler
+    }
+
+    /// `@KSCommand(permission:)` 매크로가 호출하는 정적 메타데이터 설정자.
+    /// 런타임 동작에는 영향을 주지 않으며 (capability 게이팅은
+    /// `KSPolicyEvaluator`가 수행), 도구(검증기/바인딩 생성기)에서
+    /// 내성(introspection)할 수 있도록 보관한다.
+    public func setMetadata(_ name: String, permission: String?) {
+        if let permission, !permission.isEmpty {
+            metadata[name] = KSCommandMetadata(permission: permission)
+        } else {
+            metadata.removeValue(forKey: name)
+        }
+    }
+
+    /// 지정된 명령에 부착된 메타데이터를 반환한다 (없으면 nil).
+    public func metadata(for name: String) -> KSCommandMetadata? {
+        metadata[name]
+    }
+
+    /// 등록된 모든 메타데이터의 스냅샷.
+    public func metadataSnapshot() -> [String: KSCommandMetadata] {
+        metadata
     }
 
     /// 핸들러를 제거한다.
@@ -85,6 +116,19 @@ public actor KSCommandRegistry {
         }
         if let allowlist, !allowlist.contains(name) {
             return .failure(.commandNotAllowed(name))
+        }
+        if let evaluator = policyEvaluator {
+            let decision = evaluator.evaluate(
+                command: name,
+                windowLabel: KSInvocationContext.windowLabel,
+                origin: KSInvocationContext.origin)
+            if case .deny(let reason) = decision {
+                return .failure(
+                    .permissionDenied(
+                        command: name,
+                        reason: reason.message,
+                        capability: reason.capabilityIdentifier))
+            }
         }
         guard let handler = handlers[name] else {
             return .failure(.commandNotFound(name))

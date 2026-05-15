@@ -49,6 +49,15 @@
         internal var basicAuthHandlerBox: Unmanaged<BasicAuthHandlerBox>?
         internal var clientCertHandlerBox: Unmanaged<ClientCertHandlerBox>?
 
+        /// 가장 최근 `navigate(url:)` 호출의 URL. IPC origin 평가용으로 사용된다.
+        /// 향후 WebView2 `ICoreWebView2::get_Source` 바인딩을 추가하면 대체될 수 있다.
+        internal private(set) var lastNavigatedURL: String?
+
+        /// `WebView2Host+Operations`에서 navigate가 성공한 직후 호출.
+        internal func recordNavigated(url: String) {
+            self.lastNavigatedURL = url
+        }
+
         init(label: String) {
             self.label = label
         }

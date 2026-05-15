@@ -33,6 +33,10 @@ extension KSApp {
                 throw KSError.configInvalid(
                     "duplicate plugin namespace '\(ns)'")
             }
+            // 1b. 플러그인이 선언한 권한 식별자가 네임스페이스 prefix를 따르는지 검증
+            for perm in type(of: plugin).permissions {
+                try ksValidatePluginPermissionIdentifier(perm.identifier, namespace: ns)
+            }
         }
 
         // 3. commandAllowlist 경고

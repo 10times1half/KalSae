@@ -74,6 +74,26 @@ public enum KSBindingsGenerator {
             outputPath: opts.output.path)
     }
 
+    /// `sources`에서 발견된 모든 `@KSCommand` 함수의 검증용 요약을 반환한다.
+    /// `CapabilityValidator`에 전달하기 위한 CLI 유틸리티.
+    public static func scanCommands(in sources: [URL]) -> [KSCapabilityValidator.CommandInfo] {
+        var out: [KSCapabilityValidator.CommandInfo] = []
+        for url in sources {
+            let text: String
+            do { text = try String(contentsOf: url, encoding: .utf8) } catch { continue }
+            let tree = Parser.parse(source: text)
+            let v = Visitor()
+            v.walk(tree)
+            for c in v.commands {
+                out.append(
+                    KSCapabilityValidator.CommandInfo(
+                        name: c.commandName,
+                        permission: c.permission))
+            }
+        }
+        return out
+    }
+
     /// `root` 하위의 `*.swift` 파일을 재귀적으로 열거하며
     /// `.build`, `Tests`, `node_modules`, 히든 디렉터리는 건너된다.
     public static func discoverSwiftFiles(under root: URL) -> [URL] {
