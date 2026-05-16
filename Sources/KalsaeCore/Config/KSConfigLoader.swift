@@ -95,5 +95,50 @@ public enum KSConfigLoader {
                 }
             }
         }
+        try validateUserScripts(config.security.userScripts)
+    }
+
+    /// `security.userScripts`의 의미론적 검증.
+    /// - `allowOrigins`가 비어 있으면 `scripts`도 비어 있어야 한다(default-deny).
+    /// - 각 스크립트는 `source`/`path` 중 정확히 하나만 지정해야 한다.
+    /// - `path`는 `..` 디렉터리 탈출을 포함하지 않아야 한다.
+    /// - 각 스크립트의 `origins` 항목은 `allowOrigins`의 부분집합이어야 한다.
+    private static func validateUserScripts(_ scope: KSUserScriptsScope) throws(KSError) {
+        if scope.allowOrigins.isEmpty && !scope.scripts.isEmpty {
+            throw KSError.configInvalid(
+                "security.userScripts.scripts is non-empty but security.userScripts.allowOrigins is empty (default-deny)")
+        }
+        var seenIDs: Set<String> = []
+        for (idx, s) in scope.scripts.enumerated() {
+            let tag = s.id.isEmpty ? "#\(idx)" : "'\(s.id)'"
+            if !s.id.isEmpty {
+                guard seenIDs.insert(s.id).inserted else {
+                    throw KSError.configInvalid(
+                        "security.userScripts.scripts[\(idx)]: duplicate id '\(s.id)'")
+                }
+            }
+            let hasSource = (s.source?.isEmpty == false)
+            let hasPath = (s.path?.isEmpty == false)
+            if hasSource == hasPath {
+                throw KSError.configInvalid(
+                    "security.userScripts.scripts[\(idx)] \(tag): exactly one of 'source' or 'path' must be set")
+            }
+            if let p = s.path, hasPath {
+                if p.contains("..") || p.hasPrefix("/") || p.hasPrefix("\\") {
+                    throw KSError.configInvalid(
+                        "security.userScripts.scripts[\(idx)] \(tag): path must be a relative resourceRoot path without '..'")
+                }
+            }
+            if s.origins.isEmpty {
+                throw KSError.configInvalid(
+                    "security.userScripts.scripts[\(idx)] \(tag): 'origins' must not be empty")
+            }
+            for o in s.origins {
+                if !scope.permits(originPattern: o) {
+                    throw KSError.configInvalid(
+                        "security.userScripts.scripts[\(idx)] \(tag): origin '\(o)' is not in security.userScripts.allowOrigins")
+                }
+            }
+        }
     }
 }

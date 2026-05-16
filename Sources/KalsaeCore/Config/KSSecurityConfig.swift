@@ -89,6 +89,11 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// 활성화하기 전까지 JS 측은 어떤 키체인 항목도 읽거나 쓸 수 없다.
     public var secret: KSSecretScope
 
+    /// 사용자 스크립트(`KSUserScript`) 권한 범위.
+    /// `allowOrigins`가 비어 있으면(기본값) 모든 사용자 스크립트 등록이 거부된다.
+    /// `KSApp.addUserScript` 런타임 등록과 `scripts` 선언 양쪽이 이 화이트리스트를 통과해야 한다.
+    public var userScripts: KSUserScriptsScope
+
     /// JS에서 초당 허용되는 IPC 명령 호출의 최대 수.
     /// burst는 이 속도를 잠시 넘는 짧은 급증을 허용한다.
     /// `nil`이면 속도 제한을 비활성화한다(하위 호환용 기본값).
@@ -151,7 +156,8 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         commandRateLimit: KSCommandRateLimit? = nil,
         allowPopups: Bool = false,
         crossOriginIsolation: Bool = false,
-        secret: KSSecretScope = .init()
+        secret: KSSecretScope = .init(),
+        userScripts: KSUserScriptsScope = .init()
     ) {
         self.csp = csp
         self.devCsp = devCsp
@@ -169,13 +175,14 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.allowPopups = allowPopups
         self.crossOriginIsolation = crossOriginIsolation
         self.secret = secret
+        self.userScripts = userScripts
     }
 
     private enum CodingKeys: String, CodingKey {
         case csp, devCsp, commandAllowlist
         case fs, devtools, contextMenu, allowExternalDrop
         case shell, notifications, http, downloads, navigation, commandRateLimit
-        case allowPopups, crossOriginIsolation, secret
+        case allowPopups, crossOriginIsolation, secret, userScripts
     }
 
     public init(from decoder: any Decoder) throws {
@@ -196,6 +203,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.allowPopups = try c.decodeIfPresent(Bool.self, forKey: .allowPopups) ?? false
         self.crossOriginIsolation = try c.decodeIfPresent(Bool.self, forKey: .crossOriginIsolation) ?? false
         self.secret = try c.decodeIfPresent(KSSecretScope.self, forKey: .secret) ?? .init()
+        self.userScripts = try c.decodeIfPresent(KSUserScriptsScope.self, forKey: .userScripts) ?? .init()
     }
 
     public static let defaultCSP =

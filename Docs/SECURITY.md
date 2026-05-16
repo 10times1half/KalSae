@@ -234,6 +234,86 @@ Keychain, Windows: Credential Manager, Linux: libsecret Secret Service
 JS API는 `Uint8Array`/문자열 양쪽을 받는다. 지원 플랫폼: macOS, iOS,
 Windows. Linux/Android는 현재 `unsupportedPlatform` 을 던진다.
 
+### 17. User Scripts (`security.userScripts`)
+
+Kalsae는 Tauri v2의 `initialization_script`에 대응하는 사용자 스크립트
+주입 API를 제공한다. 모든 등록은 origin 화이트리스트 기반의 **default-deny**
+정책을 따른다.
+
+```json
+{
+  "security": {
+    "userScripts": {
+      "allowOrigins": ["https://app.kalsae", "ks://app", "https://*.example.org"],
+      "scripts": [
+        {
+          "id": "telemetry-boot",
+          "path": "scripts/boot.js",
+          "injectionTime": "documentStart",
+          "forMainFrameOnly": true,
+          "origins": ["https://app.kalsae", "ks://app"]
+        }
+      ]
+    }
+  }
+}
+```
+
+| 필드 | 타입 | 기본 | 설명 |
+|---|---|---|---|
+| `allowOrigins` | `[String]` | `[]` | 사용자 스크립트가 실행될 수 있는 origin glob 화이트리스트. **비어 있으면 어떤 스크립트도 등록 불가** (default-deny). |
+| `scripts` | `[KSUserScript]` | `[]` | 부팅 시 자동 등록되는 선언 스크립트. |
+| `scripts[].id` | `String` | `""` | 비어 있으면 부팅 시 `config-<uuid>`로 자동 생성. 중복 금지. |
+| `scripts[].source` | `String?` | `nil` | 인라인 JS 본문. `path`와 **정확히 하나만** 지정. |
+| `scripts[].path` | `String?` | `nil` | resourceRoot 상대 경로. `..`/절대 경로 금지. |
+| `scripts[].injectionTime` | `"documentStart"` \| `"documentEnd"` | `documentStart` | 주입 시점. `documentEnd`는 `DOMContentLoaded` 폴리필로 구현됨. |
+| `scripts[].forMainFrameOnly` | `Bool` | `false` | `true`면 최상위 프레임에만 주입. |
+| `scripts[].origins` | `[String]` | `[]` | 이 스크립트가 활성화될 origin. **모든 항목이 `allowOrigins`의 부분집합이어야 한다.** |
+
+**보안 모델 — 다층 가드:**
+
+1. **Config validation** — 부팅 시 `KSConfigLoader`가 `allowOrigins`/origin
+   부분집합/source⊕path/`..` traversal/중복 ID를 검증한다. 위반 시
+   `configInvalid`.
+2. **Runtime API gate** — `KSApp.addUserScript(_:)`도 동일한 검증을 적용한다.
+   `allowOrigins` 위반 시 `permissionDenied`.
+3. **IIFE wrapper** — 모든 사용자 스크립트는 `KSUserScriptWrapper`가 IIFE로
+   래핑한다. 래퍼는 (a) `KSHTTPScope` 글롭으로 현재 페이지 origin을 검사하고
+   미일치 시 본문을 실행하지 않으며, (b) `try/catch`로 호스트 페이지 격리를
+   유지하고, (c) `documentEnd`일 때 `readyState`/`DOMContentLoaded` 폴리필을
+   적용한다.
+4. **Main world 전용** — 모든 PAL은 기존 `addDocumentCreatedScript` 경로를
+   재사용한다 (WKUserScript / WebView2 `AddScriptToExecuteOnDocumentCreatedAsync` /
+   WebKitGTK `webkit_user_content_manager_add_script` / Android documentStart 큐).
+   별도 isolated world는 제공하지 않는다 — Tauri의 `initialization_script`과
+   동일한 시맨틱.
+
+**런타임 API:**
+
+```swift
+import Kalsae
+
+let id = try app.addUserScript(
+    KSUserScript(
+        source: "window.__bootedAt = Date.now();",
+        injectionTime: .documentStart,
+        origins: ["https://app.kalsae"]
+    )
+)
+```
+
+- 반환 ID는 검증 통과 후 (UUID 자동 할당 포함) 영구 식별자.
+- 이미 로드된 페이지에는 적용되지 않으며 **다음 navigation부터** 효력이 발생한다 (Tauri와 동일).
+- 한번 등록된 스크립트는 프로세스 수명 동안 제거할 수 없다 (WebView2 비동기 script-id 관리 / Android documentStart 큐 한계로 인한 의도된 제약). 실험성 스크립트는 origin 게이트로 사실상 무력화하는 패턴을 권장한다.
+
+**일반적 실수:**
+
+- ❌ `allowOrigins`를 비워둔 채 `scripts` 정의 → `configInvalid`.
+- ❌ `scripts[].origins`에 `allowOrigins`에 없는 패턴 사용 → `configInvalid`.
+- ❌ `source`와 `path` 동시 지정 → `configInvalid`.
+- ❌ `path: "../../etc/passwd"` 또는 절대 경로 → `configInvalid`.
+- ❌ 동일 `id` 두 번 등록 → `configInvalid` (선언) / `permissionDenied` (런타임).
+
 ## Security Checklist for Production Apps
 
 - [ ] Set a restrictive `csp` that only allows origins your app needs.
@@ -247,3 +327,4 @@ Windows. Linux/Android는 현재 `unsupportedPlatform` 을 던진다.
 - [ ] Set `downloads.enabled: false` (default) unless your app needs downloads.
 - [ ] Set `navigation.allow` to restrict which external URLs can be navigated to.
 - [ ] Ensure `devtools` is `false` (default) for release builds.
+- [ ] Set `userScripts.allowOrigins` only when you actually use user scripts; leave empty otherwise. Prefer `path` over inline `source` and pin each script's `origins` to the smallest possible subset.

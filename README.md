@@ -316,6 +316,7 @@ Top-level sections: `app`, `build`, `windows[]`, `security`, optional `tray`, `m
 - `http` — `__ks.http.fetch`의 허용 오리진/메서드/기본 헤더
 - `downloads` — WebView 다운로드 허용 여부
 - `navigation` — WebView 탐색 허용 목록
+- `userScripts` — Tauri `initialization_script` 대응 사용자 스크립트 주입 (default-deny origin 화이트리스트, 자세한 정책은 [Docs/SECURITY.md](Docs/SECURITY.md) §17 참고)
 - `commandRateLimit` — IPC 명령 호출 속도 제한 (`rate`/`burst`)
 
 </details>

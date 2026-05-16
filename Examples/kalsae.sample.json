@@ -105,6 +105,18 @@
       "maxSecretBytes": 65536,
       "allowList": true,
       "allowDelete": true
+    },
+    "userScripts": {
+      "allowOrigins": ["https://app.kalsae", "ks://app"],
+      "scripts": [
+        {
+          "id": "telemetry-boot",
+          "path": "scripts/boot.js",
+          "injectionTime": "documentStart",
+          "forMainFrameOnly": true,
+          "origins": ["https://app.kalsae", "ks://app"]
+        }
+      ]
     }
   },
   "autostart": {

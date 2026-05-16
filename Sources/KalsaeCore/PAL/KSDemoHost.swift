@@ -115,3 +115,17 @@ public protocol KSDemoHostWithResponseCSP: KSDemoHost {
     /// HTTP 응답에 포함될 CSP 헤더 설정.
     func setResponseCSP(_ csp: String) throws(KSError)
 }
+
+/// 사용자 스크립트 주입을 지원하는 플랫폼 (모든 플랫폼).
+///
+/// `addDocumentCreatedScript`와 동일하게 "문서 생성 시 실행될 JS 문자열" 등록만
+/// 수행한다. 보안 정책(origin 가드, documentEnd 폴리필, 예외 격리)은
+/// `KSUserScriptWrapper`가 호스트 위에서 적용한 IIFE로 처리하므로 백엔드는
+/// 단순히 등록만 하면 된다. 개별 제거는 v0.x 범위 밖이다 — Tauri v2의
+/// `initialization_script`와 동일하게 부팅 시점 또는 그 이후 단방향 추가만
+/// 지원한다.
+public protocol KSDemoHostWithUserScripts: KSDemoHost {
+    /// 래핑이 끝난 IIFE 문자열을 사용자 스크립트로 등록한다.
+    /// 동일한 `id`에 대한 중복 호출 방지는 호출자(KSApp)가 책임진다.
+    func addUserScript(id: String, wrappedSource: String, forMainFrameOnly: Bool) throws(KSError)
+}

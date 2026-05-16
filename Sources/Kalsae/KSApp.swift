@@ -70,6 +70,10 @@ public final class KSApp {
     /// `install(_:)`로 등록된 플러그인 목록. `shutdown()` 시 역순 teardown에 사용된다.
     var _pluginsStorage: [any KSPlugin] = []
 
+    /// 런타임 또는 `Kalsae.json`을 통해 등록된 사용자 스크립트 ID. 중복 등록을
+    /// 방지하기 위해 `addUserScript` 시 즉시 검사한다. `KSApp+UserScripts.swift` 참조.
+    var _registeredUserScriptIDs: Set<String> = []
+
     /// dev 라이브 리로드(`KALSAE_DEV_RELOAD=1`)에서 활성화되는 watcher 작업.
     /// `shutdown()`에서 cancel된다.
     internal var devWatcherTask: Task<Void, Never>?
@@ -381,6 +385,18 @@ public final class KSApp {
         let cspScript = Self.cspInjectionScript(config.security.csp)
         try concrete.addDocumentCreatedScript(cspScript)
 
+        // Config에 선언된 사용자 스크립트를 등록한다. CSP 주입 이후에 해야
+        // origin 가드를 필수로 통과하고도 사용자 코드가 최초 DOM 파싱 전에
+        // 실행될 수 있다.
+        let userScriptResourceRoot: URL? = {
+            if case .virtualHost(let r) = servingMode { return r }
+            return nil
+        }()
+        try Self.installDeclaredUserScripts(
+            on: concrete,
+            scope: config.security.userScripts,
+            resourceRoot: userScriptResourceRoot)
+
         // 보안 설정의 context-menu / external-drop 정책 적용.
         #if os(Windows)
             if config.security.contextMenu == .disabled {
@@ -455,6 +471,14 @@ public final class KSApp {
                         host: Self.virtualHost)
                 }
                 try sec.addDocumentCreatedScript(cspScript)
+                let secUserScriptRoot: URL? = {
+                    if case .virtualHost(let r) = secMode { return r }
+                    return nil
+                }()
+                try Self.installDeclaredUserScripts(
+                    on: sec,
+                    scope: config.security.userScripts,
+                    resourceRoot: secUserScriptRoot)
                 if config.security.contextMenu == .disabled {
                     sec.setDefaultContextMenusEnabled(false)
                 }
@@ -491,6 +515,14 @@ public final class KSApp {
                     try sec.setAssetRoot(secRoot)
                 }
                 try sec.addDocumentCreatedScript(cspScript)
+                let secUserScriptRoot: URL? = {
+                    if case .virtualHost(let r) = secMode { return r }
+                    return nil
+                }()
+                try Self.installDeclaredUserScripts(
+                    on: sec,
+                    scope: config.security.userScripts,
+                    resourceRoot: secUserScriptRoot)
                 if let store = secStateStore {
                     let lbl = secondaryConfig.label
                     sec.setWindowStateSaveSink { state in _ = store.save(label: lbl, state: state) }
@@ -616,6 +648,9 @@ public final class KSApp {
             platform: platform, host: wrapper,
             secondaryHosts: secondaryWrappers,
             deepLinkBackend: builtDeepLinkBackend)
+
+        // 런타임 `addUserScript` API가 주 호스트에 라우팅되도록 바인드한다.
+        app.bindUserScriptHost(concrete, resourceRoot: userScriptResourceRoot)
 
         // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다 (라우터를 노출하는 모든 플랫폼).
         subscribeMenuRouter(app: app)
