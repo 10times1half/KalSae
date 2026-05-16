@@ -86,7 +86,7 @@
                         SECRET_COLLECTION_DEFAULT,
                         labelPtr,
                         passwordPtr,
-                        nil, // cancellable
+                        nil,  // cancellable
                         &gerror) != 0
                 }
             }

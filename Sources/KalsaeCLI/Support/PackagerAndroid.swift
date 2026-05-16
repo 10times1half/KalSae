@@ -420,13 +420,13 @@ extension KSPackager {
         where !scheme.isEmpty && scheme.range(of: "^[a-z][a-z0-9+.-]*$", options: .regularExpression) != nil {
             intentFilters += """
 
-                    <intent-filter android:autoVerify="false">
-                        <action android:name="android.intent.action.VIEW" />
-                        <category android:name="android.intent.category.DEFAULT" />
-                        <category android:name="android.intent.category.BROWSABLE" />
-                        <data android:scheme="\(scheme)" />
-                    </intent-filter>
-            """
+                        <intent-filter android:autoVerify="false">
+                            <action android:name="android.intent.action.VIEW" />
+                            <category android:name="android.intent.category.DEFAULT" />
+                            <category android:name="android.intent.category.BROWSABLE" />
+                            <data android:scheme="\(scheme)" />
+                        </intent-filter>
+                """
         }
         return """
             <?xml version="1.0" encoding="utf-8"?>
@@ -591,7 +591,8 @@ extension KSPackager {
     }
 
     static func renderStringsXml(appName: String) -> String {
-        let escaped = appName
+        let escaped =
+            appName
             .replacingOccurrences(of: "&", with: "&amp;")
             .replacingOccurrences(of: "<", with: "&lt;")
             .replacingOccurrences(of: ">", with: "&gt;")

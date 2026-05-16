@@ -8,7 +8,7 @@
 // 정상 흐름에서 반환되지 않는다 (Android 와 달리 호스트 측 Activity 가
 // 아닌 Kalsae 가 내부적으로 `UIApplicationMain` 을 호출함).
 //
-// 사용자 코드는 부팅 클로저에서 명령을 등록하면 된다 ??웹뷰 측에서는
+// 사용자 코드는 부팅 클로저에서 명령을 등록하면 된다 - 웹뷰 측에서는
 // `await window.__KS_.invoke("greet", { name: "iOS" })` 로 호출 가능.
 
 import Foundation
@@ -38,7 +38,7 @@ struct KalsaeIOSSampleApp {
                 // @KSCommand 매크로가 생성하는 등록 함수.
                 await _ksRegister_greet(into: registry)
             }
-            // UIApplicationMain 으로 진입 ??반환되지 않음.
+            // UIApplicationMain 으로 진입 - 반환되지 않음.
             _ = app.run()
         } catch {
             // 부팅 실패 시 NSLog 로 콘솔에 남기고 비정상 종료.

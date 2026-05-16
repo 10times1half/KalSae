@@ -129,7 +129,8 @@ struct KSPolicyEvaluatorTests {
         let evMac = evaluator(
             permissions: [perm], capabilities: [cap], platform: "macOS")
 
-        guard case .deny(reason: .noMatchingCapability) =
+        guard
+            case .deny(reason: .noMatchingCapability) =
                 evWin.evaluate(command: "x", windowLabel: "main")
         else {
             Issue.record("expected deny on windows")

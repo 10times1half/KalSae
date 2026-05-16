@@ -215,7 +215,6 @@ public final class KSApp {
         return (exeCandidate, nil)
     }
 
-
     /// - 부팅 인자로 전달된 `configURL`과 같은 디렉터리에
     ///   `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
     /// - 패키징 모드에서 임베디드/생성된 설정보다 사용자가 배치한 외부 설정이

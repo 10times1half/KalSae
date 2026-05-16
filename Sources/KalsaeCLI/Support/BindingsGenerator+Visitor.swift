@@ -148,7 +148,8 @@ extension KSBindingsGenerator {
                     for arg in args {
                         guard let lit = arg.expression.as(StringLiteralExprSyntax.self)
                         else { continue }
-                        let raw = lit.segments.first?.as(StringSegmentSyntax.self)?
+                        let raw =
+                            lit.segments.first?.as(StringSegmentSyntax.self)?
                             .content.text ?? ""
                         if arg.label?.text == "permission" {
                             permission = raw.isEmpty ? nil : raw

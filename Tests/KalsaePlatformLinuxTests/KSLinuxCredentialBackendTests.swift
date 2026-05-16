@@ -28,7 +28,7 @@
                 try await backend.set(key, secret: secret)
             } catch let error {
                 if error.code == .unsupportedPlatform {
-                    return // Secret Service unavailable on this host → skip
+                    return  // Secret Service unavailable on this host → skip
                 }
                 Issue.record("Unexpected set error: \(error)")
                 return
@@ -72,7 +72,7 @@
                 service: Self.uniqueService(), account: "missing")
 
             do {
-                try await backend.delete(key) // 매칭 없음 → 조용히 통과
+                try await backend.delete(key)  // 매칭 없음 → 조용히 통과
             } catch let error {
                 if error.code == .unsupportedPlatform { return }
                 Issue.record("Unexpected error on missing delete: \(error)")

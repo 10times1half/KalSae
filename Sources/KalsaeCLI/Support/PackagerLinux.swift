@@ -157,14 +157,17 @@ extension KSPackager {
             let stageName = "\(slugify(opts.appName))-\(opts.version)-linux-\(opts.architecture.rawValue)"
             let stage = opts.output.appendingPathComponent("tarball").appendingPathComponent(stageName)
             try emitTarballTree(stage: stage, opts: opts, exeName: exeName, fm: fm, warnings: &warnings)
-            nextSteps.append("tar -czf '\(stageName).tar.gz' -C '\(stage.deletingLastPathComponent().path)' '\(stageName)'")
+            nextSteps.append(
+                "tar -czf '\(stageName).tar.gz' -C '\(stage.deletingLastPathComponent().path)' '\(stageName)'")
         }
 
         // 3) Debian package tree: <output>/deb/<id>/{DEBIAN,usr}
         if opts.formats.contains(.deb) {
             let debRoot = opts.output.appendingPathComponent("deb").appendingPathComponent(opts.identifier)
             try emitDebTree(root: debRoot, opts: opts, exeName: exeName, fm: fm, warnings: &warnings)
-            nextSteps.append("dpkg-deb --build '\(debRoot.path)' '\(opts.identifier)_\(opts.version)_\(opts.architecture.debArchitecture).deb'")
+            nextSteps.append(
+                "dpkg-deb --build '\(debRoot.path)' '\(opts.identifier)_\(opts.version)_\(opts.architecture.debArchitecture).deb'"
+            )
         }
 
         // 4) AppImage AppDir: <output>/AppDir/
@@ -174,7 +177,9 @@ extension KSPackager {
             warnings.append(
                 "AppImage bundles GTK4/WebKitGTK system libraries (~120MB). "
                     + "Prefer .deb for the Kalsae 'reuse OS engine' philosophy when targeting Debian-based distros.")
-            nextSteps.append("appimagetool '\(appDir.path)' '\(slugify(opts.appName))-\(opts.version)-\(opts.architecture.rawValue).AppImage'")
+            nextSteps.append(
+                "appimagetool '\(appDir.path)' '\(slugify(opts.appName))-\(opts.version)-\(opts.architecture.rawValue).AppImage'"
+            )
         }
 
         // 5) 호스트 OS 경고
@@ -430,7 +435,8 @@ extension KSPackager {
             try safeCopy(from: icon, to: appDir.appendingPathComponent("\(opts.identifier).png"), fm: fm)
             try safeCopy(from: icon, to: iconDir.appendingPathComponent("\(opts.identifier).png"), fm: fm)
         } else {
-            warnings.append("AppImage requires an icon at the AppDir root; using empty placeholder may cause appimagetool to fail.")
+            warnings.append(
+                "AppImage requires an icon at the AppDir root; using empty placeholder may cause appimagetool to fail.")
         }
     }
 

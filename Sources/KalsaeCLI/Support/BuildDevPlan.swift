@@ -60,7 +60,8 @@ public enum KSBuildPlan {
         //
         // 이 자동 보정 덕분에 새 템플릿은 `frontendDist: "dist"` 를 그대로 쓸 수 있다.
         let baseDir = configDirForFrontendDist(configURL: configURL)
-        return baseDir
+        return
+            baseDir
             .appendingPathComponent(config.build.frontendDist)
             .standardizedFileURL
     }
@@ -76,7 +77,8 @@ public enum KSBuildPlan {
             comps[comps.count - 1] == "Resources",
             comps[comps.count - 3] == "Sources"
         {
-            return dir
+            return
+                dir
                 .deletingLastPathComponent()  // strip Resources
                 .deletingLastPathComponent()  // strip <NAME>
                 .deletingLastPathComponent()  // strip Sources

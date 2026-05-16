@@ -130,7 +130,8 @@ struct KSBuiltinCommandsSecretTests {
 
         // 직접 백엔드 로직(=registerSecretCommands가 의존하는 정규화)을 확인하기
         // 위해 registry 핸들러를 통해 set을 호출하고 백엔드 snapshot을 확인한다.
-        let body = #"{"service":"github","account":"alice","secret":"#
+        let body =
+            #"{"service":"github","account":"alice","secret":"#
             + #""\#(Data("token-1".utf8).base64EncodedString())"}"#
         let result = await registry.dispatch(
             name: "__ks.secret.set", args: Data(body.utf8))
@@ -230,7 +231,13 @@ struct KSBuiltinCommandsSecretTests {
             Issue.record("list failed: \(result)")
             return
         }
-        struct Out: Decodable { let items: [Item]; struct Item: Decodable { let service: String; let account: String } }
+        struct Out: Decodable {
+            let items: [Item]
+            struct Item: Decodable {
+                let service: String
+                let account: String
+            }
+        }
         let decoded = try JSONDecoder().decode(Out.self, from: payload)
         #expect(decoded.items.count == 2)
         // service 필드는 prefix가 제거된 값이어야 한다.

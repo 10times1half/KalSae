@@ -24,11 +24,12 @@
 
         /// 컨텍스트 메뉴를 표시하는 핸들러. 선택된 평면화 액션 항목의 인덱스
         /// (없으면 `nil`)를 비동기로 반환한다.
-        public typealias ShowContextMenuHandler = @Sendable (
-            _ items: [KSMenuItem],
-            _ point: KSPoint,
-            _ handle: KSWindowHandle?
-        ) async -> Int?
+        public typealias ShowContextMenuHandler =
+            @Sendable (
+                _ items: [KSMenuItem],
+                _ point: KSPoint,
+                _ handle: KSWindowHandle?
+            ) async -> Int?
 
         public var onShowContextMenu: ShowContextMenuHandler? {
             get { lock.withLock { _onShowContextMenu } }

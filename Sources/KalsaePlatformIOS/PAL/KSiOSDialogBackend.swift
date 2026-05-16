@@ -253,33 +253,41 @@
                 let style: UIAlertAction.Style = (options.kind == .error) ? .destructive : .default
                 switch options.buttons {
                 case .ok:
-                    alert.addAction(UIAlertAction(title: "OK", style: style) { _ in
-                        cont.resume(returning: .ok)
-                    })
+                    alert.addAction(
+                        UIAlertAction(title: "OK", style: style) { _ in
+                            cont.resume(returning: .ok)
+                        })
                 case .okCancel:
-                    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                        cont.resume(returning: .cancel)
-                    })
-                    alert.addAction(UIAlertAction(title: "OK", style: style) { _ in
-                        cont.resume(returning: .ok)
-                    })
+                    alert.addAction(
+                        UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                            cont.resume(returning: .cancel)
+                        })
+                    alert.addAction(
+                        UIAlertAction(title: "OK", style: style) { _ in
+                            cont.resume(returning: .ok)
+                        })
                 case .yesNo:
-                    alert.addAction(UIAlertAction(title: "No", style: .cancel) { _ in
-                        cont.resume(returning: .no)
-                    })
-                    alert.addAction(UIAlertAction(title: "Yes", style: style) { _ in
-                        cont.resume(returning: .yes)
-                    })
+                    alert.addAction(
+                        UIAlertAction(title: "No", style: .cancel) { _ in
+                            cont.resume(returning: .no)
+                        })
+                    alert.addAction(
+                        UIAlertAction(title: "Yes", style: style) { _ in
+                            cont.resume(returning: .yes)
+                        })
                 case .yesNoCancel:
-                    alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-                        cont.resume(returning: .cancel)
-                    })
-                    alert.addAction(UIAlertAction(title: "No", style: .default) { _ in
-                        cont.resume(returning: .no)
-                    })
-                    alert.addAction(UIAlertAction(title: "Yes", style: style) { _ in
-                        cont.resume(returning: .yes)
-                    })
+                    alert.addAction(
+                        UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                            cont.resume(returning: .cancel)
+                        })
+                    alert.addAction(
+                        UIAlertAction(title: "No", style: .default) { _ in
+                            cont.resume(returning: .no)
+                        })
+                    alert.addAction(
+                        UIAlertAction(title: "Yes", style: style) { _ in
+                            cont.resume(returning: .yes)
+                        })
                 }
                 host.present(alert, animated: true)
             }

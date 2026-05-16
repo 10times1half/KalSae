@@ -11,7 +11,7 @@
 //            --triple arm64-apple-ios16.0 -c release \
 //            --product KalsaeIOSSample
 //
-//   2) Kalsae CLI 로 .app 번들 생성 (호스트 OS 무관 ??순수 string emit)
+//   2) Kalsae CLI 로 .app 번들 생성 (호스트 OS 무관 - 순수 string emit)
 //        kalsae build --ios \
 //            --ios-executable Samples/KalsaeIOSSample/.build/<triple>/release/KalsaeIOSSample
 //      산출: dist/ios-KalsaeIOSSample-<ver>/KalsaeIOSSample.app

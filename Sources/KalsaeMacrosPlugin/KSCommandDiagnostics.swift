@@ -44,7 +44,8 @@ enum KSCommandDiagnostic: String, DiagnosticMessage {
         case .emptyPermission:
             return "@KSCommand `permission:` argument must not be an empty string."
         case .unknownArgumentLabel:
-            return "@KSCommand accepts only the unlabeled name argument and `permission:`; unknown argument labels are rejected."
+            return
+                "@KSCommand accepts only the unlabeled name argument and `permission:`; unknown argument labels are rejected."
         }
     }
 }

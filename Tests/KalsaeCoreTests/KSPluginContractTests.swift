@@ -121,7 +121,8 @@ private final class SpyPluginContext: KSPluginContext, @unchecked Sendable {
     private let lock = NSLock()
     private var _quitCount: Int = 0
     var quitCount: Int {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         return _quitCount
     }
 
@@ -132,7 +133,8 @@ private final class SpyPluginContext: KSPluginContext, @unchecked Sendable {
     func emit(_ event: String, payload: sending any Encodable) async throws(KSError) {}
 
     func quit() {
-        lock.lock(); defer { lock.unlock() }
+        lock.lock()
+        defer { lock.unlock() }
         _quitCount += 1
     }
 }

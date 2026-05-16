@@ -4,7 +4,7 @@ import Testing
 @testable import KalsaeCLICore
 @testable import KalsaeCore
 
-@Suite("KSPackager ??iOS .app bundle (Phase iOS-Stable 짠3)")
+@Suite("KSPackager - iOS .app bundle (Phase iOS-Stable v3)")
 struct PackagerIOSAppBundleTests {
 
     private func uniqueDir(suffix: String) -> URL {
@@ -92,10 +92,10 @@ struct PackagerIOSAppBundleTests {
             .appendingPathComponent("Info.plist")
         let text = try String(contentsOf: plistURL, encoding: .utf8)
 
-        // 蹂댁븞: ATS off-by-default 媛뺤젣 (RFC-008 짠4.2).
+        // 보안: ATS off-by-default 강제 (RFC-008 v4.2).
         #expect(text.contains("<key>NSAppTransportSecurity</key>"))
         #expect(text.contains("<key>NSAllowsArbitraryLoads</key>"))
-        // 踰꾩쟾/?앸퀎??min OS.
+        // 버전/배포 관련 min OS.
         #expect(text.contains("<key>CFBundleIdentifier</key>"))
         #expect(text.contains("<string>com.example.demo</string>"))
         #expect(text.contains("<key>CFBundleShortVersionString</key>"))
@@ -107,7 +107,7 @@ struct PackagerIOSAppBundleTests {
         // Launch screen + iPhone-required.
         #expect(text.contains("<key>UILaunchScreen</key>"))
         #expect(text.contains("<key>LSRequiresIPhoneOS</key>"))
-        // ?λ쭅???ㅽ궡.
+        // 딥링크 스키마.
         #expect(text.contains("<key>CFBundleURLTypes</key>"))
         #expect(text.contains("<string>myapp</string>"))
         #expect(text.contains("<string>demo</string>"))

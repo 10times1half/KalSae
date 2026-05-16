@@ -4,7 +4,7 @@ import Testing
 @testable import KalsaeCLICore
 @testable import KalsaeCore
 
-@Suite("KSPackager ??Linux packaging (RFC-009)")
+@Suite("KSPackager - Linux packaging (RFC-009)")
 struct PackagerLinuxTests {
 
     private func uniqueDir(_ suffix: String) -> URL {
@@ -54,14 +54,14 @@ struct PackagerLinuxTests {
         return (work, opts)
     }
 
-    // MARK: - 寃利?
+    // MARK: - 검증
     @Test("identifier validation rejects bad reverse-DNS")
     func identifierValidation() {
         #expect(KSPackager.isValidLinuxIdentifier("com.example.demo"))
         #expect(KSPackager.isValidLinuxIdentifier("io.kalsae.app-name"))
-        #expect(!KSPackager.isValidLinuxIdentifier("demo"))                    // no dot
-        #expect(!KSPackager.isValidLinuxIdentifier("Com.Example.Demo"))        // uppercase
-        #expect(!KSPackager.isValidLinuxIdentifier("1com.example.demo"))       // starts with digit
+        #expect(!KSPackager.isValidLinuxIdentifier("demo"))  // no dot
+        #expect(!KSPackager.isValidLinuxIdentifier("Com.Example.Demo"))  // uppercase
+        #expect(!KSPackager.isValidLinuxIdentifier("1com.example.demo"))  // starts with digit
         #expect(!KSPackager.isValidLinuxIdentifier(""))
     }
 
@@ -70,7 +70,7 @@ struct PackagerLinuxTests {
         #expect(KSPackager.isValidDebVersion("1.2.3"))
         #expect(KSPackager.isValidDebVersion("0.1.0-alpha"))
         #expect(KSPackager.isValidDebVersion("2024.01.15+build.42"))
-        #expect(!KSPackager.isValidDebVersion("v1.0"))      // leading 'v'
+        #expect(!KSPackager.isValidDebVersion("v1.0"))  // leading 'v'
         #expect(!KSPackager.isValidDebVersion(""))
         #expect(!KSPackager.isValidDebVersion("1.0 beta"))  // whitespace
     }
@@ -95,7 +95,7 @@ struct PackagerLinuxTests {
         }
     }
 
-    // MARK: - .desktop ?뚮뜑留?
+    // MARK: - .desktop 템플릿
     @Test("desktop file renders required keys + escapes")
     func desktopRender() {
         let txt = KSPackager.renderLinuxDesktopFile(
@@ -105,7 +105,7 @@ struct PackagerLinuxTests {
             identifier: "com.example.myapp")
         #expect(txt.hasPrefix("[Desktop Entry]"))
         #expect(txt.contains("Type=Application"))
-        #expect(txt.contains("Name=My App\\nName"))   // newline escaped
+        #expect(txt.contains("Name=My App\\nName"))  // newline escaped
         #expect(txt.contains("Exec=/usr/bin/myapp"))
         #expect(txt.contains("Icon=myapp"))
         #expect(txt.contains("Terminal=false"))
@@ -119,7 +119,7 @@ struct PackagerLinuxTests {
         #expect(!txt.contains("Icon="))
     }
 
-    // MARK: - DEBIAN/control ?뚮뜑留?
+    // MARK: - DEBIAN/control 템플릿
     @Test("deb control declares system GTK/WebKitGTK Depends (no bundling)")
     func debControlRender() throws {
         let (_, opts) = try makeFixture(suffix: "ctrl", formats: [.deb])
@@ -129,11 +129,11 @@ struct PackagerLinuxTests {
         #expect(txt.contains("Architecture: amd64"))
         #expect(txt.contains("Maintainer: Demo Dev <dev@example.com>"))
         #expect(txt.contains("Installed-Size: 2048"))
-        // ?듭떖: ?쒖뒪???쇱씠釉뚮윭由щ? Depends 濡??좎뼵 ??Kalsae ??"OS ?붿쭊 ?ъ궗?? 泥좏븰 ?뺤떇??利앸챸.
+        // 참고: 시스템 라이브러리가 Depends로 연결되어 Kalsae의 "OS 웹엔진 재사용" 철학을 반영한다.
         #expect(txt.contains("libgtk-4-1"))
         #expect(txt.contains("libwebkitgtk-6.0-4"))
         #expect(txt.contains("libsoup-3.0-0"))
-        // CRLF 媛 ?꾨땶 LF + 留덉?留?鍮?以?
+        // CRLF가 아닌 LF + 마지막 빈 줄
         #expect(txt.hasSuffix("\n\n"))
     }
 
@@ -148,7 +148,7 @@ struct PackagerLinuxTests {
         #expect(txt.contains("MyApp"))
     }
 
-    // MARK: - End-to-end emit (?몄뒪??OS 臾닿?)
+    // MARK: - End-to-end emit (크로스 OS 테스트)
 
     @Test("tarball format emits expected tree")
     func tarballEmit() throws {
@@ -163,7 +163,7 @@ struct PackagerLinuxTests {
         #expect(fm.fileExists(atPath: stagePrefix.appendingPathComponent("Resources/index.html").path))
         #expect(fm.fileExists(atPath: stagePrefix.appendingPathComponent("demo-app.desktop").path))
         #expect(fm.fileExists(atPath: stagePrefix.appendingPathComponent("INSTALL.md").path))
-        // README ?덈궡臾몄씠 ?묒꽦?섏뼱????        #expect(fm.fileExists(atPath: work.appendingPathComponent("out/README.md").path))
+        // README 문서도 생성되어 있어야 함        #expect(fm.fileExists(atPath: work.appendingPathComponent("out/README.md").path))
         #expect(report.policy.contains("tarball"))
 
         // packaged kalsae.json: frontendDist="Resources", devtools off
@@ -183,13 +183,17 @@ struct PackagerLinuxTests {
         #expect(fm.fileExists(atPath: debRoot.appendingPathComponent("usr/bin/com.example.demo").path))
         #expect(fm.fileExists(atPath: debRoot.appendingPathComponent("usr/lib/com.example.demo/MyApp").path))
         #expect(fm.fileExists(atPath: debRoot.appendingPathComponent("usr/lib/com.example.demo/kalsae.json").path))
-        #expect(fm.fileExists(atPath: debRoot.appendingPathComponent("usr/lib/com.example.demo/Resources/index.html").path))
-        #expect(fm.fileExists(atPath: debRoot.appendingPathComponent("usr/share/applications/com.example.demo.desktop").path))
+        #expect(
+            fm.fileExists(atPath: debRoot.appendingPathComponent("usr/lib/com.example.demo/Resources/index.html").path))
+        #expect(
+            fm.fileExists(
+                atPath: debRoot.appendingPathComponent("usr/share/applications/com.example.demo.desktop").path))
 
         let control = try String(contentsOf: debRoot.appendingPathComponent("DEBIAN/control"), encoding: .utf8)
         #expect(control.contains("libwebkitgtk-6.0-4"))
 
-        let launcher = try String(contentsOf: debRoot.appendingPathComponent("usr/bin/com.example.demo"), encoding: .utf8)
+        let launcher = try String(
+            contentsOf: debRoot.appendingPathComponent("usr/bin/com.example.demo"), encoding: .utf8)
         #expect(launcher.hasPrefix("#!/bin/sh"))
         #expect(launcher.contains("/usr/lib/com.example.demo"))
         #expect(report.policy.contains("deb"))
@@ -219,7 +223,7 @@ struct PackagerLinuxTests {
         #expect(fm.fileExists(atPath: work.appendingPathComponent("out/tarball").path))
         #expect(fm.fileExists(atPath: work.appendingPathComponent("out/deb").path))
         #expect(fm.fileExists(atPath: work.appendingPathComponent("out/AppDir").path))
-        // policy ???뺣젹???щ㎎紐낆쓣 ?⑹퀜??媛吏?        #expect(report.policy == "linux-appimage+deb+tarball")
+        // policy 출력 형식명을 포함해야 함        #expect(report.policy == "linux-appimage+deb+tarball")
     }
 
     @Test("missing executable throws KSError")

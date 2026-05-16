@@ -1,0 +1,186 @@
+#
+# release-windows-cli.yml
+#
+# v* 태그 푸시 시 Windows 용 `kalsae` CLI 를 빌드해 zip 으로 패키징하고,
+# 동일 태그의 GitHub Release 에 자산으로 업로드한다.
+#
+# 산출물:
+#   kalsae-windows-x64-<tag>.zip
+#     ├ kalsae.exe
+#     ├ <swift 런타임 / VC++ DLL whitelist 결과물>
+#     ├ runtime-manifest.json    (어떤 DLL 이 어디서 왔는지 추적)
+#     ├ LICENSE
+#     ├ README.md
+#     └ NOTICE.md                (Windows 한정으로 추출된 THIRD-PARTY-NOTICES)
+#   kalsae-windows-x64-<tag>.zip.sha256
+#
+# 트리거:
+#   - push tag `v*` 또는 수동 (workflow_dispatch + input)
+#
+
+name: Release Windows CLI
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Tag to release (must already exist, e.g. v0.4.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & upload kalsae.exe
+    runs-on: windows-latest
+    # 태그가 아닌 브랜치 푸시는 무시 (push trigger 는 이미 tags 한정이지만
+    # workflow_dispatch 보호 차원에서 명시).
+    if: github.event_name == 'workflow_dispatch' || github.ref_type == 'tag'
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - name: Resolve tag
+        id: tag
+        shell: pwsh
+        run: |
+          $tag = if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            '${{ inputs.ref }}'
+          } else {
+            '${{ github.ref_name }}'
+          }
+          if (-not $tag) { throw "tag is empty" }
+          if ($tag -notmatch '^v\d+\.\d+\.\d+') { throw "invalid tag: $tag" }
+          echo "tag=$tag" >> $env:GITHUB_OUTPUT
+          $isPre = if ($tag -match '-') { 'true' } else { 'false' }
+          echo "prerelease=$isPre" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.tag }}
+          fetch-depth: 1
+
+      - name: Setup Swift
+        # NOTE: 저장소 다른 워크플로(ci.yml)와 동일 액션을 사용. 보안 강화가
+        # 필요할 경우 commit SHA 핀으로 교체할 것.
+        uses: compnerd/gha-setup-swift@main
+        with:
+          branch: swift-6.3.1-release
+          tag: 6.3.1-RELEASE
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/AppData/Local/org.swift.swiftpm
+          key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved','Package.swift') }}-${{ steps.tag.outputs.tag }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ hashFiles('Package.resolved','Package.swift') }}-
+            spm-${{ runner.os }}-
+
+      - name: Fetch WebView2 SDK
+        shell: pwsh
+        run: ./Scripts/fetch-webview2.ps1
+
+      - name: Verify KSVersion matches tag
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.tag.outputs.tag }}'
+          $version = $tag.TrimStart('v')
+          $file = 'Sources/KalsaeCore/KSVersion.swift'
+          $content = Get-Content -Raw $file
+          if ($content -notmatch 'current\s*=\s*"([^"]+)"') {
+            throw "Could not parse current version from $file"
+          }
+          $declared = $Matches[1]
+          if ($declared -ne $version) {
+            throw "Tag $tag (=$version) does not match KSVersion.current=$declared. Bump KSVersion before tagging."
+          }
+          Write-Host "version match: $declared"
+
+      - name: Build kalsae (release)
+        shell: pwsh
+        run: |
+          swift build -c release --product kalsae
+          if (-not (Test-Path '.build/release/kalsae.exe')) {
+            throw "kalsae.exe not produced"
+          }
+
+      - name: Stage runtime DLLs (whitelist)
+        shell: pwsh
+        run: |
+          $stage = 'stage/kalsae-windows-x64'
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item '.build/release/kalsae.exe' (Join-Path $stage 'kalsae.exe')
+          ./Scripts/stage-windows-cli-runtime.ps1 `
+              -Executable '.build/release/kalsae.exe' `
+              -Destination $stage
+
+      - name: Stage license & notices
+        shell: pwsh
+        run: |
+          $stage = 'stage/kalsae-windows-x64'
+          Copy-Item LICENSE   (Join-Path $stage 'LICENSE')
+          Copy-Item README.md (Join-Path $stage 'README.md')
+          ./Scripts/extract-windows-notices.ps1 -Output (Join-Path $stage 'NOTICE.md')
+
+      - name: Self-test (run kalsae --version in a clean tmp dir)
+        shell: pwsh
+        run: |
+          $stage = Resolve-Path 'stage/kalsae-windows-x64'
+          $tmp = Join-Path $env:RUNNER_TEMP "ks-selftest-$(Get-Random)"
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Copy-Item "$stage/*" $tmp -Recurse
+          Push-Location $tmp
+          try {
+            $out = & .\kalsae.exe --version 2>&1
+            $code = $LASTEXITCODE
+            Write-Host "exit=$code; output:`n$out"
+            if ($code -ne 0) { throw "kalsae.exe --version exited with $code" }
+            $expected = '${{ steps.tag.outputs.tag }}'.TrimStart('v')
+            if ("$out" -notmatch [Regex]::Escape($expected)) {
+              throw "self-test output did not mention version $expected"
+            }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Create zip + sha256
+        id: pack
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.tag.outputs.tag }}'
+          $zip = "kalsae-windows-x64-$tag.zip"
+          if (Test-Path $zip) { Remove-Item $zip }
+          Compress-Archive -Path 'stage/kalsae-windows-x64/*' -DestinationPath $zip -Force
+          $hash = (Get-FileHash -Algorithm SHA256 $zip).Hash.ToLower()
+          "$hash  $zip" | Set-Content -Path "$zip.sha256" -Encoding ascii
+          echo "zip=$zip" >> $env:GITHUB_OUTPUT
+          echo "sha=$zip.sha256" >> $env:GITHUB_OUTPUT
+          Get-Item $zip,"$zip.sha256" | Format-List FullName,Length
+
+      - name: Upload to GitHub Release
+        shell: pwsh
+        run: |
+          $tag = '${{ steps.tag.outputs.tag }}'
+          $zip = '${{ steps.pack.outputs.zip }}'
+          $sha = '${{ steps.pack.outputs.sha }}'
+          $isPre = '${{ steps.tag.outputs.prerelease }}'
+
+          # 릴리스가 없으면 생성, 있으면 업데이트.
+          $exists = gh release view $tag 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            $args = @('release','create',$tag,$zip,$sha,
+                      '--title',$tag,
+                      '--generate-notes')
+            if ($isPre -eq 'true') { $args += '--prerelease' }
+            gh @args
+          } else {
+            gh release upload $tag $zip $sha --clobber
+          }

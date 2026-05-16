@@ -1151,7 +1151,8 @@ struct BuildCommand: ParsableCommand {
         }
 
         let libURL = URL(fileURLWithPath: libArg, relativeTo: cwd)
-        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let outputDir =
+            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
             ?? cwd.appendingPathComponent("dist/android-\(info.appName)-\(info.version)")
 
         let applicationId = androidApplicationId ?? info.identifier
@@ -1215,7 +1216,8 @@ struct BuildCommand: ParsableCommand {
         }()
 
         let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
-        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let outputDir =
+            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
             ?? cwd.appendingPathComponent("dist/ios-\(info.appName)-\(info.version)")
 
         let identifier = iosBundleIdentifier ?? info.identifier
@@ -1291,7 +1293,8 @@ struct BuildCommand: ParsableCommand {
         }
 
         let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
-        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let outputDir =
+            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
             ?? cwd.appendingPathComponent("dist/linux-\(info.appName)-\(info.version)")
         let iconURL: URL? = linuxIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
         let frontendDistURL: URL? = {
@@ -1315,7 +1318,9 @@ struct BuildCommand: ParsableCommand {
             iconPath: iconURL,
             maintainer: linuxMaintainer)
 
-        print("📦  Packaging \(info.appName) Linux (\(formats.map { $0.rawValue }.sorted().joined(separator: "+"))) v\(info.version) → \(outputDir.path)")
+        print(
+            "📦  Packaging \(info.appName) Linux (\(formats.map { $0.rawValue }.sorted().joined(separator: "+"))) v\(info.version) → \(outputDir.path)"
+        )
         if dryrun {
             print("   (dry-run: skipping file emission)")
             return
