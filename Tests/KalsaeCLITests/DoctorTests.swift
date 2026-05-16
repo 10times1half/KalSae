@@ -30,7 +30,7 @@ struct DoctorTests {
         let root = try makeTempProject()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let configURL = root.appendingPathComponent("Kalsae.json")
+        let configURL = root.appendingPathComponent("kalsae.json")
         let distURL = root.appendingPathComponent("dist")
         try FileManager.default.createDirectory(at: distURL, withIntermediateDirectories: true)
         try write("<html></html>", to: distURL.appendingPathComponent("index.html"))
@@ -64,7 +64,7 @@ struct DoctorTests {
         let root = try makeTempProject()
         defer { try? FileManager.default.removeItem(at: root) }
 
-        let configURL = root.appendingPathComponent("Kalsae.json")
+        let configURL = root.appendingPathComponent("kalsae.json")
         try write("not valid json", to: configURL)
 
         let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))

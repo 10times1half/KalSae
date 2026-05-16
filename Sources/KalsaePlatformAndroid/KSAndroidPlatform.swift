@@ -13,7 +13,7 @@
         /// 타겟 Android API 레벨 (targetSdk 35 = Android 15).
         public static let targetAPILevel: Int = 35
 
-        public var name: String { "Android (Preview, API \(Self.minimumAPILevel)+)" }
+        public var name: String { "Android (API \(Self.minimumAPILevel)+)" }
 
         public let commandRegistry: KSCommandRegistry
 
@@ -32,6 +32,10 @@
                 accelerators: nil,
                 autostart: _autostart,
                 deepLink: _deepLink)
+        }
+
+        @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? {
+            KSAndroidCommandRouter.shared
         }
 
         private let _windows: KSAndroidWindowBackend
@@ -61,6 +65,13 @@
         /// 그 후에 `components.dialogs?.onOpenFile = ...` 식으로 덮어쓸 수 있다.
         func installJNIDialogDefaults() {
             _dialogs.installJNIDefaults()
+        }
+
+        /// 등록된 JNI 훅을 사용하는 기본 컨텍스트 메뉴 핸들러를 설치한다.
+        /// 비파괴(non-destructive): 호스트가 이미 `_menus.onShowContextMenu`
+        /// 를 명시 주입한 경우 보존된다. `KS_android_startup` 에서 호출된다.
+        func installJNIMenuDefaults() {
+            _menus.installJNIDefaults()
         }
 
         public func run(

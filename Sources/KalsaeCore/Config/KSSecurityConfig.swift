@@ -21,8 +21,8 @@ import Foundation
 /// 각 동작은 독립적으로 제어되어, 예를 들어 사용자가 거부한 뒤에도
 /// JS 프론트엔드가 조용히 토스트를 남발하지 못하게 한다.
 ///
-/// 기본값은 "기본적으로 안전" 정책을 따른다.
-/// `post`, `cancel`, `requestPermission`이 모두 허용된다.
+/// 기본값은 **default-deny** 다 — `post`, `cancel`, `requestPermission`
+/// 모두 `false`. 알림을 사용하려면 `Kalsae.json` 에서 명시적으로 활성화한다.
 public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// `ks://` 스킴 핸들러가 제공하는 기본 HTTP 응답 헤더에 주입되는
     /// Content Security Policy.
@@ -46,8 +46,11 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
 
     /// JS에서 호출 가능한 `@KSCommand` 식별자의 허용 목록.
     ///
-    /// 비어 있으면 어떤 명령도 도달할 수 없고,
-    /// `nil`이면 기본 집합(등록되었고 `internal`로 표시되지 않은 명령)을 사용한다.
+    /// **의미론 (default-deny):**
+    /// - `nil` (누락) 또는 `[]` (빈 배열) → **사용자 명령 전체 차단 (deny-all)**.
+    ///   내장 `__ks.*` 명령은 `registerInternal` 경로로 등록되어 이 검사를
+    ///   우회하므로, security scope 설정이 허용하는 한 계속 동작한다.
+    /// - 명시적 배열 → 나열된 이름만 호출 가능. glob (`fs.*`) 패턴을 지원한다.
     public var commandAllowlist: [String]?
 
     /// 내장 `fs.*` 명령에 대한 파일시스템 접근 정책.
@@ -80,6 +83,11 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     /// `__ks.http.fetch`를 제어하며, 기본값은 비어 있으므로 호스트 앱이
     /// 신뢰할 오리진을 선언하기 전까지 JS 측은 네트워크에 접근할 수 없다.
     public var http: KSHTTPScope
+
+    /// OS 시크릿 저장소 권한 범위.
+    /// `__ks.secret.*`를 제어하며, 기본값은 `enabled=false`이므로 명시적으로
+    /// 활성화하기 전까지 JS 측은 어떤 키체인 항목도 읽거나 쓸 수 없다.
+    public var secret: KSSecretScope
 
     /// JS에서 초당 허용되는 IPC 명령 호출의 최대 수.
     /// burst는 이 속도를 잠시 넘는 짧은 급증을 허용한다.
@@ -142,7 +150,8 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         navigation: KSNavigationScope = .init(),
         commandRateLimit: KSCommandRateLimit? = nil,
         allowPopups: Bool = false,
-        crossOriginIsolation: Bool = false
+        crossOriginIsolation: Bool = false,
+        secret: KSSecretScope = .init()
     ) {
         self.csp = csp
         self.devCsp = devCsp
@@ -159,12 +168,14 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.commandRateLimit = commandRateLimit
         self.allowPopups = allowPopups
         self.crossOriginIsolation = crossOriginIsolation
+        self.secret = secret
     }
 
     private enum CodingKeys: String, CodingKey {
-        case csp, devCsp, commandAllowlist, fs, devtools, contextMenu, allowExternalDrop
+        case csp, devCsp, commandAllowlist
+        case fs, devtools, contextMenu, allowExternalDrop
         case shell, notifications, http, downloads, navigation, commandRateLimit
-        case allowPopups, crossOriginIsolation
+        case allowPopups, crossOriginIsolation, secret
     }
 
     public init(from decoder: any Decoder) throws {
@@ -184,6 +195,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         self.commandRateLimit = try c.decodeIfPresent(KSCommandRateLimit.self, forKey: .commandRateLimit)
         self.allowPopups = try c.decodeIfPresent(Bool.self, forKey: .allowPopups) ?? false
         self.crossOriginIsolation = try c.decodeIfPresent(Bool.self, forKey: .crossOriginIsolation) ?? false
+        self.secret = try c.decodeIfPresent(KSSecretScope.self, forKey: .secret) ?? .init()
     }
 
     public static let defaultCSP =
@@ -300,9 +312,9 @@ public struct KSNotificationScope: Codable, Sendable, Equatable {
     public var requestPermission: Bool
 
     public init(
-        post: Bool = true,
-        cancel: Bool = true,
-        requestPermission: Bool = true
+        post: Bool = false,
+        cancel: Bool = false,
+        requestPermission: Bool = false
     ) {
         self.post = post
         self.cancel = cancel
@@ -315,10 +327,10 @@ public struct KSNotificationScope: Codable, Sendable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        self.post = try c.decodeIfPresent(Bool.self, forKey: .post) ?? true
-        self.cancel = try c.decodeIfPresent(Bool.self, forKey: .cancel) ?? true
+        self.post = try c.decodeIfPresent(Bool.self, forKey: .post) ?? false
+        self.cancel = try c.decodeIfPresent(Bool.self, forKey: .cancel) ?? false
         self.requestPermission =
             try c.decodeIfPresent(
-                Bool.self, forKey: .requestPermission) ?? true
+                Bool.self, forKey: .requestPermission) ?? false
     }
 }

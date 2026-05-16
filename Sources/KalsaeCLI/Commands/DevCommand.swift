@@ -29,7 +29,7 @@ struct DevCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json when present).")
+        help: "Override path to kalsae.json (default: ./kalsae.json when present).")
     var config: String? = nil
 
     @Flag(name: .long, help: "Do not launch build.devCommand even when configured.")
@@ -286,7 +286,6 @@ struct DevCommand: ParsableCommand {
         let candidates: [URL] = [
             cwd.appendingPathComponent("Sources"),
             cwd.appendingPathComponent("Package.swift"),
-            cwd.appendingPathComponent("Kalsae.json"),
             cwd.appendingPathComponent("kalsae.json"),
         ]
 

@@ -24,7 +24,12 @@
                 clipboard: _clipboard,
                 accelerators: nil,
                 autostart: _autostart,
-                deepLink: _deepLink)
+                deepLink: _deepLink,
+                credentials: KSiOSCredentialBackend())
+        }
+
+        @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? {
+            KSiOSCommandRouter.shared
         }
 
         private let _windows: KSiOSWindowBackend
@@ -54,138 +59,30 @@
             config: KSConfig,
             configure: @Sendable (any KSPlatform) async throws(KSError) -> Void
         ) async throws(KSError) -> Never {
-            let code = try await runOnMain(config: config, configure: configure)
-            Darwin.exit(Int32(code))
-            fatalError("unreachable")
-        }
-
-        @MainActor
-        private func runOnMain(
-            config: KSConfig,
-            configure: @Sendable (any KSPlatform) async throws(KSError) -> Void
-        ) async throws(KSError) -> Int32 {
-            let window = try KSBootOrchestrator.selectWindow(from: config)
-
-            await commandRegistry.setAllowlist(config.security.commandAllowlist)
-            await commandRegistry.setRateLimit(config.security.commandRateLimit)
-
-            let host = try KSiOSDemoHost(windowConfig: window, registry: commandRegistry)
-
-            // RFC-008 #2.9: 윈도우 상태 영속화. iOS는 UIKit이 layout을 관리하므로
-            // 캡처/복원의 의미가 제한적이지만 API 일관성을 위해 sink를 등록한다.
-            let stateStore: KSWindowStateStore? =
-                window.persistState
-                ? KSWindowStateStore.standard(forIdentifier: config.app.identifier)
-                : nil
-            if let store = stateStore {
-                let label = window.label
-                host.setWindowStateSaveSink { state in
-                    _ = store.save(label: label, state: state)
-                }
-            }
-
-            let resourceRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-                .appendingPathComponent(config.build.frontendDist)
-            let servingMode = KSBootOrchestrator.decideServingMode(
-                windowURL: window.url,
-                devServerURL: config.build.devServerURL,
-                resourceRoot: resourceRoot)
-
-            if case .virtualHost(let servedRoot) = servingMode {
-                try host.setAssetRoot(servedRoot)
-            }
-
-            host.setCrossOriginIsolation(config.security.crossOriginIsolation)
-
-            // dev 서버 모드에서는 `devCsp`가 있으면 그것을 주입하고,
-            // 없으면 주입을 건너뛴다(→ dev 서버 자체 CSP가 적용).
-            // 프로덕션 CSP는 인라인 스크립트/HMR 웹소츓과 충돌하기 쉬워 그대로 적용하지 않는다.
-            let injectedCSP: String? = {
-                if case .devServer = servingMode {
-                    return config.security.devCsp
-                }
-                return config.security.csp
-            }()
-            if let injectedCSP {
-                try host.addDocumentCreatedScript(KSBootOrchestrator.cspInjectionScript(injectedCSP))
-            }
-
-            let deepLinkPair: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = {
-                guard let dlc = config.deepLink else { return nil }
-                let backend = KSiOSDeepLinkBackend(identifier: config.app.identifier)
-                if dlc.autoRegisterOnLaunch {
-                    for s in dlc.schemes {
-                        do {
-                            try backend.register(scheme: s)
-                        } catch {
-                            KSLog.logger("platform.ios").error(
-                                "deepLink auto-register failed for '\(s)': \(error)")
-                        }
-                    }
-                }
-                return (backend, dlc)
-            }()
-            _deepLink =
-                deepLinkPair?.backend as? KSiOSDeepLinkBackend
-                ?? KSiOSDeepLinkBackend(identifier: config.app.identifier)
-
-            await KSBuiltinCommands.register(
-                into: commandRegistry,
-                windows: _windows,
-                shell: _shell,
-                clipboard: _clipboard,
-                notifications: _notifications,
-                dialogs: _dialogs,
-                mainWindow: { [weak host] in host?.mainHandle },
-                // iOS has no programmatic quit API.
-                quit: {},
-                platformName: name,
-                shellScope: config.security.shell,
-                notificationScope: config.security.notifications,
-                fsScope: config.security.fs,
-                httpScope: config.security.http,
-                navigationScope: config.security.navigation,
-                autostart: nil,  // autostart is not applicable on iOS
-                deepLink: deepLinkPair,
-                appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
-
-            // RFC-008 #2.7: Win/Mac/Linux와 동일하게 `start()` 이후에
-            // `configure(self)`를 호출한다. 이전에는 configure가 먼저 호출되어
-            // configure 클로저 안에서 `host.emit()`을 부르면 웹뷰가 아직
-            // navigate 되지 않아 메시지가 유실되는 문제가 있었다.
-            #if DEBUG
-                let effectiveDevtools = config.security.devtools
-            #else
-                let effectiveDevtools = false
-            #endif
-            try host.start(
-                url: KSBootOrchestrator.resolveStartURL(
-                    windowURL: window.url,
-                    devServerURL: config.build.devServerURL,
-                    servingMode: servingMode,
-                    virtualHostURL: "ks://app/index.html"),
-                devtools: effectiveDevtools)
-
-            // RFC-008 §4.2: 보안 설정 적용 — Win/Mac/Linux 패턴과 통일.
-            if config.security.contextMenu == .disabled {
-                host.setDefaultContextMenusEnabled(false)
-            }
-            if !config.security.allowExternalDrop {
-                host.setAllowExternalDrop(false)
-                try? host.installFileDropEmitter()
-            }
-            let shellRef = _shell
-            try host.installSecurityHandlers(
-                allowPopups: config.security.allowPopups,
-                openExternal: { urlStr in
-                    guard let u = URL(string: urlStr) else { return }
-                    Task.detached { try? await shellRef.openExternal(u) }
-                })
-
+            _ = config
+            // iOS의 UIApplication 생명주기는 UIKit이 관리하므로 Swift `run()`이
+            // 메인 루프를 점유하는 데스크톱 모델과 맞지 않는다. KSApp.boot() +
+            // KSiOSDemoHost를 UIKit `@main` 진입점에서 사용하는 것이 정식 경로다.
+            // (Android와 동일 패턴 — RFC-006/RFC-008 #2.10)
+            //
+            // configure 클로저에서 `self.windows` 등 백엔드에 접근하면 실제
+            // UIKit 호스트와 분리된 인스턴스를 만지는 것이므로 의도대로 동작하지
+            // 않을 수 있음을 경고로 알린다.
+            KSLog.logger("platform.ios").warning(
+                "KSiOSPlatform.run() is permanently unsupported. The configure "
+                    + "closure will execute, but backends accessed via `self` are "
+                    + "decoupled from the UIKit host. Use KSApp.boot() with "
+                    + "KSiOSDemoHost instead.")
             try await configure(self)
-
-            return host.runMessageLoop()
+            throw KSError.unsupportedPlatform(
+                "KSiOSPlatform.run() is permanently unsupported — iOS lifecycle is "
+                    + "UIApplication-controlled. Use KSApp.boot() + KSiOSDemoHost "
+                    + "from a UIKit @main entry point instead.")
         }
+
+        // 과거 `runOnMain` 부팅 헬퍼는 KSApp.boot() / KSiOSDemoHost 경로로 통합되어
+        // 제거되었다. iOS 부팅 흐름은 KSApp.boot() → KSiOSDemoHost.runMessageLoop()
+        // → KSiOSAppDelegate가 담당한다.
     }
 
 // MARK: - Private helpers

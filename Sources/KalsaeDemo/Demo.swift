@@ -40,7 +40,7 @@ import Kalsae
 
         @MainActor
         static func run() async throws {
-            let resolved = try resolveConfigURL()
+            let resolved = KSApp.resolveBundledConfigURL(resourceBundle: .module)
             let configURL = resolved.url
             print("Config:       \(configURL.path)")
             if let r = resolved.resourceRoot {
@@ -176,59 +176,8 @@ import Kalsae
 
         // MARK: - Config bootstrap
 
-        /// `(configURL, resourceRoot?)` 를 반환한다.
-        ///
-        /// `resourceRoot` 가 `nil` 이면 `KSApp.boot` 가 `configURL.deletingLastPathComponent()
-        /// + config.build.frontendDist` 로 자동 해석한다 — 패키지 산출물처럼 `Kalsae.json`
-        /// 과 자산이 분리된 표준 레이아웃에 맞다.
-        ///
-        /// 개발 모드 (`swift run`) 에서는 `Bundle.module` 이 `<bundle>/Resources/kalsae.json`
-        /// 을 반환하는데, 자산도 같은 폴더에 있으므로 `frontendDist` 가 "Resources" 일 때
-        /// 자동 경로(`Resources/Resources/`) 가 빗나간다. 이때만 명시적으로
-        /// `resourceRoot = configDir` 로 덮어 써야 한다.
-        @MainActor
-        static func resolveConfigURL() throws -> (url: URL, resourceRoot: URL?) {
-            let fm = FileManager.default
-            let candidates = ["Kalsae.json", "kalsae.json"]
-
-            // 1) 패키지 산출물 — EXE 옆 (Windows / Linux 패키저).
-            //    자산은 `<exeDir>/<frontendDist>/` 에 있으므로 자동 해석에 맡긴다.
-            let exeDir = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
-                .deletingLastPathComponent()
-            for name in candidates {
-                let url = exeDir.appendingPathComponent(name)
-                if fm.fileExists(atPath: url.path) { return (url, nil) }
-            }
-
-            // 2) macOS `.app` — `Contents/Resources/Kalsae.json` 옆에 자산이 함께 있다.
-            if let resourceURL = Bundle.main.resourceURL {
-                for name in candidates {
-                    let url = resourceURL.appendingPathComponent(name)
-                    if fm.fileExists(atPath: url.path) {
-                        return (url, resourceURL)
-                    }
-                }
-            }
-
-            // 3) `swift run` 등 개발 모드 — SwiftPM 리소스 번들.
-            //    `.copy("Resources")` 로 보존된 트리에 kalsae.json 과 자산이 함께 있다.
-            if let bundled = Bundle.module.url(
-                forResource: "kalsae", withExtension: "json")
-            {
-                return (bundled, bundled.deletingLastPathComponent())
-            }
-
-            // 4) Windows standalone — 외부 Kalsae.json 이 RCDATA 임베드 후
-            //    제거되었을 수 있다. EXE 옆 가상 경로를 반환하면 KSApp.boot 가
-            //    `KSConfigLoader.load` 실패를 잡아 PE RCDATA(`KSAS_CONFIG_JSON`)
-            //    폴백으로 임베디드 설정을 디코딩한다.
-            #if os(Windows)
-                return (exeDir.appendingPathComponent("Kalsae.json"), nil)
-            #else
-                throw KSError.configNotFound(
-                    "kalsae.json (looked next to executable, in app bundle, and in SwiftPM resource bundle)")
-            #endif
-        }
+        // 자체 `resolveConfigURL()` 헬퍼는 Phase 2에서 `KSApp.resolveBundledConfigURL`
+        // 으로 통합되어 제거되었다.
     }
 
 #else

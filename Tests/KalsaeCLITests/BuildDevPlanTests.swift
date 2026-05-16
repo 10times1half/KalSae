@@ -59,7 +59,7 @@ struct BuildPlanTests {
     func distResolutionOverride() {
         let config = makeConfig()
         let cwd = URL(fileURLWithPath: "C:/repo")
-        let configURL = URL(fileURLWithPath: "C:/repo/Sources/App/Resources/Kalsae.json")
+        let configURL = URL(fileURLWithPath: "C:/repo/Sources/App/Resources/kalsae.json")
         let dist = KSBuildPlan.resolveDistURL(
             config: config,
             configURL: configURL,

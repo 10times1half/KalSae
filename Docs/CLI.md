@@ -228,7 +228,7 @@ also produces a `.zip` archive (`--zip`).
   `CFBundleExecutable`, `LSMinimumSystemVersion`, etc.
 - `--arch universal` is supported when `lipo` is available.
 
-**Android (`--android`, RFC-007 Phase 2/3)** (`KSPackager.runAndroid`):
+**Android (`--android`)** (`KSPackager.runAndroid`):
 
 - Generates a complete Gradle project rooted at `dist/android-<App>-<ver>/`
   (or `--output`), including:
@@ -259,8 +259,33 @@ also produces a `.zip` archive (`--zip`).
   UniformTypeIdentifiers are importable) `--android-icon` is resized per
   density; on Windows/Linux the original PNG is copied unchanged to all five
   mipmap densities and Android selects the appropriate density at runtime.
-- See [RFC-007](RFCs/RFC-007-android-release.md) for the full design and
-  the deferred phases (PAL JNI stabilization, CI, README updates).
+
+**Android end-to-end build (local, Linux/macOS only)**:
+
+```bash
+# Requires Swift 6.2, Java 17, Android cmdline-tools (platforms;android-35,
+# build-tools;35.0.0), and Swift Android SDK 6.2 (auto-installed below).
+./Scripts/cross-compile-android.sh
+
+# Equivalent manual steps:
+swift sdk install \
+  https://github.com/swift-android-sdk/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-0.1.artifactbundle.tar.gz \
+  --checksum ca7e09f09a591b6a661a39134aaf53b1b59d5e3a193b271ab1f20effdfc6e88e
+swift build --swift-sdk aarch64-unknown-linux-android28 \
+  --product KalsaePlatformAndroid -c release
+swift build --product kalsae -c release
+.build/release/kalsae build --android \
+  --android-native-lib "$(find .build -name libKalsaePlatformAndroid.so -path '*release*' | head -n1)" \
+  --android-min-sdk 28 --android-target-sdk 35 \
+  --config Sources/KalsaeDemo/Resources/kalsae.json \
+  --dist Sources/KalsaeDemo/Resources \
+  --output dist/android-e2e
+cd dist/android-e2e && gradle wrapper --gradle-version 8.10 && ./gradlew assembleDebug
+```
+
+Mirrored in CI by [.github/workflows/phase-android-e2e.yml](../.github/workflows/phase-android-e2e.yml).
+Windows hosts must run the above from WSL — `swift-android-sdk` is not
+officially supported on native Windows toolchains.
 
 **Code signing (Windows)**:
 
@@ -289,8 +314,8 @@ also produces a `.zip` archive (`--zip`).
   bundle plus `Kalsae.json` and `kalsae.runtime.json`.
 - Tool installation:
   ```powershell
-  winget install Resource-Hacker        # or: choco install resource-hacker
-  winget install electron.rcedit
+  winget install AngusJohnson.ResourceHacker        # or: choco install AngusJohnson.ResourceHacker
+  winget install ElectronCommunity.rcedit
   ```
 - Without either tool on PATH, the build **hard-errors** with installation
   guidance. Pass `--standalone-allow-fallback` to opt into the

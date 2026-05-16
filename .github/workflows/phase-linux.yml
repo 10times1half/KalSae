@@ -1,0 +1,177 @@
+name: Phase Linux (RFC-009)
+
+# End-to-end verification of the Linux platform on Ubuntu:
+#   - Build full Swift toolchain (Kalsae + KalsaePlatformLinux + KalsaeCLI)
+#   - Run the Linux-specific test suites
+#   - Emit a tarball + .deb stage via `kalsae build --linux`
+#   - Verify the .deb tree with `dpkg-deb --info` / `--contents`
+#
+# Scope (per RFC-009):
+#   - Ubuntu runner only (GTK4 / WebKitGTK6 / libsoup3 are Linux-only).
+#   - AppImage assembly is fail-soft (appimagetool needs separate install).
+#   - Real GUI tests require Xvfb and are out of scope for v1 (the unit
+#     suites are headless contracts).
+#
+# Sister workflow: `.github/workflows/ci.yml` keeps Windows / macOS coverage.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/KalsaePlatformLinux/**'
+      - 'Sources/CKalsaeGtk/**'
+      - 'Sources/CGtk4/**'
+      - 'Sources/CWebKitGTK/**'
+      - 'Sources/KalsaeCLI/Support/PackagerLinux.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Tests/KalsaePlatformLinuxTests/**'
+      - 'Tests/KalsaeCLITests/PackagerLinuxTests.swift'
+      - 'Package.swift'
+      - '.github/workflows/phase-linux.yml'
+  pull_request:
+    paths:
+      - 'Sources/KalsaePlatformLinux/**'
+      - 'Sources/CKalsaeGtk/**'
+      - 'Sources/CGtk4/**'
+      - 'Sources/CWebKitGTK/**'
+      - 'Sources/KalsaeCLI/Support/PackagerLinux.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Tests/KalsaePlatformLinuxTests/**'
+      - 'Tests/KalsaeCLITests/PackagerLinuxTests.swift'
+      - 'Package.swift'
+      - '.github/workflows/phase-linux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Ubuntu 24.04 ships GTK 4.14, WebKitGTK 6.0, libsoup 3 — Kalsae's target.
+  SWIFT_VERSION: '6.0.3'
+
+jobs:
+  linux:
+    name: Build + Test + Package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-4-dev \
+            libwebkitgtk-6.0-dev \
+            libsoup-3.0-dev \
+            xdg-utils \
+            libnotify-bin \
+            dpkg-dev \
+            file
+
+      - name: Setup Swift ${{ env.SWIFT_VERSION }}
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Cache SwiftPM build artifacts
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-linux-${{ env.SWIFT_VERSION }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-linux-${{ env.SWIFT_VERSION }}-
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Run Linux platform tests
+        # Headless unit contracts — no Xvfb required.
+        run: swift test --filter "KSLinux|PackagerLinux"
+
+      - name: Build kalsae CLI (release)
+        run: swift build --product kalsae -c release
+
+      - name: Build KalsaeDemo executable (release)
+        run: swift build --product KalsaeDemo -c release
+
+      - name: Emit Linux distribution (tarball + .deb)
+        run: |
+          set -euo pipefail
+          EXE=".build/release/KalsaeDemo"
+          OUT="${PWD}/dist/linux-e2e"
+          .build/release/kalsae build \
+            --linux \
+            --linux-executable "${EXE}" \
+            --linux-format tarball,deb \
+            --linux-arch x86_64 \
+            --linux-maintainer 'Kalsae CI <ci@kalsae.dev>' \
+            --config Sources/KalsaeDemo/Resources/kalsae.json \
+            --dist Sources/KalsaeDemo/Resources \
+            --output "${OUT}"
+          ls -la "${OUT}"
+
+      - name: Assemble .deb (dpkg-deb --build)
+        run: |
+          set -euo pipefail
+          OUT="${PWD}/dist/linux-e2e"
+          # PackagerLinux emits the staged DEBIAN tree under deb/<identifier>/.
+          STAGE=$(find "${OUT}/deb" -maxdepth 1 -mindepth 1 -type d | head -n1)
+          if [ -z "${STAGE}" ]; then
+            echo "::error::No .deb stage directory produced."
+            ls -la "${OUT}/deb" || true
+            exit 1
+          fi
+          dpkg-deb --build "${STAGE}" "${OUT}/kalsae-demo.deb"
+          ls -lh "${OUT}/kalsae-demo.deb"
+
+      - name: Inspect .deb (control + Depends + contents)
+        run: |
+          set -euo pipefail
+          DEB="${PWD}/dist/linux-e2e/kalsae-demo.deb"
+          echo "::group::dpkg-deb --info"
+          dpkg-deb --info "${DEB}"
+          echo "::endgroup::"
+          echo "::group::dpkg-deb --contents"
+          dpkg-deb --contents "${DEB}" | head -40
+          echo "::endgroup::"
+          # Formal proof of the "reuse OS engine" philosophy: the package must
+          # declare libgtk-4-1 / libwebkitgtk-6.0-4 / libsoup-3.0-0 as runtime
+          # Depends (no bundled binaries).
+          INFO=$(dpkg-deb --info "${DEB}")
+          for dep in libgtk-4-1 libwebkitgtk-6.0-4 libsoup-3.0-0; do
+            if ! echo "${INFO}" | grep -q "${dep}"; then
+              echo "::error::Missing Depends entry: ${dep}"
+              exit 1
+            fi
+          done
+          echo "All required system Depends present."
+
+      - name: Verify tarball contents
+        run: |
+          set -euo pipefail
+          OUT="${PWD}/dist/linux-e2e"
+          STAGE=$(find "${OUT}/tarball" -maxdepth 1 -mindepth 1 -type d | head -n1)
+          if [ -z "${STAGE}" ]; then
+            echo "::error::No tarball stage directory produced."
+            exit 1
+          fi
+          tar -czf "${OUT}/kalsae-demo.tar.gz" -C "$(dirname "${STAGE}")" "$(basename "${STAGE}")"
+          ls -lh "${OUT}/kalsae-demo.tar.gz"
+          tar -tzf "${OUT}/kalsae-demo.tar.gz" | head -20
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist-${{ github.run_number }}
+          path: |
+            dist/linux-e2e/kalsae-demo.deb
+            dist/linux-e2e/kalsae-demo.tar.gz
+          retention-days: 14
+          if-no-files-found: warn

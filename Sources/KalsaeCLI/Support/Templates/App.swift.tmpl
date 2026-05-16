@@ -1,5 +1,9 @@
 import Kalsae
-import Foundation
+
+// 이 진입점은 Windows / macOS / Linux 데스크톱 전용이다.
+// iOS는 UIApplicationDelegate에서, Android는 Activity의 onCreate에서
+// `KSApp.boot(...)`를 호출해야 한다. 호스트 통합 패턴은
+// `Samples/KalsaeAndroidSample/` 및 `Samples/KalsaeIOSSample/` 참고.
 
 // MARK: - Commands
 
@@ -24,65 +28,14 @@ struct App {
 
     @MainActor
     static func run() async throws {
-        let resolved = try resolveConfigURL()
-        // resourceRoot 는 패키지 산출물에서는 nil 이며, KSApp.boot 가
-        // `<configDir>/<config.build.frontendDist>` 로 자동 해석한다.
-        // 개발 모드(SwiftPM 리소스 번들 / .app 번들)에서는 kalsae.json 옆에
-        // 자산이 함께 놓여 있어 `<configDir>` 자체가 resourceRoot 가 된다.
-        let app = try await KSApp.boot(
-            configURL: resolved.url,
-            resourceRoot: resolved.resourceRoot
-        ) { registry in
+        // `bootFromBundle` 이 다음 위치를 순서대로 탐색한다:
+        //   1) 실행 파일 옆 `kalsae.json`   (kalsae build 의 일반 산출물)
+        //   2) `.app/Contents/Resources`    (macOS 번들)
+        //   3) SwiftPM 리소스 번들 (`.module`)  (개발 모드 `swift run`)
+        //   4) Windows standalone PE RCDATA  (외부 파일이 없을 때)
+        let app = try await KSApp.bootFromBundle(resourceBundle: .module) { registry in
             await _ksRegister_hello(into: registry)
         }
         _ = app.run()
-    }
-
-    /// `Kalsae.json` 위치 + 권장 `resourceRoot` 를 함께 해석.
-    ///
-    /// 우선순위:
-    ///   1) 패키지 산출물 — EXE 옆 `Kalsae.json`. 자산은 `<exeDir>/<frontendDist>/`
-    ///      에 분리되어 있으므로 `resourceRoot=nil` 로 자동 해석에 맡긴다.
-    ///   2) macOS `.app` 번들 — `Contents/Resources/Kalsae.json` 옆에 자산이
-    ///      함께 있으므로 `resourceRoot=Contents/Resources/`.
-    ///   3) 개발 모드 — SwiftPM 리소스 번들. kalsae.json 옆에 자산이 함께 있다.
-    ///   4) Windows standalone — 외부 파일이 없으면 EXE 옆 가상 경로를 그대로
-    ///      반환한다. KSApp.boot 가 PE RCDATA(`KSAS_CONFIG_JSON`) 폴백으로
-    ///      임베디드 설정을 디코딩한다.
-    @MainActor
-    static func resolveConfigURL() throws -> (url: URL, resourceRoot: URL?) {
-        let fm = FileManager.default
-        let candidates = ["Kalsae.json", "kalsae.json"]
-
-        let exeDir = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
-            .deletingLastPathComponent()
-        for name in candidates {
-            let url = exeDir.appendingPathComponent(name)
-            if fm.fileExists(atPath: url.path) { return (url, nil) }
-        }
-
-        if let resourceURL = Bundle.main.resourceURL {
-            for name in candidates {
-                let url = resourceURL.appendingPathComponent(name)
-                if fm.fileExists(atPath: url.path) {
-                    return (url, resourceURL)
-                }
-            }
-        }
-
-        if let bundled = Bundle.module.url(
-            forResource: "kalsae", withExtension: "json")
-        {
-            return (bundled, bundled.deletingLastPathComponent())
-        }
-
-        // standalone --embed-config: 외부 파일이 없어도 KSApp.boot 가 PE RCDATA
-        // 에서 임베디드 설정을 디코딩한다. 가상 경로(EXE 옆)을 반환해 부팅을 진행.
-        #if os(Windows)
-            return (exeDir.appendingPathComponent("Kalsae.json"), nil)
-        #else
-            throw KSError.configNotFound(
-                "Kalsae.json (looked next to executable, in app bundle, and in SwiftPM resource bundle)")
-        #endif
     }
 }

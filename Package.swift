@@ -119,6 +119,20 @@ let package = Package(
             ]
         ),
 
+        // ── CLibSecret ───────────────────────────────────────────
+        // Linux 전용 libsecret-1 시스템 라이브러리 (Secret Service /
+        // GNOME Keyring / KWallet 등 통합 자격증명 저장소).
+        // pkg-config로 libsecret-1 패키지 검색. 별도 번들링/Vendor 없이
+        // 시스템 동적 라이브러리에 동적 링크된다.
+        .systemLibrary(
+            name: "CLibSecret",
+            path: "Sources/CLibSecret",
+            pkgConfig: "libsecret-1",
+            providers: [
+                .apt(["libsecret-1-dev"]),
+            ]
+        ),
+
         // ── CKalsaeGtk ───────────────────────────────────────────
         // GTK4 + WebKitGTK의 C 함수를 Swift에서 호출 가능하게 감싸는
         // Linux 전용 브리지 타겟. Swift에서 직접 호출하기 어려운
@@ -179,6 +193,8 @@ let package = Package(
             dependencies: [
                 "KalsaeCore",
                 .target(name: "CKalsaeGtk",
+                        condition: .when(platforms: [.linux])),
+                .target(name: "CLibSecret",
                         condition: .when(platforms: [.linux])),
             ],
             path: "Sources/KalsaePlatformLinux",

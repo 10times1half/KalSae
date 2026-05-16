@@ -6,9 +6,11 @@ public import KalsaeCore
 // 백그라운드 컨텍스트(예: `Task.detached`에서 돌아가는 IPC 디스패치
 // 핸들러)에서 호출된 명령이 데드락 없이 네이티브 UI를 조작할 수
 // 있도록 `postJob → @MainActor sync 호출` 패턴을 감싼다. Win32 메시지
-// 루프는 Swift의 협동 스케줄러를 펄프하지 않으므로 백그라운드에서의
+// 루프는 Swift의 협동 스케줄러를 펌프하지 않으므로 백그라운드에서의
 // `await MainActor.run`은 재개되지 않지만, PostMessageW(WM_USER+1)은
-// 재개된다.
+// 재개된다. 따라서 Windows는 `postJob` + 동기 UI 진입점을 쓰고,
+// 나머지 플랫폼은 `KSDialogBackend` / `KSNotificationBackend`의 async
+// 메서드에 그대로 위임한다.
 
 #if os(Windows)
     internal import KalsaePlatformWindows
@@ -28,10 +30,20 @@ extension KSApp {
                 completion(result)
             }
         #else
-            KSLog.logger("kalsae.app").info(
-                "showMessage is not implemented on this platform yet")
-            _ = options
-            _ = completion
+            // macOS / Linux / iOS / Android: PAL의 async `message`로 위임한다.
+            // 각 백엔드가 자체적으로 UI 스레드 마샬링을 처리한다.
+            let dialogs = platform.dialogs
+            Task { @MainActor in
+                let result: KSMessageResult
+                do {
+                    result = try await dialogs.message(options, parent: nil)
+                } catch {
+                    KSLog.logger("kalsae.app").error(
+                        "showMessage failed: \(error)")
+                    result = .cancel
+                }
+                completion(result)
+            }
         #endif
     }
 
@@ -47,11 +59,18 @@ extension KSApp {
                 completion(urls)
             }
         #else
-            KSLog.logger("kalsae.app").info(
-                "openFile is not implemented on this platform yet")
-            _ = options
-            // 플랫폼 미구현 시 호출자가 영구히 대기하지 않도록 빈 결과로 콜백한다.
-            Task { @MainActor in completion([]) }
+            let dialogs = platform.dialogs
+            Task { @MainActor in
+                let urls: [URL]
+                do {
+                    urls = try await dialogs.openFile(options: options, parent: nil)
+                } catch {
+                    KSLog.logger("kalsae.app").error(
+                        "openFile failed: \(error)")
+                    urls = []
+                }
+                completion(urls)
+            }
         #endif
     }
 
@@ -67,9 +86,15 @@ extension KSApp {
                 }
             }
         #else
-            KSLog.logger("kalsae.app").info(
-                "notifications are not implemented on this platform yet")
-            _ = n
+            let notifications = platform.notifications
+            Task { @MainActor in
+                do {
+                    try await notifications.post(n)
+                } catch {
+                    KSLog.logger("kalsae.app").error(
+                        "postNotification failed: \(error)")
+                }
+            }
         #endif
     }
 

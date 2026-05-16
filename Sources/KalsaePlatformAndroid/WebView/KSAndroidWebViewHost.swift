@@ -167,6 +167,47 @@
                 hasFormat: (format) => call('__ks.clipboard.hasFormat', { format: String(format) }),
               });
 
+              // ---- 보안 비밀(자격증명) ----
+              const Secret = (() => {
+                function _toBytes(secret) {
+                  if (secret == null) return new Uint8Array(0);
+                  if (typeof secret === 'string') return new TextEncoder().encode(secret);
+                  if (secret instanceof Uint8Array) return secret;
+                  if (secret instanceof ArrayBuffer) return new Uint8Array(secret);
+                  if (ArrayBuffer.isView(secret)) return new Uint8Array(secret.buffer, secret.byteOffset, secret.byteLength);
+                  throw new TypeError('secret must be string | Uint8Array | ArrayBuffer');
+                }
+                function _b64encode(bytes) {
+                  let bin = '';
+                  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i]);
+                  return btoa(bin);
+                }
+                function _b64decode(b64) {
+                  const bin = atob(b64);
+                  const u8 = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+                  return u8;
+                }
+                return Object.freeze({
+                  set: (service, account, secret) => call('__ks.secret.set', {
+                    service: String(service), account: String(account),
+                    secret: _b64encode(_toBytes(secret))
+                  }),
+                  get: async (service, account) => {
+                    const r = await call('__ks.secret.get', { service: String(service), account: String(account) });
+                    if (!r || !r.secret) return null;
+                    return _b64decode(r.secret);
+                  },
+                  getString: async (service, account) => {
+                    const r = await call('__ks.secret.get', { service: String(service), account: String(account) });
+                    if (!r || !r.secret) return null;
+                    return new TextDecoder().decode(_b64decode(r.secret));
+                  },
+                  delete: (service, account) => call('__ks.secret.delete', { service: String(service), account: String(account) }),
+                  list:   (service) => call('__ks.secret.list', { service: String(service) }),
+                });
+              })();
+
               // ---- 앱 ----
               const App = Object.freeze({
                 quit:        () => call('__ks.app.quit'),
@@ -225,6 +266,7 @@
                 shell:  Shell,
                 dialog: Dialog,
                 clipboard: Clipboard,
+                secret: Secret,
                 app:    App,
                 events: Events,
                 log:    Log,

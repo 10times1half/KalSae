@@ -3,7 +3,7 @@ public import KalsaeCore
 
 /// Kalsae 애플리케이션의 최상위 진입점.
 ///
-/// `KSApp`은 `Kalsae.json`을 로드하고, 보안 설정을 적용하며,
+/// `KSApp`은 `kalsae.json`을 로드하고, 보안 설정을 적용하며,
 /// 플랫폼에 맞는 데모 호스트를 생성하고, 각 플랫폼의 DemoHost가
 /// 제공하는 소형 크로스플랫폼 API(`emit`, `postJob`, `run`)를 노출한다.
 ///
@@ -94,10 +94,10 @@ public final class KSApp {
     //
     // `KSApp+SingleInstance.swift` 참조.
 
-    /// `Kalsae.json`에서 애플리케이션을 부팅한다.
+    /// `kalsae.json`에서 애플리케이션을 부팅한다.
     ///
     /// - Parameters:
-    ///   - configURL: `Kalsae.json`의 절대 파일 URL.
+    ///   - configURL: `kalsae.json`의 절대 파일 URL.
     ///   - windowLabel: `config.windows`에서 열 윈도우. `nil`이면 첫 번째 항목이 사용된다.
     ///   - urlOverride: nil이 아닐 경우 `config.windows[i].url` 및 기본 해상도보다 우선한다.
     ///   - resourceRoot: 정적 자산이 제공되는 위치를 재정의한다.
@@ -117,7 +117,7 @@ public final class KSApp {
         do {
             config = try KSConfigLoader.load(from: resolvedConfigURL)
         } catch {
-            // standalone --embed-config 산출물에서는 외부 Kalsae.json 이 제거된다.
+            // standalone --embed-config 산출물에서는 외부 kalsae.json 이 제거된다.
             // PE RCDATA `KSAS_CONFIG_JSON` 에 임베드된 데이터가 있으면 그걸로 폴백한다.
             #if os(Windows)
                 if let embedded = KSEmbeddedConfigLoader.loadEmbeddedConfigData() {
@@ -143,16 +143,88 @@ public final class KSApp {
             configure: configure)
     }
 
-    /// 외부 설정 오버라이드 허용 정책(E4):
+    /// 번들된 `kalsae.json`을 자동으로 찾아 애플리케이션을 부팅한다.
+    ///
+    /// 대부분의 앱에서 `App.swift` 의 부팅 보일러플레이트를 한 줄로 줄이기 위한
+    /// 고수준 헬퍼다. 다음 위치를 순서대로 시도한다:
+    ///
+    ///   1. **실행 파일 옆 `kalsae.json`** — `kalsae build` 의 일반 산출물.
+    ///      자산은 `<exeDir>/<frontendDist>/` 에 분리되어 있으므로 `resourceRoot`
+    ///      는 자동 해석에 맡긴다.
+    ///   2. **`Bundle.main.resourceURL`** — macOS `.app` 의 `Contents/Resources`.
+    ///      자산이 같은 디렉터리에 있으므로 `resourceRoot` 로 사용된다.
+    ///   3. **호출자가 전달한 `resourceBundle`** — 보통 `Bundle.module`. SwiftPM
+    ///      리소스 번들이 `kalsae.json` 을 포함하는 개발 모드 (`swift run`).
+    ///   4. **Windows standalone PE RCDATA** — 외부 파일이 없으면 `KSApp.boot`
+    ///      가 `KSAS_CONFIG_JSON` 에서 임베디드 설정을 디코딩한다 (가상 경로 반환).
+    ///
+    /// - Parameters:
+    ///   - resourceBundle: SwiftPM 리소스 번들. 개발 모드에서 `kalsae.json` 을
+    ///     찾으려면 호출자가 자신의 `Bundle.module` 을 전달해야 한다 (Kalsae 모듈
+    ///     내부에서 `Bundle.module` 을 참조하면 *Kalsae 자체의* 번들을 가리키므로
+    ///     앱의 리소스에 접근할 수 없기 때문).
+    ///   - windowLabel: 열 윈도우. `nil` 이면 `config.windows` 의 첫 번째.
+    ///   - urlOverride: 윈도우 URL 을 덮어쓴다.
+    ///   - configure: 명령 등록 클로저.
+    public static func bootFromBundle(
+        resourceBundle: Bundle? = nil,
+        windowLabel: String? = nil,
+        urlOverride: String? = nil,
+        configure: (KSCommandRegistry) async throws(KSError) -> Void
+    ) async throws(KSError) -> KSApp {
+        let resolved = resolveBundledConfigURL(resourceBundle: resourceBundle)
+        return try await boot(
+            configURL: resolved.url,
+            windowLabel: windowLabel,
+            urlOverride: urlOverride,
+            resourceRoot: resolved.resourceRoot,
+            configure: configure)
+    }
+
+    /// `bootFromBundle()` 의 위치 해석. 외부에서 자체 부팅을 짜는 앱이
+    /// 동일한 우선순위를 재사용하고 싶을 때 호출할 수 있다.
+    public static func resolveBundledConfigURL(
+        resourceBundle: Bundle? = nil
+    ) -> (url: URL, resourceRoot: URL?) {
+        let fm = FileManager.default
+        let name = "kalsae.json"
+
+        // 1) 실행 파일 옆
+        let exeDir = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+            .deletingLastPathComponent()
+        let exeCandidate = exeDir.appendingPathComponent(name)
+        if fm.fileExists(atPath: exeCandidate.path) {
+            return (exeCandidate, nil)
+        }
+
+        // 2) Bundle.main (.app/Contents/Resources)
+        if let resourceURL = Bundle.main.resourceURL {
+            let url = resourceURL.appendingPathComponent(name)
+            if fm.fileExists(atPath: url.path) {
+                return (url, resourceURL)
+            }
+        }
+
+        // 3) 호출자 SwiftPM 리소스 번들
+        if let bundled = resourceBundle?.url(forResource: "kalsae", withExtension: "json") {
+            return (bundled, bundled.deletingLastPathComponent())
+        }
+
+        // 4) Windows standalone: PE RCDATA 폴백을 기대하며 가상 경로 반환.
+        //    boot() 가 KSConfigLoader 실패 시 KSEmbeddedConfigLoader 로 폴백한다.
+        return (exeCandidate, nil)
+    }
+
+
     /// - 부팅 인자로 전달된 `configURL`과 같은 디렉터리에
-    ///   `Kalsae.json` 또는 `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
+    ///   `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
     /// - 패키징 모드에서 임베디드/생성된 설정보다 사용자가 배치한 외부 설정이
     ///   우선되도록 하여 운영 환경 조정 가능성을 보장한다.
     ///
     /// **RFC-002 §2.3 (취약점 #3) — 릴리스 빌드에서 비활성화.**
     /// 릴리스 빌드(`#if !DEBUG`)에서는 외부 파일이 임베디드 설정을 덮어쓰지 못하도록
     /// 항상 원본 `configURL`을 그대로 반환한다. 이를 통해 공격자가 앱 번들 디렉터리에
-    /// 변조된 `Kalsae.json`(예: `commandAllowlist: null`, `fs.allow: ["**"]`)을 배치해
+    /// 변조된 `kalsae.json`(예: `commandAllowlist: null`, `fs.allow: ["**"]`)을 배치해
     /// 모든 보안 제한을 우회하는 시나리오를 차단한다. 디버그 빌드에서만 외부 파일
     /// 우선이 유지되어 개발 워크플로(설정 핫스왑)를 깨지 않는다.
     private static func resolveExternalConfigOverride(_ configURL: URL) -> URL {
@@ -161,18 +233,12 @@ public final class KSApp {
         #else
             let fm = FileManager.default
             let dir = configURL.deletingLastPathComponent()
-            let candidates = [
-                dir.appendingPathComponent("Kalsae.json"),
-                dir.appendingPathComponent("kalsae.json"),
-            ]
-
-            for candidate in candidates {
-                if candidate.standardizedFileURL == configURL.standardizedFileURL {
-                    return configURL
-                }
-                if fm.fileExists(atPath: candidate.path) {
-                    return candidate
-                }
+            let candidate = dir.appendingPathComponent("kalsae.json")
+            if candidate.standardizedFileURL == configURL.standardizedFileURL {
+                return configURL
+            }
+            if fm.fileExists(atPath: candidate.path) {
+                return candidate
             }
             return configURL
         #endif
@@ -200,10 +266,11 @@ public final class KSApp {
         let window = try selectWindow(from: config, label: windowLabel)
 
         // 2. 사용자 명령 등록 이전에 명령 제한목록을 적용한다.
-        //    이렇게 해야 `setAllowlist(nil)` (Codable 기본값)이
-        //    "등록된 모든 명령 허용"의 의미를 유지한다.
+        //    의미론: nil/[] 모두 deny-all 로 강제.
+        //    내장 `__ks.*` 명령은 `registerInternal` 경로로 등록되어 이 검사를
+        //    우회하므로 default-deny 에서도 정상 동작한다.
         let registry = KSCommandRegistry()
-        await registry.setAllowlist(config.security.commandAllowlist)
+        await registry.setAllowlist(config.security.commandAllowlist ?? [])
 
         // 2a. Tauri-style capabilities — `config.capabilities`가 비어 있지 않으면
         //     정책 평가기를 설치한다. allowlist와 capabilities가 동시에 지정된
@@ -535,6 +602,9 @@ public final class KSApp {
             navigationScope: config.security.navigation,
             autostart: autostartBackend,
             deepLink: deepLinkPair,
+            credentials: platform.credentials,
+            secretScope: config.security.secret,
+            bundleId: config.app.identifier,
             appDirectory: URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
             windows: platform.windows,
             shell: platform.shell,
@@ -548,10 +618,8 @@ public final class KSApp {
             secondaryHosts: secondaryWrappers,
             deepLinkBackend: builtDeepLinkBackend)
 
-        // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다.
-        #if os(Windows) || os(Linux)
-            subscribeMenuRouter(app: app)
-        #endif
+        // 7. 네이티브 메뉴 / 트레이 클릭을 구독한다 (라우터를 노출하는 모든 플랫폼).
+        subscribeMenuRouter(app: app)
 
         // 8. dev 라이브 리로드 (`KALSAE_DEV_RELOAD=1`).
         //    `kalsae dev`가 자식 프로세스에 환경 변수를 전달하면 해당 부팅이

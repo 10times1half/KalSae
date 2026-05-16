@@ -1,13 +1,13 @@
 #if os(Windows)
     internal import WinSDK
-    internal import KalsaeCore
+    public import KalsaeCore
     internal import Foundation
 
     /// 메뉴 / 트레이 명령을 구독자(subscriber)로 라우팅한다. 플랫폼 계층
     /// (또는 데모)이 단일 sink를 설치해 JS 브리지, 명령 레지스트리, 또는
     /// 둘 다로 전달한다.
     @MainActor
-    public final class KSWindowsCommandRouter {
+    public final class KSWindowsCommandRouter: KSMenuCommandRouting {
         public static let shared = KSWindowsCommandRouter()
 
         public typealias Sink = @MainActor (_ command: String, _ itemID: String?) -> Void

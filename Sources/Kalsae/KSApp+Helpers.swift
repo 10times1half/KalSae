@@ -102,7 +102,7 @@ extension KSApp {
             <code>build.frontendDist</code> 디렉터리를 생성했는지 확인하세요.</li>\
             <li>개발 중이라면 dev 서버(예: <code>npm run dev</code>) 가 \
             지정된 주소에서 응답하는지 확인하세요.</li>\
-            <li><code>Kalsae.json</code> 의 <code>build.devServerURL</code> / \
+            <li><code>kalsae.json</code> 의 <code>build.devServerURL</code> / \
             <code>build.frontendDist</code> 설정이 올바른지 확인하세요.</li>\
             </ul>\
             <p class="muted">This page is served as a <code>data:</code> URL by Kalsae \

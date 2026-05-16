@@ -37,7 +37,7 @@ Tauri는 `tauri-plugin-updater`를 통해 GitHub Releases / 임의 URL에서 서
   Google Play)의 업데이트 메커니즘에 위임한다. 자체 IPA/APK 교체는 스토어 정책 위반
   이므로 지원하지 않는다. `makeInstaller`는 iOS/Android에서 `KSError(.unsupportedPlatform)`
   을 throw하며, 매니페스트의 `playstore` / `appstore` installerType은 사용자 안내용
-  메타데이터로만 기능한다 (RFC-007 §3.5 참조).
+  메타데이터로만 기능한다.
 
 ---
 
@@ -200,8 +200,6 @@ interface KSUpdateInfo {
 - `size` / `sha256` / `signature` / `installerType=playstore|appstore`는 **선택 사항** — 누락되어도 매니페스트 파싱은 성공한다.
 - 플러그인은 버전 비교까지만 수행하고 (`checkForUpdate` 결과에 새 버전을 보고함), `downloadUpdate`/`installUpdate`는 `KSError(.unsupportedPlatform)`을 throw한다.
 - 호출자는 `KSUpdateInfo.installerType`을 확인해 스토어 링크로 사용자를 안내해야 한다.
-
-RFC-007 §3.5 참조.
 
 ### GitHub Releases 어댑터
 `manifestURL`이 `https://api.github.com/repos/{owner}/{repo}/releases/latest` 형태이면

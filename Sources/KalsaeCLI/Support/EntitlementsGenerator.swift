@@ -3,7 +3,7 @@ public import KalsaeCore
 
 // MARK: - Entitlements 생성기 (RFC-008 P3 — Mac App Store / Developer ID)
 //
-// `Kalsae.json`(`KSConfig`) → macOS/iOS `.entitlements` plist 의 자동 매핑.
+// `kalsae.json`(`KSConfig`) → macOS/iOS `.entitlements` plist 의 자동 매핑.
 //
 // **순수 함수**: 파일/네트워크 I/O 없음. `renderEntitlementsPlist(_:target:)` 는
 // 입력만으로 결과 XML 문자열을 생성하며 단위 테스트 가능하다.

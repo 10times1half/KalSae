@@ -10,7 +10,7 @@ Read it first.
 - PowerShell on Windows: chain with `;`, never `&&`.
 - Build: `swift build` · Test: `swift test` · Filter: `swift test --filter "name"`.
 - Windows setup: run `./Scripts/fetch-webview2.ps1` once before building.
-- Linux setup: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`.
+- Linux setup: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libsecret-1-dev`.
 
 ## Hard rules
 

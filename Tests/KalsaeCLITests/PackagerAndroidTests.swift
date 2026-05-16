@@ -19,7 +19,7 @@ struct PackagerAndroidTests {
         try text.write(to: url, atomically: false, encoding: .utf8)
     }
 
-    /// 가짜 .so + 가짜 Kalsae.json + 빈 dist 가 모인 작업 디렉터리를 만든다.
+    /// 가짜 .so + 가짜 kalsae.json + 빈 dist 가 모인 작업 디렉터리를 만든다.
     private func makeFixture(suffix: String) throws -> (work: URL, opts: KSPackager.AndroidOptions) {
         let fm = FileManager.default
         let work = uniqueDir(suffix: suffix)
@@ -28,7 +28,7 @@ struct PackagerAndroidTests {
         let lib = work.appendingPathComponent("libKalsaePlatformAndroid.so")
         try writeText("ELF-fake", to: lib)
 
-        let config = work.appendingPathComponent("Kalsae.json")
+        let config = work.appendingPathComponent("kalsae.json")
         try writeText(
             #"{"app":{"name":"Demo"},"build":{"frontendDist":"dist"},"security":{"devtools":true}}"#,
             to: config)
@@ -96,7 +96,7 @@ struct PackagerAndroidTests {
         }
         // assets + jniLibs
         let assets = root.appendingPathComponent("app/src/main/assets")
-        #expect(fm.fileExists(atPath: assets.appendingPathComponent("Kalsae.json").path))
+        #expect(fm.fileExists(atPath: assets.appendingPathComponent("kalsae.json").path))
         #expect(fm.fileExists(atPath: assets.appendingPathComponent("index.html").path))
         #expect(
             fm.fileExists(
@@ -179,9 +179,9 @@ struct PackagerAndroidTests {
         #expect(!xml.contains("android.intent.action.VIEW"))
     }
 
-    // MARK: - Kalsae.json rewrite
+    // MARK: - kalsae.json rewrite
 
-    @Test("Packaged Kalsae.json has frontendDist='.' and security.devtools=false")
+    @Test("Packaged kalsae.json has frontendDist='.' and security.devtools=false")
     func configRewrite() throws {
         let fm = FileManager.default
         let (work, opts) = try makeFixture(suffix: "rewrite")
@@ -190,7 +190,7 @@ struct PackagerAndroidTests {
         let report = try KSPackager.runAndroid(opts)
         let data = try Data(
             contentsOf: URL(fileURLWithPath: report.outputPath)
-                .appendingPathComponent("app/src/main/assets/Kalsae.json"))
+                .appendingPathComponent("app/src/main/assets/kalsae.json"))
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let build = json?["build"] as? [String: Any]
         let security = json?["security"] as? [String: Any]
@@ -231,7 +231,7 @@ struct PackagerAndroidTests {
         try fm.createDirectory(at: work, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: work) }
 
-        let config = work.appendingPathComponent("Kalsae.json")
+        let config = work.appendingPathComponent("kalsae.json")
         try writeText("{}", to: config)
 
         let opts = KSPackager.AndroidOptions(

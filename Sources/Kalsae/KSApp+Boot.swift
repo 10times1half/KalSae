@@ -97,34 +97,6 @@ extension KSApp {
     }
 
     #if os(Windows)
-        /// `KSWindowsCommandRouter` 클릭을 (a) 프론트엔드로 전송되는 `"menu"` 이벤트와
-        /// (b) 일치하는 `@KSCommand` 핸들러의 레지스트리 디스패치에 연결한다.
-        /// `app`을 약하게 참조한다.
-        static func subscribeMenuRouter(app: KSApp) {
-            KSWindowsCommandRouter.shared.subscribe { [weak app] command, itemID in
-                guard let app else { return }
-                struct MenuClickPayload: Encodable {
-                    let command: String
-                    let itemID: String?
-                }
-                let payload = MenuClickPayload(command: command, itemID: itemID)
-                do {
-                    try app.emit("menu", payload: payload)
-                } catch {
-                    KSLog.logger("kalsae.app").error(
-                        "failed to emit 'menu' event for '\(command)': \(error)")
-                }
-                // 레지스트리로 분배. 메뉴 구동 명령은 인자 없는
-                // `@KSCommand`로 설계되어 있다.
-                let registry = app.registry
-                Task.detached {
-                    _ = await registry.dispatch(
-                        name: command,
-                        args: Data("{}".utf8))
-                }
-            }
-        }
-
         /// Windows 알림 백엔드를 트레이 아이콘을 통해 연결해 토스트가
         /// 상주 쉘 아이콘을 경유해 표시되도록 한다. `attachTray`가 약한 참조를
         /// 저장하므로 `tray.install(...)` 전에 호출해도 안전하다.
@@ -135,30 +107,39 @@ extension KSApp {
                 nbackend.attachTray(traybackend)
             }
         }
-    #elseif os(Linux)
-        static func subscribeMenuRouter(app: KSApp) {
-            KSLinuxCommandRouter.shared.subscribe { [weak app] command, itemID in
-                guard let app else { return }
-                struct MenuClickPayload: Encodable {
-                    let command: String
-                    let itemID: String?
-                }
-                let payload = MenuClickPayload(command: command, itemID: itemID)
-                do {
-                    try app.emit("menu", payload: payload)
-                } catch {
-                    KSLog.logger("kalsae.app").error(
-                        "failed to emit 'menu' event for '\(command)': \(error)")
-                }
-                let registry = app.registry
-                Task.detached {
-                    _ = await registry.dispatch(
-                        name: command,
-                        args: Data("{}".utf8))
-                }
+    #endif
+
+    /// 플랫폼의 메뉴 / 트레이 명령 라우터(`KSMenuCommandRouting`)에 단일
+    /// sink를 설치한다. 모든 메뉴 / 트레이 클릭은 (a) 프론트엔드로 전송되는
+    /// `"menu"` 이벤트와 (b) 일치하는 `@KSCommand` 핸들러의 레지스트리
+    /// 디스패치로 라우팅된다. `app`을 약하게 참조한다. 라우터를 노출하지 않는
+    /// 플랫폼(테스트용 더미 등)에서는 아무 동작도 하지 않는다.
+    @MainActor
+    static func subscribeMenuRouter(app: KSApp) {
+        guard let router = app.platform.menuCommandRouter else { return }
+        router.subscribe { [weak app] command, itemID in
+            guard let app else { return }
+            struct MenuClickPayload: Encodable {
+                let command: String
+                let itemID: String?
+            }
+            let payload = MenuClickPayload(command: command, itemID: itemID)
+            do {
+                try app.emit("menu", payload: payload)
+            } catch {
+                KSLog.logger("kalsae.app").error(
+                    "failed to emit 'menu' event for '\(command)': \(error)")
+            }
+            // 레지스트리로 분배. 메뉴 구동 명령은 인자 없는
+            // `@KSCommand`로 설계되어 있다.
+            let registry = app.registry
+            Task.detached {
+                _ = await registry.dispatch(
+                    name: command,
+                    args: Data("{}".utf8))
             }
         }
-    #endif
+    }
 }
 extension KSApp {
     /// 최선의 우아한 종료를 수행한다: 트레이 아이콘 제거, IPC 브리지 등록 해제,

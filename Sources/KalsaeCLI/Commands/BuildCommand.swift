@@ -66,7 +66,7 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
+        help: "Override path to kalsae.json (default: ./kalsae.json).")
     var config: String? = nil
 
     @Option(name: .long, help: "Override frontend dist directory.")
@@ -118,11 +118,6 @@ struct BuildCommand: ParsableCommand {
     @Flag(name: .long, help: "Print the build/package commands without executing them.")
     var dryrun: Bool = false
 
-    @Option(
-        name: [.customShort("o"), .long],
-        help: "Override the produced executable name (renames the binary in .build/<config>/ after swift build).")
-    var exeName: String? = nil
-
     @Flag(
         name: .long,
         help: "Generate an NSIS installer (.nsi + .exe via makensis) after packaging. Windows-only.")
@@ -167,7 +162,7 @@ struct BuildCommand: ParsableCommand {
     @Option(
         name: .long,
         help:
-            "Distribution target (RFC-008): dev | devid | mas | win-store | ios-appstore. Overrides Kalsae.json distribution.target. Default: value from Kalsae.json, or 'dev' if absent."
+            "Distribution target (RFC-008): dev | devid | mas | win-store | ios-appstore. Overrides kalsae.json distribution.target. Default: value from kalsae.json, or 'dev' if absent."
     )
     var store: String? = nil
 
@@ -278,7 +273,7 @@ struct BuildCommand: ParsableCommand {
 
     @Option(
         name: .long,
-        help: "Android: applicationId (e.g. 'com.example.myapp'). Default: Kalsae.json app.identifier."
+        help: "Android: applicationId (e.g. 'com.example.myapp'). Default: kalsae.json app.identifier."
     )
     var androidApplicationId: String? = nil
 
@@ -301,6 +296,81 @@ struct BuildCommand: ParsableCommand {
         name: .long,
         help: "Android: path to 1024x1024 launcher icon PNG. If absent, a placeholder is used.")
     var androidIcon: String? = nil
+
+    // MARK: - iOS (Phase iOS-Stable §3)
+
+    @Flag(
+        name: .long,
+        help:
+            "Emit an iOS .app bundle (preview-stable). Skips the host's normal Win/Mac/Linux packager. Requires --ios-executable pointing at the iOS-built binary."
+    )
+    var ios: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "iOS: path to the cross-compiled iOS executable (Mach-O). Built via `swift build --triple arm64-apple-ios16.0 -c release --product <YourApp>`. Required with --ios."
+    )
+    var iosExecutable: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: CFBundleIdentifier (e.g. 'com.example.myapp'). Default: kalsae.json app.identifier."
+    )
+    var iosBundleIdentifier: String? = nil
+
+    @Option(
+        name: .long,
+        help: "iOS: CFBundleVersion (build number, must increase per submission). Default: 1.")
+    var iosBundleVersion: String = "1"
+
+    @Option(
+        name: .long,
+        help: "iOS: MinimumOSVersion (e.g. '16.0'). Default: 16.0.")
+    var iosMinOSVersion: String = "16.0"
+
+    @Option(
+        name: .long,
+        help: "iOS: launcher icon PNG (1024x1024 recommended). Optional.")
+    var iosIcon: String? = nil
+
+    // MARK: - Linux (RFC-009)
+
+    @Flag(
+        name: .long,
+        help:
+            "Emit a Linux distribution tree (RFC-009). Skips the host's normal Win/Mac packager. Requires --linux-executable pointing at the Linux ELF binary."
+    )
+    var linux: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Linux: path to the built Linux ELF executable (e.g. .build/release/MyApp). Required with --linux."
+    )
+    var linuxExecutable: String? = nil
+
+    @Option(
+        name: .long,
+        help:
+            "Linux: comma-separated formats — any of 'tarball', 'deb', 'appimage'. Default: 'tarball'."
+    )
+    var linuxFormat: String = "tarball"
+
+    @Option(
+        name: .long,
+        help: "Linux: target architecture — 'x86_64' or 'aarch64'. Default: x86_64.")
+    var linuxArch: String = "x86_64"
+
+    @Option(
+        name: .long,
+        help: "Linux: launcher icon PNG (512x512 recommended). Optional.")
+    var linuxIcon: String? = nil
+
+    @Option(
+        name: .long,
+        help: "Linux: .deb Maintainer field — 'Name <email@host>'. Required with --linux-format deb.")
+    var linuxMaintainer: String? = nil
 
     func validate() throws {
         if let jobs, jobs < 1 {
@@ -388,8 +458,6 @@ struct BuildCommand: ParsableCommand {
                 }
                 print("✔  Build complete (\(configuration))")
                 try timer.measure("post-build") {
-                    try renameOutputBinaryIfNeeded(
-                        config: config, configuration: configuration, cwd: cwd, fm: fm)
                     try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
                 }
             }
@@ -467,8 +535,6 @@ struct BuildCommand: ParsableCommand {
             }
 
             try timer.measure("post-build") {
-                try renameOutputBinaryIfNeeded(
-                    config: config, configuration: configuration, cwd: cwd, fm: fm)
                 try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
             }
         }
@@ -522,32 +588,6 @@ struct BuildCommand: ParsableCommand {
         }
     }
 
-    /// `--exe-name` 가 지정되면 swift build 산출물(`.build/<config>/<target>.exe`)을
-    /// 새 이름으로 복사한다. 원본은 보존(SwiftPM 인크리멘털 빌드 안전).
-    private func renameOutputBinaryIfNeeded(
-        config: KSConfig, configuration: String, cwd: URL, fm: FileManager
-    ) throws {
-        guard let exeName, !exeName.isEmpty else { return }
-        let info = parseAppInfo(config: config)
-        let buildDir = cwd.appendingPathComponent(".build/\(configuration)")
-        #if os(Windows)
-            let suffix = ".exe"
-        #else
-            let suffix = ""
-        #endif
-        let src = buildDir.appendingPathComponent("\(info.executableName)\(suffix)")
-        guard fm.fileExists(atPath: src.path) else {
-            print("⚠  --exe-name: source binary not found at \(src.path); skipping rename.")
-            return
-        }
-        let dst = buildDir.appendingPathComponent("\(exeName)\(suffix)")
-        if fm.fileExists(atPath: dst.path) {
-            try fm.removeItem(at: dst)
-        }
-        try fm.copyItem(at: src, to: dst)
-        print("📝  Copied \(src.lastPathComponent) → \(dst.lastPathComponent)")
-    }
-
     private func runPackage(configuration: String, configURL: URL, config: KSConfig) throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
@@ -556,6 +596,21 @@ struct BuildCommand: ParsableCommand {
         // RFC-007: --android short-circuits host packagers entirely.
         if android {
             try runPackageAndroid(config: config, info: info, cwd: cwd, fm: fm)
+            return
+        }
+
+        // Phase iOS-Stable §3: --ios short-circuits host packagers entirely.
+        // (별도의 `--store ios-appstore` 는 macOS 호스트의 xcodebuild 파이프라인을
+        // 거치는 IPA 생성용으로 유지되며, `--ios` 는 어느 호스트에서나 동작하는
+        // 미니멀 .app 번들 emit 를 수행한다.)
+        if ios {
+            try runPackageIOSAppBundle(config: config, info: info, cwd: cwd, fm: fm)
+            return
+        }
+
+        // RFC-009: --linux short-circuits host packagers entirely (emit-only, host-OS agnostic).
+        if linux {
+            try runPackageLinux(config: config, info: info, cwd: cwd, fm: fm)
             return
         }
 
@@ -609,7 +664,7 @@ struct BuildCommand: ParsableCommand {
         #endif
     }
 
-    /// `--store` CLI 플래그가 `Kalsae.json distribution.target` 보다 우선한다.
+    /// `--store` CLI 플래그가 `kalsae.json distribution.target` 보다 우선한다.
     /// 양쪽 미지정이면 `.developer`.
     private func resolveDistributionTarget(config: KSConfig) -> KSDistributionTarget {
         if let raw = store, let parsed = KSDistributionTarget.parse(raw) {
@@ -1022,7 +1077,7 @@ struct BuildCommand: ParsableCommand {
             }
             guard let teamID = config.distribution.appleTeamID, !teamID.isEmpty else {
                 throw ValidationError(
-                    "--store ios-appstore requires distribution.appleTeamID in Kalsae.json.")
+                    "--store ios-appstore requires distribution.appleTeamID in kalsae.json.")
             }
             guard let method = KSPackager.IOSExportMethod(rawValue: iosExportMethod) else {
                 throw ValidationError(
@@ -1135,6 +1190,141 @@ struct BuildCommand: ParsableCommand {
         print("ℹ  Next steps: cd '\(outputDir.path)' ; gradle wrapper ; ./gradlew assembleRelease")
     }
 
+    /// Phase iOS-Stable §3 — `--ios` 플래그 진입점. 어느 호스트에서나 동작하는
+    /// 미니멀 .app 번들 emit. 실제 디바이스 실행/시뮬레이터 설치는 macOS 가 필요.
+    private func runPackageIOSAppBundle(
+        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
+    ) throws {
+        guard let exeArg = iosExecutable else {
+            throw ValidationError(
+                "--ios requires --ios-executable <path to iOS Mach-O binary>. "
+                    + "Build it first with: "
+                    + "swift build --triple arm64-apple-ios\(iosMinOSVersion) "
+                    + "-c release --product <YourApp>")
+        }
+        let arch: KSPackager.IOSArchitecture = {
+            switch self.arch {
+            case "arm64", "x64": return .arm64
+            case "arm64-simulator": return .arm64Simulator
+            default:
+                print(
+                    "⚠  --arch \(self.arch): iOS supports 'arm64' or 'arm64-simulator'. "
+                        + "Defaulting to arm64.")
+                return .arm64
+            }
+        }()
+
+        let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
+        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+            ?? cwd.appendingPathComponent("dist/ios-\(info.appName)-\(info.version)")
+
+        let identifier = iosBundleIdentifier ?? info.identifier
+        let iconURL: URL? = iosIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let frontendDistURL: URL? = {
+            if let raw = dist, !raw.isEmpty {
+                return URL(fileURLWithPath: raw, relativeTo: cwd)
+            }
+            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
+            return fm.fileExists(atPath: fallback.path) ? fallback : nil
+        }()
+        let deepLinkSchemes = config.deepLink?.schemes ?? []
+
+        let opts = KSPackager.IOSOptions(
+            executablePath: exeURL,
+            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
+            frontendDist: frontendDistURL,
+            output: outputDir,
+            appName: info.appName,
+            version: info.version,
+            identifier: identifier,
+            bundleVersion: iosBundleVersion,
+            minimumOSVersion: iosMinOSVersion,
+            architecture: arch,
+            iconPath: iconURL,
+            deepLinkSchemes: deepLinkSchemes,
+            permissions: config.permissions)
+
+        print("📦  Packaging \(info.appName) iOS .app v\(info.version) → \(outputDir.path)")
+        if dryrun {
+            print("   (dry-run: skipping file emission)")
+            return
+        }
+        let report = try KSPackager.runIOS(opts)
+        print(report.description)
+        print(
+            "ℹ  Next steps: install on a simulator with "
+                + "`xcrun simctl install booted '\(report.outputPath)'` "
+                + "(macOS + Xcode required).")
+    }
+
+    /// RFC-009 — `--linux` 플래그 진입점. 어느 호스트에서나 동작하는 emit-only
+    /// 파이프라인. 실제 `.deb` / `.AppImage` 산출은 Linux 호스트의 외부 도구
+    /// (`dpkg-deb`, `appimagetool`) 가 마무리한다.
+    private func runPackageLinux(
+        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
+    ) throws {
+        guard let exeArg = linuxExecutable else {
+            throw ValidationError(
+                "--linux requires --linux-executable <path to Linux ELF binary>. "
+                    + "Build it first with: swift build -c release --product <YourApp>")
+        }
+        guard let arch = KSPackager.LinuxArchitecture(rawValue: linuxArch.lowercased()) else {
+            throw ValidationError("--linux-arch must be 'x86_64' or 'aarch64' (got '\(linuxArch)').")
+        }
+
+        // 콤마 분리 형식 파싱.
+        var formats: Set<KSPackager.LinuxFormat> = []
+        for raw in linuxFormat.split(separator: ",") {
+            let token = raw.trimmingCharacters(in: .whitespaces).lowercased()
+            if token == "all" {
+                formats = Set(KSPackager.LinuxFormat.allCases)
+                break
+            }
+            guard let f = KSPackager.LinuxFormat(rawValue: token) else {
+                throw ValidationError(
+                    "--linux-format token '\(token)' is invalid. Allowed: tarball, deb, appimage, all.")
+            }
+            formats.insert(f)
+        }
+        guard !formats.isEmpty else {
+            throw ValidationError("--linux-format must contain at least one format.")
+        }
+
+        let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
+        let outputDir = output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+            ?? cwd.appendingPathComponent("dist/linux-\(info.appName)-\(info.version)")
+        let iconURL: URL? = linuxIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+        let frontendDistURL: URL? = {
+            if let raw = dist, !raw.isEmpty {
+                return URL(fileURLWithPath: raw, relativeTo: cwd)
+            }
+            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
+            return fm.fileExists(atPath: fallback.path) ? fallback : nil
+        }()
+
+        let opts = KSPackager.LinuxOptions(
+            executablePath: exeURL,
+            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
+            frontendDist: frontendDistURL,
+            output: outputDir,
+            appName: info.appName,
+            version: info.version,
+            identifier: info.identifier,
+            architecture: arch,
+            formats: formats,
+            iconPath: iconURL,
+            maintainer: linuxMaintainer)
+
+        print("📦  Packaging \(info.appName) Linux (\(formats.map { $0.rawValue }.sorted().joined(separator: "+"))) v\(info.version) → \(outputDir.path)")
+        if dryrun {
+            print("   (dry-run: skipping file emission)")
+            return
+        }
+        let report = try KSPackager.runLinux(opts)
+        print(report.description)
+        print("ℹ  Next steps: see \(outputDir.path)/README.md for the exact tar/dpkg-deb/appimagetool commands.")
+    }
+
     private struct AppInfo {
         let appName: String
         let version: String
@@ -1153,7 +1343,7 @@ struct BuildCommand: ParsableCommand {
         if let found = KSConfigLocator.find(cwd: cwd, fm: fm) {
             return found
         }
-        throw ValidationError("Could not find Kalsae.json (use --config to override).")
+        throw ValidationError("Could not find kalsae.json (use --config to override).")
     }
 
     private func loadConfig(configURL: URL) throws -> KSConfig {
@@ -1298,7 +1488,7 @@ struct BuildCommand: ParsableCommand {
         return report.didMutate
     }
 
-    /// `Kalsae.json`에서 패키징에 필요한 메타데이터만 파싱한다.
+    /// `kalsae.json`에서 패키징에 필요한 메타데이터만 파싱한다.
     /// `KalsaeCore.KSConfig`를 재사용하여 스키마가 런타임 로더와
     /// 동기화된 상태를 유지한다 — 수동 CLI 파서와
     /// 엔진 관점 사이의 관점 차이가 없다.

@@ -1,11 +1,11 @@
-/// 스토어 배포 빌드용 메타데이터(`Kalsae.json` 의 `distribution` 섹션).
+/// 스토어 배포 빌드용 메타데이터(`kalsae.json` 의 `distribution` 섹션).
 ///
 /// 본 섹션이 생략되면 `KSDistributionConfig.default` 가 사용되며,
 /// 그 경우 빌드는 일반 개발 산출물(`KSDistributionTarget.developer`)로
 /// 수행된다.
 ///
 /// CLI 의 `--store` 플래그가 본 섹션의 `target` 값을 덮어쓴다. 즉
-/// `Kalsae.json` 은 권장 기본값을, `--store` 는 1회성 오버라이드를
+/// `kalsae.json` 은 권장 기본값을, `--store` 는 1회성 오버라이드를
 /// 담당한다. 양쪽 모두 미지정이면 `developer`.
 import Foundation
 

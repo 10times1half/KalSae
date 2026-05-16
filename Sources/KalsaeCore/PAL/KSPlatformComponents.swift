@@ -19,6 +19,7 @@ public struct KSPlatformComponents: Sendable {
     public var accelerators: (any KSAcceleratorBackend)?
     public var autostart: (any KSAutostartBackend)?
     public var deepLink: (any KSDeepLinkBackend)?
+    public var credentials: (any KSCredentialBackend)?
 
     public init(
         windows: any KSWindowBackend,
@@ -30,7 +31,8 @@ public struct KSPlatformComponents: Sendable {
         clipboard: (any KSClipboardBackend)? = nil,
         accelerators: (any KSAcceleratorBackend)? = nil,
         autostart: (any KSAutostartBackend)? = nil,
-        deepLink: (any KSDeepLinkBackend)? = nil
+        deepLink: (any KSDeepLinkBackend)? = nil,
+        credentials: (any KSCredentialBackend)? = nil
     ) {
         self.windows = windows
         self.dialogs = dialogs
@@ -42,6 +44,7 @@ public struct KSPlatformComponents: Sendable {
         self.accelerators = accelerators
         self.autostart = autostart
         self.deepLink = deepLink
+        self.credentials = credentials
     }
 }
 
@@ -64,4 +67,5 @@ extension KSPlatformComponentsProvider {
     public var accelerators: (any KSAcceleratorBackend)? { components.accelerators }
     public var autostart: (any KSAutostartBackend)? { components.autostart }
     public var deepLink: (any KSDeepLinkBackend)? { components.deepLink }
+    public var credentials: (any KSCredentialBackend)? { components.credentials }
 }

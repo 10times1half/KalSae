@@ -6,6 +6,11 @@ let package = Package(
     // SwiftPM의 `platforms:`는 Apple 플랫폼 최소 버전만 선언한다.
     // Windows 10 1809+ 와 Linux (GTK4 + WebKitGTK 6.0)는 자동 지원되며,
     // 이 줄은 그 두 OS에서의 빌드를 제한하지 않는다.
+    //
+    // iOS / Android 빌드는 `kalsae build --ios` 또는 `kalsae build --android`
+    // 를 사용한다. iOS는 UIKit `@main` 진입점이, Android는 Activity 호스트가
+    // 별도로 필요하다 — `Samples/KalsaeIOSSample/`, `Samples/KalsaeAndroidSample/`
+    // 참고.
     platforms: [
         .macOS(.v14),
         .iOS(.v16),

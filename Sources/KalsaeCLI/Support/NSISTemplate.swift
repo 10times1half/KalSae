@@ -1,6 +1,6 @@
 /// NSIS 인스톨러 스크립트(.nsi) 렌더러.
 ///
-/// `KSPackager.run()` 산출 디렉터리(`<App>.exe`, `Kalsae.json`, `Resources/`,
+/// `KSPackager.run()` 산출 디렉터리(`<App>.exe`, `kalsae.json`, `Resources/`,
 /// `kalsae.runtime.json`, 옵션 `*.ico`, evergreen bootstrapper)를 시작 메뉴 +
 /// 데스크톱 바로가기 + uninstaller가 있는 인스톨러로 묶는다.
 ///

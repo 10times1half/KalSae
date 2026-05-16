@@ -51,14 +51,37 @@ public enum KSBuildPlan {
             return URL(fileURLWithPath: distOverride, relativeTo: cwd)
                 .standardizedFileURL
         }
-        // `frontendDist` 가 `..` 세그먼트를 포함할 수 있으므로 (예: 템플릿 기본값
-        // `"../../../dist"` — kalsae.json 은 `Sources/<NAME>/Resources/` 에 있고
-        // vite outDir 은 프로젝트 루트의 `dist/`) standardize 로 `..` 를 collapse
-        // 해야 한다. Windows 의 `contentsOfDirectory` 는 `..` 가 그대로 남은 URL 에서
-        // 빈 결과를 돌려줘 "dist empty" 오진을 일으킨다.
-        return configURL.deletingLastPathComponent()
+        // `frontendDist` 는 일반적으로 kalsae.json 디렉터리 기준 상대 경로지만,
+        // SwiftPM 템플릿은 kalsae.json 을 `Sources/<NAME>/Resources/` 에 두므로
+        // 이 경우 *프로젝트 루트* 기준으로 해석한다. 즉:
+        //
+        //   <root>/Sources/<NAME>/Resources/kalsae.json + "dist"
+        //     → <root>/dist
+        //
+        // 이 자동 보정 덕분에 새 템플릿은 `frontendDist: "dist"` 를 그대로 쓸 수 있다.
+        let baseDir = configDirForFrontendDist(configURL: configURL)
+        return baseDir
             .appendingPathComponent(config.build.frontendDist)
             .standardizedFileURL
+    }
+
+    /// `frontendDist` 가 해석되는 기준 디렉터리. configURL 이
+    /// `.../Sources/<NAME>/Resources/kalsae.json` 형태이면 프로젝트 루트
+    /// (`.../`) 를 반환하고, 그 외에는 configURL 의 상위 디렉터리를 반환한다.
+    private static func configDirForFrontendDist(configURL: URL) -> URL {
+        let dir = configURL.deletingLastPathComponent()
+        // 패턴: */Sources/*/Resources
+        let comps = dir.pathComponents
+        if comps.count >= 4,
+            comps[comps.count - 1] == "Resources",
+            comps[comps.count - 3] == "Sources"
+        {
+            return dir
+                .deletingLastPathComponent()  // strip Resources
+                .deletingLastPathComponent()  // strip <NAME>
+                .deletingLastPathComponent()  // strip Sources
+        }
+        return dir
     }
 
     public static func validateFrontendDist(
@@ -141,20 +164,18 @@ public struct KSDevPlan: Sendable {
 
 // MARK: - 설정 파일 위치 탐색
 
-/// `kalsae.json` / `Kalsae.json` 을 찾는다. 우선순위:
-/// 1. `cwd/Kalsae.json`
-/// 2. `cwd/kalsae.json`
-/// 3. `cwd/Sources/<*>/Resources/{Kalsae,kalsae}.json`
+/// `kalsae.json` 을 찾는다. 우선순위:
+/// 1. `cwd/kalsae.json`
+/// 2. `cwd/Sources/<*>/Resources/kalsae.json`
 ///
-/// (3) 은 `kalsae new` 가 `Sources/<NAME>/Resources/` 에만
+/// (2) 는 `kalsae new` 가 `Sources/<NAME>/Resources/` 에만
 /// `kalsae.json` 을 쓰는 기본 동작과 호환을 위해 추가된 fallback.
 public enum KSConfigLocator {
+    public static let fileName = "kalsae.json"
+
     public static func find(cwd: URL, fm: FileManager = .default) -> URL? {
-        let names = ["Kalsae.json", "kalsae.json"]
-        for n in names {
-            let candidate = cwd.appendingPathComponent(n)
-            if fm.fileExists(atPath: candidate.path) { return candidate }
-        }
+        let candidate = cwd.appendingPathComponent(Self.fileName)
+        if fm.fileExists(atPath: candidate.path) { return candidate }
         let sources = cwd.appendingPathComponent("Sources")
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: sources.path, isDirectory: &isDir),
@@ -173,10 +194,8 @@ public enum KSConfigLocator {
         // 다중 타겟 시 결정적 결과를 위해 정렬.
         for entry in entries.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             let resources = entry.appendingPathComponent("Resources")
-            for n in names {
-                let candidate = resources.appendingPathComponent(n)
-                if fm.fileExists(atPath: candidate.path) { return candidate }
-            }
+            let nested = resources.appendingPathComponent(Self.fileName)
+            if fm.fileExists(atPath: nested.path) { return nested }
         }
         return nil
     }

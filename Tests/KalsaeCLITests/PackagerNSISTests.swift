@@ -18,7 +18,7 @@ struct PackagerNSISTests {
             to: root.appendingPathComponent("Demo.exe"),
             atomically: false, encoding: .utf8)
         try "{}".write(
-            to: root.appendingPathComponent("Kalsae.json"),
+            to: root.appendingPathComponent("kalsae.json"),
             atomically: false, encoding: .utf8)
         try fm.createDirectory(
             at: root.appendingPathComponent("Resources"),

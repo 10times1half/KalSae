@@ -133,7 +133,7 @@ public enum KSBundleAnalyzer {
         let hasSourceMaps = allFiles.contains { $0.ext == "map" }
         if hasSourceMaps {
             suggestions.append(
-                "Enable `stripSourceMaps` in Kalsae.json build config to remove .map files during packaging.")
+                "Enable `stripSourceMaps` in kalsae.json build config to remove .map files during packaging.")
         }
 
         let jsFiles = allFiles.filter { $0.ext == "js" || $0.ext == "mjs" }

@@ -5,12 +5,12 @@ import Testing
 
 @Suite("KSNotificationScope")
 struct KSNotificationScopeTests {
-    @Test("Defaults permit all three operations")
-    func defaultsPermitAll() {
+    @Test("Defaults deny all three operations (0.4.0↑)")
+    func defaultsDenyAll() {
         let scope = KSNotificationScope()
-        #expect(scope.post)
-        #expect(scope.cancel)
-        #expect(scope.requestPermission)
+        #expect(!scope.post)
+        #expect(!scope.cancel)
+        #expect(!scope.requestPermission)
     }
 
     @Test("Decodes from JSON with explicit denials")
@@ -22,12 +22,12 @@ struct KSNotificationScopeTests {
         #expect(!scope.requestPermission)
     }
 
-    @Test("Missing keys fall back to safe defaults")
+    @Test("Missing keys fall back to safe defaults (deny-all)")
     func missingKeysUseDefaults() throws {
         let scope = try JSONDecoder().decode(KSNotificationScope.self, from: Data("{}".utf8))
-        #expect(scope.post)
-        #expect(scope.cancel)
-        #expect(scope.requestPermission)
+        #expect(!scope.post)
+        #expect(!scope.cancel)
+        #expect(!scope.requestPermission)
     }
 
     @Test("Embedded notifications field round-trips inside KSSecurityConfig")
@@ -48,12 +48,12 @@ struct KSNotificationScopeTests {
         #expect(sec.notifications.requestPermission)
     }
 
-    @Test("Missing notifications key on security config falls back to defaults")
+    @Test("Missing notifications key on security config falls back to defaults (deny-all)")
     func missingNotificationsKey() throws {
         let json = #"{"csp": "x"}"#
         let sec = try JSONDecoder().decode(KSSecurityConfig.self, from: Data(json.utf8))
-        #expect(sec.notifications.post)
-        #expect(sec.notifications.cancel)
-        #expect(sec.notifications.requestPermission)
+        #expect(!sec.notifications.post)
+        #expect(!sec.notifications.cancel)
+        #expect(!sec.notifications.requestPermission)
     }
 }

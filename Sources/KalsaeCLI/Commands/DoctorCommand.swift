@@ -4,17 +4,17 @@ import KalsaeCLICore
 import KalsaeCore
 
 /// `kalsae doctor` — 로컬 개발 환경(Kalsae CLI, Swift, Node.js 등)과
-/// 프로젝트 구성(Kalsae.json)의 이상 유무를 진단한다.
+/// 프로젝트 구성(kalsae.json)의 이상 유무를 진단한다.
 struct DoctorCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "doctor",
         abstract: "Check common environment and project issues."
     )
 
-    /// Kalsae.json 경로 재정의 (기본값: ./Kalsae.json 또는 ./kalsae.json).
+    /// kalsae.json 경로 재정의 (기본값: ./kalsae.json).
     @Option(
         name: .long,
-        help: "Override path to Kalsae.json (default: ./Kalsae.json or ./kalsae.json).")
+        help: "Override path to kalsae.json (default: ./kalsae.json).")
     var config: String? = nil
 
     /// 경고가 하나라도 있으면 종료 코드를 0이 아닌 값으로 반환한다.

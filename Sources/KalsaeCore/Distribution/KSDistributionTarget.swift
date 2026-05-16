@@ -1,6 +1,6 @@
 /// 앱의 최종 배포 대상을 나타낸다.
 ///
-/// `kalsae build --store <value>` 와 `Kalsae.json` 의 `distribution.target`
+/// `kalsae build --store <value>` 와 `kalsae.json` 의 `distribution.target`
 /// 양쪽에서 동일하게 사용된다. 런타임에는 `KSApp.distributionTarget`로
 /// 노출되어, PAL 백엔드가 스토어 정책에 맞춰 일부 기능을 no-op으로
 /// 분기할 때 참조한다.
@@ -14,6 +14,29 @@
 /// | `macAppStore`     | `.pkg` (productbuild)              | macOS 4~5개 백엔드가 no-op 분기 |
 /// | `microsoftStore`  | `.msix` (signtool)                 | Windows 2개 백엔드가 no-op 분기 |
 /// | `iosAppStore`     | `.ipa` (xcodebuild + altool)       | iOS stub 백엔드 채움 |
+///
+/// ---
+///
+/// ### 향후 구현자 메모 — Updater Android/iOS 가드 (RFC-001 / RFC-007 §3.5)
+///
+/// 본 enum 자체는 자체 업데이트(self-update)와 직접 관련이 없으나, 향후
+/// `Sources/KalsaePluginUpdater/` 모듈이 도입될 때 **반드시** 다음 정책을
+/// 코드로 강제해야 한다(현재는 RFC 문서로만 기록되어 있다):
+///
+/// - `makeInstaller(for:)` 는 `os(Android)` / `os(iOS)` 에서 즉시
+///   `KSError(code: .unsupportedPlatform, ...)` 을 throw 한다. 모바일 앱
+///   업데이트는 Play Store / App Store 메커니즘에 위임한다.
+/// - IPC 표(RFC-007 §3.5.2): `kalsae.updater.check` 만 허용,
+///   `kalsae.updater.download` / `kalsae.updater.install` 은 거부,
+///   `kalsae.updater.cancel` 은 no-op.
+/// - 매니페스트의 `playstore` / `appstore` installerType 값은 자체 설치가
+///   아니라 "스토어로 이동" 안내용 메타데이터로만 기능한다.
+///
+/// 누락 시 정책 위반(스토어 거절 사유) 및 보안 회귀로 이어지므로,
+/// `KalsaePluginUpdater` 의 PR 에서 위 가드 + Android 테스트를 반드시
+/// 함께 추가할 것. 본 메모는 [Docs/RFCs/RFC-001-updater.md](../../../Docs/RFCs/RFC-001-updater.md)
+/// §비목표 와 [Docs/RFCs/RFC-007-android-release.md](../../../Docs/RFCs/RFC-007-android-release.md)
+/// §3.5 의 단일 발견지점(single point of discovery)으로 기능한다.
 import Foundation
 
 public enum KSDistributionTarget: String, Codable, Sendable, CaseIterable {

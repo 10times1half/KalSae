@@ -316,5 +316,5 @@ JS Thread (WebView)          UI Thread (MainActor)      Background Thread
 
 - **Frame size limit**: 16 MB maximum inbound frame size.
 - **Rate limiting**: Token-bucket algorithm, configurable via `security.commandRateLimit`.
-- **Allowlist**: Only commands in `security.commandAllowlist` are dispatchable.
+- **Allowlist**: Only user commands listed in `security.commandAllowlist` are dispatchable (`nil`/`[]` = deny-all since 0.4.0). Built-in `__ks.*` commands are registered via `registerInternal()` and bypass this gate (they are governed by their own scopes such as `shell`, `notifications`, `fs`, `http`).
 - **XSS protection**: JSON strings are escaped for `</script>` and Unicode line/paragraph separators.

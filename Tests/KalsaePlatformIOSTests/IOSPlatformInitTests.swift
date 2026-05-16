@@ -39,5 +39,21 @@
                 Issue.record("Echo command must succeed: \(e)")
             }
         }
+
+        // Phase iOS-Stable §1.3: run() 은 영구 미지원 (Android 패턴 동일).
+        // UIApplication 라이프사이클은 호스트가 통제하므로 KSApp.boot() +
+        // KSiOSDemoHost 사용을 강제한다.
+        @Test("run() always throws unsupportedPlatform")
+        func runThrowsUnsupportedPlatform() async {
+            let platform = KSiOSPlatform()
+            do {
+                try await platform.run(config: KSConfig()) { _ in }
+                Issue.record("KSiOSPlatform.run should throw unsupportedPlatform")
+            } catch let e {
+                #expect(
+                    e.code == .unsupportedPlatform,
+                    "Expected unsupportedPlatform, got \(e.code)")
+            }
+        }
     }
 #endif

@@ -199,8 +199,8 @@ struct ProjectTemplateTests {
             "App.swift must not pass `configURL.deletingLastPathComponent()` as resourceRoot — that breaks packaged builds, got: \(app)"
         )
         #expect(
-            app.contains("KSApp.boot("),
-            "App.swift should still call KSApp.boot, got: \(app)")
+            app.contains("KSApp.bootFromBundle("),
+            "App.swift should still call KSApp.bootFromBundle, got: \(app)")
     }
 
     // MARK: - 프론트엔드 프리셋
@@ -216,8 +216,8 @@ struct ProjectTemplateTests {
         let json = try String(contentsOf: jsonURL, encoding: .utf8)
 
         #expect(
-            json.contains("\"frontendDist\": \"../../../dist\""),
-            "react preset should set frontendDist to project-root dist")
+            json.contains("\"frontendDist\": \"dist\""),
+            "react preset should set frontendDist to dist (resolved at runtime against project root)")
         #expect(json.contains("localhost:5173"), "react preset should set devServerURL")
         #expect(json.contains("\"devCommand\": \"pnpm run dev\""), "react preset should include pnpm dev command")
         #expect(json.contains("\"buildCommand\": \"pnpm run build\""), "react preset should include pnpm build command")
@@ -399,14 +399,14 @@ struct KSConfigLocatorTests {
         #expect(lower == "kalsae.json")
     }
 
-    @Test("Prefers root-level Kalsae.json over Resources fallback")
+    @Test("Prefers root-level kalsae.json over Resources fallback")
     func prefersRootLevel() throws {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("Kalsae-locator-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tmp) }
 
-        let rootCfg = tmp.appendingPathComponent("Kalsae.json")
+        let rootCfg = tmp.appendingPathComponent("kalsae.json")
         try "{}".write(to: rootCfg, atomically: false, encoding: .utf8)
 
         // Sources/X/Resources/kalsae.json 도 만든다.
@@ -417,7 +417,7 @@ struct KSConfigLocatorTests {
             atomically: false, encoding: .utf8)
 
         let found = KSConfigLocator.find(cwd: tmp)
-        #expect(found?.path == rootCfg.path, "Root-level Kalsae.json should win")
+        #expect(found?.path == rootCfg.path, "Root-level kalsae.json should win")
     }
 
     @Test("Returns nil when no config exists")

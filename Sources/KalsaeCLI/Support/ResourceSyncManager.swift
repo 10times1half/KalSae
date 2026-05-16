@@ -64,7 +64,7 @@ public enum KSResourceSyncManager {
     public static func sync(
         distURL: URL,
         resourcesURL: URL,
-        preserved: Set<String> = ["kalsae.json", "Kalsae.json"],
+        preserved: Set<String> = ["kalsae.json"],
         fm: FileManager = .default
     ) throws -> KSResourceSyncReport {
         var isDir: ObjCBool = false

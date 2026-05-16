@@ -21,11 +21,11 @@ img-src 'self' data:; connect-src 'self' ks://localhost
 
 ### 2. Command Allowlist
 
-The `security.commandAllowlist` field in `Kalsae.json` restricts which `@KSCommand` functions the JavaScript frontend can invoke.
+The `security.commandAllowlist` field in `Kalsae.json` restricts which user `@KSCommand` functions the JavaScript frontend can invoke. **Built-in `__ks.*` commands always bypass this gate** — they are registered via `registerInternal()` and are governed instead by their dedicated scopes (`shell`, `notifications`, `fs`, `http`, `downloads`, `navigation`, `secret`).
 
-- `nil` (default): All registered commands are callable from JS.
-- `[]` (empty): No commands are callable — the app is purely a static web UI.
+- `nil` (omitted) or `[]` (empty): **deny-all for user commands.** The app may still call `__ks.*` built-ins per their scopes. This is the default since 0.4.0.
 - `["cmd1", "cmd2"]`: Only `cmd1` and `cmd2` are dispatchable.
+- `commandAllowlistAll: true` (separate field): legacy escape hatch — allow every registered user command. **Not recommended for production**; prefer enumerating commands explicitly.
 
 The allowlist is applied **before** user command registration in the boot sequence, ensuring no race condition where a command could be invoked before the allowlist is set.
 
@@ -213,10 +213,31 @@ config path. To prevent supply-chain hijacking in shipped apps, this override
 is honoured **only in debug builds** (`#if DEBUG`). Release binaries always
 load the bundled `kalsae.json` and ignore the environment variable / argument.
 
+### 16. Credential Store (`security.secret`)
+
+토큰·API 키 등 민감한 비밀은 OS의 보안 자격증명 보관소(macOS/iOS:
+Keychain, Windows: Credential Manager, Linux: libsecret Secret Service
+— GNOME Keyring / KWallet / KeePassXC)에 위임 저장한다. JS는
+`window.__KS_.secret.{set,get,getString,delete,list}` 로 호출하며 다음
+게이트를 통과해야 한다:
+
+| Field | Default | 효과 |
+|---|---|---|
+| `enabled` | `false` | 전체 켜기/끄기 |
+| `allowedServices` | `[]` | 사용 가능한 `service` 화이트리스트 (`"*"` = 모두) |
+| `maxSecretBytes` | `65536` | 값 크기 상한 |
+| `allowList` | `true` | `list()` 허용 여부 |
+| `allowDelete` | `true` | `delete()` 허용 여부 |
+
+호스트는 `service` 앞에 `KSConfig.app.identifier`를 자동으로 prefix하여
+다른 앱의 저장소를 침범하지 못한다. wire payload는 base64로 인코딩되고
+JS API는 `Uint8Array`/문자열 양쪽을 받는다. 지원 플랫폼: macOS, iOS,
+Windows. Linux/Android는 현재 `unsupportedPlatform` 을 던진다.
+
 ## Security Checklist for Production Apps
 
 - [ ] Set a restrictive `csp` that only allows origins your app needs.
-- [ ] Configure `commandAllowlist` to enumerate exactly which commands JS should call.
+- [ ] Configure `commandAllowlist` to enumerate exactly which user commands JS should call. Do **not** rely on `commandAllowlistAll: true` in production.
 - [ ] Set `fs.allow` and `fs.deny` to scope file access to the minimum required paths.
 - [ ] Review `shell.openExternalSchemes` — consider restricting to only needed schemes.
 - [ ] Set `http.allow` to list only trusted API endpoints.

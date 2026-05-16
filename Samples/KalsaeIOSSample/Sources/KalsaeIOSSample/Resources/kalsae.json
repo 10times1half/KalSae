@@ -1,0 +1,31 @@
+{
+  "app": {
+    "name": "Kalsae iOS Sample",
+    "version": "0.1.0",
+    "identifier": "io.kalsae.iossample"
+  },
+  "build": {
+    "frontendDist": "frontend",
+    "devServerURL": "about:blank"
+  },
+  "windows": [
+    {
+      "label": "main",
+      "title": "Kalsae iOS Sample",
+      "width": 390,
+      "height": 844,
+      "resizable": true,
+      "decorations": true,
+      "transparent": false,
+      "fullscreen": false,
+      "visible": true,
+      "center": true,
+      "alwaysOnTop": false
+    }
+  ],
+  "security": {
+    "csp": "default-src 'self' ks://app; script-src 'self' ks://app 'unsafe-inline'; style-src 'self' ks://app 'unsafe-inline'; img-src 'self' ks://app data:; connect-src 'self' ks://app",
+    "commandAllowlist": ["greet"],
+    "devtools": false
+  }
+}

@@ -3,7 +3,7 @@ import Testing
 
 @testable import KalsaeCore
 
-// MARK: - Kalsae.json: capabilities 블록 디코딩
+// MARK: - kalsae.json: capabilities 블록 디코딩
 
 @Suite("KSConfig — capabilities decoding")
 struct KSCapabilitiesDecodingTests {

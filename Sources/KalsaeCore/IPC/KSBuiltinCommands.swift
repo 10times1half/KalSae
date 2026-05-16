@@ -96,6 +96,9 @@ public enum KSBuiltinCommands {
         navigationScope: KSNavigationScope = .init(),
         autostart: (any KSAutostartBackend)? = nil,
         deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+        credentials: (any KSCredentialBackend)? = nil,
+        secretScope: KSSecretScope = .init(),
+        bundleId: String = "",
         appDirectory: URL? = nil
     ) async {
         let resolver = WindowResolver(windows: windows, mainWindow: mainWindow)
@@ -148,6 +151,13 @@ public enum KSBuiltinCommands {
         if let deepLink {
             await registerDeepLinkCommands(
                 into: registry, backend: deepLink.backend, config: deepLink.config)
+        }
+        if let credentials {
+            await registerSecretCommands(
+                into: registry,
+                backend: credentials,
+                scope: secretScope,
+                bundleId: bundleId)
         }
     }
 
@@ -254,7 +264,10 @@ public enum KSBuiltinCommands {
         _ name: String,
         handler: @Sendable @escaping (In) async throws(KSError) -> Out
     ) async {
-        await registry.register(name) { data -> Result<Data, KSError> in
+        // 모든 내장 (`__ks.*`) 명령은 사용자 `commandAllowlist` 검사를 우회하도록
+        // `registerInternal` 로 등록한다. security scope / rate limit / policy
+        // evaluator 는 정상 평가된다.
+        await registry.registerInternal(name) { data -> Result<Data, KSError> in
             let input: In
             do {
                 input = try JSONDecoder().decode(
@@ -291,7 +304,8 @@ public enum KSBuiltinCommands {
         _ name: String,
         handler: @Sendable @escaping (Empty) async throws(KSError) -> Out
     ) async {
-        await registry.register(name) { _ -> Result<Data, KSError> in
+        // `register<In, Out>` 와 동일한 이유로 internal 경로 사용.
+        await registry.registerInternal(name) { _ -> Result<Data, KSError> in
             do {
                 let out = try await handler(Empty())
                 let encoded = try JSONEncoder().encode(out)
@@ -367,6 +381,10 @@ func kalsaeOSName() -> String {
         return "macos"
     #elseif os(Linux)
         return "linux"
+    #elseif os(iOS)
+        return "ios"
+    #elseif os(Android)
+        return "android"
     #else
         return "unknown"
     #endif

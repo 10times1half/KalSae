@@ -111,6 +111,27 @@
         KSAndroidJNIRegistry.shared.deliver(requestId, json: json)
     }
 
+    /// `KSAndroidMenuBackend` 가 발급한 컨텍스트 메뉴 요청에 대해 Kotlin 호스트
+    /// 가 결과를 되돌릴 때 호출한다. 사용자가 PopupMenu 의 항목을 선택하면
+    /// `selectedIndex` 는 평면화된 액션 목록의 인덱스(0-based)이고, 취소되었
+    /// 거나 영역 밖을 탭한 경우 `-1` 을 전달한다.
+    ///
+    /// Kotlin 호출 예:
+    /// ```kotlin
+    /// KalsaeJNI.onContextMenuResult(requestId, popupMenuSelectedIndex)
+    /// ```
+    ///
+    /// 내부 구현 노트: 다이얼로그와 같은 `KSAndroidJNIRegistry` 풀을 재사용
+    /// 하기 위해 `{"selectedIndex": N}` 형식의 JSON 으로 어댑팅한다.
+    @_cdecl("KS_android_on_context_menu_result")
+    public func KS_android_on_context_menu_result(
+        _ requestId: Int32,
+        _ selectedIndex: Int32
+    ) {
+        let json = "{\"selectedIndex\":\(selectedIndex)}"
+        KSAndroidJNIRegistry.shared.deliver(requestId, json: json)
+    }
+
     // MARK: - 시작
 
     /// 기본 단일 윈도우 설정으로 Kalsae Android 런타임을 초기화한다.
@@ -133,11 +154,12 @@
                 registry: platform.commandRegistry)
             _sharedPlatform = platform
             _sharedHost = host
-            // Kotlin 측 register* 진입점으로 등록된 훅이 있으면 다이얼로그
-            // 백엔드의 기본 핸들러가 자동으로 그쪽을 호출하도록 위임한다.
-            // 등록된 훅이 없으면 백엔드는 기존처럼 `unsupportedPlatform` 을
-            // throw 한다(설치 전 호출 보호).
+            // Kotlin 측 register* 진입점으로 등록된 훅이 있으면 다이얼로그/
+            // 메뉴 백엔드의 기본 핸들러가 자동으로 그쪽을 호출하도록 위임한다.
+            // 등록된 훅이 없으면 다이얼로그 백엔드는 `unsupportedPlatform` 을
+            // throw 하고, 메뉴 백엔드는 조용히 종료된다(default-deny).
             platform.installJNIDialogDefaults()
+            platform.installJNIMenuDefaults()
             Task { @MainActor in
                 wireJNIHooks(into: host.webViewHost)
             }

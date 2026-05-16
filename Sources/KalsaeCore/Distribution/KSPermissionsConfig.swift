@@ -1,6 +1,6 @@
 /// 사용자에게 명시적 동의를 요구하는 OS 권한(Camera, Microphone 등).
 ///
-/// `Kalsae.json` 의 `permissions` 섹션에 들어가며, 스토어 빌드 시
+/// `kalsae.json` 의 `permissions` 섹션에 들어가며, 스토어 빌드 시
 /// 다음 산출물을 자동 생성하는 단일 진실 공급원(source of truth)이다.
 ///
 /// - macOS / iOS: `Info.plist` 의 `NS*UsageDescription` 키 + sandbox

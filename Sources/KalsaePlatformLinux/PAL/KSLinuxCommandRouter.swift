@@ -4,7 +4,7 @@
     /// Routes menu and tray command clicks to subscribers on Linux.
     /// Mirrors `KSMacCommandRouter` / `KSWindowsCommandRouter`.
     @MainActor
-    public final class KSLinuxCommandRouter {
+    public final class KSLinuxCommandRouter: KSMenuCommandRouting {
         public static let shared = KSLinuxCommandRouter()
 
         public typealias Sink = @MainActor (_ command: String, _ itemID: String?) -> Void

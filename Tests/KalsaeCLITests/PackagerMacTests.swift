@@ -28,7 +28,7 @@ struct PackagerMacTests {
         // Fake executable, config, dist
         let exe = work.appendingPathComponent("Demo")
         try writeText("#!/bin/sh\necho hi\n", to: exe)
-        let config = work.appendingPathComponent("Kalsae.json")
+        let config = work.appendingPathComponent("kalsae.json")
         try writeText("{\"app\":{\"name\":\"Demo\"}}", to: config)
         let dist = work.appendingPathComponent("dist")
         try fm.createDirectory(at: dist, withIntermediateDirectories: true)
@@ -54,7 +54,7 @@ struct PackagerMacTests {
         #expect(bundle.lastPathComponent == "Demo.app")
         #expect(fm.fileExists(atPath: bundle.appendingPathComponent("Contents/MacOS/Demo").path))
         #expect(fm.fileExists(atPath: bundle.appendingPathComponent("Contents/Info.plist").path))
-        #expect(fm.fileExists(atPath: bundle.appendingPathComponent("Contents/Resources/Kalsae.json").path))
+        #expect(fm.fileExists(atPath: bundle.appendingPathComponent("Contents/Resources/kalsae.json").path))
         #expect(fm.fileExists(atPath: bundle.appendingPathComponent("Contents/Resources/index.html").path))
 
         let plist = try String(
@@ -75,7 +75,7 @@ struct PackagerMacTests {
 
         let exe = work.appendingPathComponent("App")
         try writeText("x", to: exe)
-        let config = work.appendingPathComponent("Kalsae.json")
+        let config = work.appendingPathComponent("kalsae.json")
         try writeText("{}", to: config)
 
         let output = work.appendingPathComponent("out")
@@ -104,7 +104,7 @@ struct PackagerMacTests {
 
         let exe = work.appendingPathComponent("App")
         try writeText("x", to: exe)
-        let config = work.appendingPathComponent("Kalsae.json")
+        let config = work.appendingPathComponent("kalsae.json")
         try writeText("{}", to: config)
 
         let output = work.appendingPathComponent("out")

@@ -44,6 +44,7 @@ jobs:
           #     libgtk-4-dev
           #     libwebkitgtk-6.0-dev
           #     libsoup-3.0-dev
+          #     libsecret-1-dev
           #     xdg-utils
           #     libnotify-bin
 

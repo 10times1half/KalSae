@@ -58,7 +58,7 @@ selected at compile time via `#if os(...)`.
 
 1. **Config Loading** — `KSConfigLoader.load(from:)` reads `Kalsae.json` and validates the schema. In debug builds, `KALSAE_CONFIG` / `--kalsae-config` may override the path; release builds ignore the override.
 2. **Window Selection** — `KSBootOrchestrator.selectWindow(from:label:)` picks the target window config.
-3. **Command Registry** — `KSCommandRegistry` is created; `commandAllowlist` and `commandRateLimit` are applied **before** user registration.
+3. **Command Registry** — `KSCommandRegistry` is created; `commandAllowlist` / `commandAllowlistAll` and `commandRateLimit` are applied **before** user registration. Built-in `__ks.*` commands use `registerInternal()` and bypass the allowlist (governed by their dedicated scopes instead).
 4. **User Registration** — The `configure` closure runs, registering `@KSCommand` handlers.
 5. **Platform Host** — `KSDemoHostFactory.makeHost(...)` returns an `any KSDemoHost` (e.g. `KSWindowsDemoHost`, `KSMacDemoHost`, `KSLinuxDemoHost`, `KSiOSDemoHost`, `KSAndroidDemoHost`).
 6. **Serving Mode** — `KSBootOrchestrator.decideServingMode()` chooses how frontend assets are served:
@@ -90,7 +90,7 @@ JS (WebView)                    Swift (Host)
 - **Wire format**: `KSIPCMessage` with `kind` (invoke/response/event), `id`, `name`, `payload`, `isError`.
 - **Inbound frame limit**: 16 MB (`KSIPCBridgeCore.maxFrameBytes`).
 - **Rate limiting**: Token-bucket algorithm (`KSCommandRateLimit`), configurable per-app.
-- **Allowlist**: `commandAllowlist` in `KSSecurityConfig` restricts which commands JS can invoke.
+- **Allowlist**: `commandAllowlist` in `KSSecurityConfig` restricts which user commands JS can invoke (`nil`/`[]` = deny-all since 0.4.0; built-in `__ks.*` commands always bypass).
 - **Threading**: `Task.detached` for dispatch, `MainHop` closure for UI-thread response posting.
 
 ## Security Model
@@ -98,7 +98,7 @@ JS (WebView)                    Swift (Host)
 | Layer | Mechanism |
 |---|---|
 | **CSP** | Default: `default-src 'self'; script-src 'self'; ...` — injected as both HTTP header (Windows) and meta tag (all platforms) |
-| **Command Allowlist** | Only explicitly listed `@KSCommand` names are dispatchable from JS |
+| **Command Allowlist** | Only explicitly listed user `@KSCommand` names are dispatchable from JS. `nil`/`[]` = deny-all (default since 0.4.0). Built-in `__ks.*` commands bypass and are governed by their own scopes. |
 | **Filesystem** | `KSFSScope` with allow/deny glob patterns, `$APP`/`$HOME`/`$DOCS`/`$TEMP` placeholders |
 | **Shell** | `KSShellScope` — `openExternalSchemes`, `showItemInFolder`, `moveToTrash` independently controlled |
 | **HTTP Fetch** | `KSHTTPScope` — origin allowlist for `__ks.http.fetch` |
@@ -131,9 +131,9 @@ Each platform implements the `KSPlatform` protocol, which exposes:
 |---|---|---|
 | Windows | ✅ Stable | Full PAL, WebView2, WinRT notifications, Registry autostart, WM_COPYDATA single instance |
 | macOS | ✅ Stable | Full PAL, WKWebView, UserNotifications, SMAppService autostart, NSRunningApp single instance |
-| Linux | 🔶 Preview | Full PAL, WebKitGTK 6.0, D-Bus SNI tray, Unix socket single instance |
+| Linux | ✅ Stable | Full PAL, WebKitGTK 6.0, D-Bus SNI tray, Unix socket single instance |
 | iOS | 🔶 Preview | PAL implemented, `run()` path available; security handlers wired in `runOnMain()` |
-| Android | 🔶 Preview | PAL implemented, `run()` is permanently unsupported (JVM Activity-controlled lifecycle) — use `KSApp.boot()` + `KSAndroidDemoHost` from a Kotlin host |
+| Android | ✅ Stable | Full PAL via JNI bridge: dialogs, context menus via `PopupMenu` routed through `KSAndroidCommandRouter`, notifications, clipboard, deep link. `installAppMenu`/`installWindowMenu` are intentional no-ops (no persistent menubar in single-Activity model). `run()` is permanently unsupported (JVM Activity-controlled lifecycle) — use `KSApp.boot()` + `KSAndroidDemoHost` from a Kotlin host |
 
 ## Key Design Decisions
 

@@ -15,7 +15,7 @@
 ///           WebAppInterface.kt
 ///         res/values/{strings,themes}.xml
 ///         res/mipmap-{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png
-///         assets/  (Kalsae.json + frontend dist)
+///         assets/  (kalsae.json + frontend dist)
 ///         jniLibs/arm64-v8a/libKalsaePlatformAndroid.so
 ///       build.gradle.kts
 ///       proguard-rules.pro
@@ -43,7 +43,7 @@ extension KSPackager {
     public struct AndroidOptions: Sendable {
         /// 빌드된 네이티브 라이브러리 경로 (`libKalsaePlatformAndroid.so`).
         public var nativeLibPath: URL
-        /// 원본 Kalsae.json 경로 (assets/ 로 복사 + rewrite).
+        /// 원본 kalsae.json 경로 (assets/ 로 복사 + rewrite).
         public var configPath: URL
         /// 프론트엔드 dist 디렉터리. nil 이거나 미존재 시 경고만.
         public var frontendDist: URL?
@@ -59,7 +59,7 @@ extension KSPackager {
         public var architecture: AndroidArchitecture
         /// 아이콘 PNG. 1024 권장. nil 이면 placeholder (단색 PNG) 생성.
         public var iconPath: URL?
-        /// 딥 링크 스킴들 (Kalsae.json `deepLink.schemes`). 비어있으면 intent-filter 생략.
+        /// 딥 링크 스키들 (kalsae.json `deepLink.schemes`). 비어있으면 intent-filter 생략.
         public var deepLinkSchemes: [String]
         /// 패키징 시 소스맵(.map) 등 자동 제거.
         public var stripSourceMaps: Bool
@@ -204,8 +204,8 @@ extension KSPackager {
             sourceIcon: opts.iconPath, resRoot: srcMain.appendingPathComponent("res"), fm: fm)
         warnings.append(contentsOf: iconWarnings)
 
-        // 7) Kalsae.json (assets/) — frontendDist 를 "." 으로 rewrite + devtools off
-        let dstConfig = assets.appendingPathComponent("Kalsae.json")
+        // 7) kalsae.json (assets/) — frontendDist 를 "." 으로 rewrite + devtools off
+        let dstConfig = assets.appendingPathComponent("kalsae.json")
         try safeCopy(from: opts.configPath, to: dstConfig, fm: fm)
         try rewritePackagedConfig(at: dstConfig, frontendDist: ".", disableDevtools: true)
 

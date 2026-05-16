@@ -1,7 +1,7 @@
-/// PE 리소스(RCDATA `KSAS_CONFIG_JSON`)에 임베드된 `Kalsae.json` 데이터를 로드한다.
+/// PE 리소스(RCDATA `KSAS_CONFIG_JSON`)에 임베드된 `kalsae.json` 데이터를 로드한다.
 ///
-/// `kalsae build --standalone` 의 후처리가 `Kalsae.json` 을 EXE 안에 RCDATA 로
-/// 함께 주입하면, 외부 `Kalsae.json` 이 없어도 단일 EXE 만으로 부팅이 가능하다.
+/// `kalsae build --standalone` 의 후처리가 `kalsae.json` 을 EXE 안에 RCDATA 로
+/// 함께 주입하면, 외부 `kalsae.json` 이 없어도 단일 EXE 만으로 부팅이 가능하다.
 /// `KSApp.boot(configURL:)` 가 외부 파일 로드 실패 시 이 헬퍼로 폴백한다.
 ///
 /// Windows 외 호스트에서는 항상 `nil`.

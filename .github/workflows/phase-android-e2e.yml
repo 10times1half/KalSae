@@ -1,0 +1,212 @@
+name: Phase Android E2E (RFC-007 Phase 6.3)
+
+# Cross-compile KalsaePlatformAndroid → emit Gradle project via `kalsae build
+# --android` → assemble a real `app-debug.apk` via Gradle. Verifies the full
+# Android cross-compile + packaging pipeline end-to-end.
+#
+# Scope (per RFC-007 / plan.md decisions):
+#   - Ubuntu runner only (Swift Android SDK is not officially supported on
+#     Windows hosts — Linux/macOS only; Windows developers use WSL).
+#   - Linux CI pins Swift 6.2 RELEASE (the latest version with a matching
+#     Swift Android SDK), independent of Windows CI's 6.3.1 pin.
+#   - Builds an unsigned debug APK only. Release signing / Play Store upload
+#     belong to RFC-008.
+#   - Emulator boot, `adb install`, and instrumented tests are intentionally
+#     out of scope (cost / flakiness vs. value).
+#
+# Sister workflow: `.github/workflows/android-packager.yml` verifies the
+# host-OS-agnostic emitter logic via unit tests against a stub `.so`. This
+# workflow verifies the real cross-compile + Gradle assembly path.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/KalsaePlatformAndroid/**'
+      - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
+      - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Sources/KalsaeDemo/Resources/kalsae.json'
+      - 'Sources/KalsaeDemo/Resources/**'
+      - 'Samples/KalsaeAndroidSample/**'
+      - 'Package.swift'
+      - 'Scripts/cross-compile-android.sh'
+      - '.github/workflows/phase-android-e2e.yml'
+  pull_request:
+    paths:
+      - 'Sources/KalsaePlatformAndroid/**'
+      - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
+      - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Sources/KalsaeDemo/Resources/kalsae.json'
+      - 'Sources/KalsaeDemo/Resources/**'
+      - 'Samples/KalsaeAndroidSample/**'
+      - 'Package.swift'
+      - 'Scripts/cross-compile-android.sh'
+      - '.github/workflows/phase-android-e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Pinned versions — bump together. See `Scripts/cross-compile-android.sh`
+  # for the local-dev parity script that mirrors these.
+  SWIFT_VERSION: '6.2'
+  ANDROID_SDK_ARTIFACT: 'https://github.com/swift-android-sdk/swift-android-sdk/releases/download/6.2/swift-6.2-RELEASE-android-0.1.artifactbundle.tar.gz'
+  ANDROID_SDK_CHECKSUM: 'ca7e09f09a591b6a661a39134aaf53b1b59d5e3a193b271ab1f20effdfc6e88e'
+  # The Swift Android SDK 6.2 bundles destination triples for android24..28.
+  # Use android28 (matches upstream README examples). `minSdk` in the emitted
+  # AndroidManifest.xml is controlled separately via `--android-min-sdk`.
+  ANDROID_SDK_TRIPLE: 'aarch64-unknown-linux-android28'
+
+jobs:
+  e2e:
+    name: Cross-Compile + APK Assembly
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift ${{ env.SWIFT_VERSION }}
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Show Swift version
+        run: swift --version
+
+      - name: Setup Java (Temurin 17, for Gradle)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android command-line tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0'
+
+      - name: Cache SwiftPM build artifacts
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-android-e2e-${{ env.SWIFT_VERSION }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-android-e2e-${{ env.SWIFT_VERSION }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-android-e2e-gradle-${{ hashFiles('Samples/KalsaeAndroidSample/**/*.gradle*', 'Samples/KalsaeAndroidSample/**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-android-e2e-gradle-
+
+      - name: Install Swift Android SDK
+        run: |
+          set -euo pipefail
+          # `swift sdk install` downloads the artifactbundle and verifies the checksum.
+          swift sdk install "${ANDROID_SDK_ARTIFACT}" --checksum "${ANDROID_SDK_CHECKSUM}"
+          # Run the SDK's bundled setup script — uses GitHub-provided NDK.
+          # `ANDROID_NDK_LATEST_HOME` is set by the runner image (currently NDK 27+).
+          if [ -n "${ANDROID_NDK_LATEST_HOME:-}" ]; then
+            export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          fi
+          # Locate the installed bundle (resolves to ~/.swiftpm/swift-sdks/<bundle>).
+          BUNDLE=$(swift sdk list | grep -oE 'swift-6\.2[^[:space:]]*' | head -n1 || true)
+          if [ -z "$BUNDLE" ]; then
+            echo "::error::Swift Android SDK 6.2 not found after install. swift sdk list output:"
+            swift sdk list
+            exit 1
+          fi
+          SETUP="$HOME/.swiftpm/swift-sdks/swift-6.2-RELEASE-android-0.1.artifactbundle/swift-android/scripts/setup-android-sdk.sh"
+          if [ ! -f "$SETUP" ]; then
+            echo "::warning::Setup script not at expected path; searching..."
+            SETUP=$(find "$HOME/.swiftpm/swift-sdks" -name 'setup-android-sdk.sh' | head -n1)
+          fi
+          if [ -n "$SETUP" ] && [ -f "$SETUP" ]; then
+            echo "Running NDK setup: $SETUP"
+            "$SETUP" || echo "::warning::setup-android-sdk.sh exited non-zero (may be OK if NDK already configured)"
+          else
+            echo "::warning::setup-android-sdk.sh not found; relying on default config."
+          fi
+          swift sdk list
+
+      - name: Cross-compile KalsaePlatformAndroid (.so)
+        run: |
+          set -euo pipefail
+          swift build \
+            --swift-sdk "${ANDROID_SDK_TRIPLE}" \
+            --product KalsaePlatformAndroid \
+            -c release
+          # Locate the produced .so (path varies by Swift version).
+          SO=$(find .build -name 'libKalsaePlatformAndroid.so' -path '*release*' | head -n1)
+          if [ -z "$SO" ]; then
+            echo "::error::libKalsaePlatformAndroid.so not produced. .build tree:"
+            find .build -name '*.so' || true
+            exit 1
+          fi
+          echo "ANDROID_NATIVE_LIB=$SO" >> "$GITHUB_ENV"
+          ls -lh "$SO"
+          file "$SO"
+
+      - name: Build kalsae CLI (host toolchain)
+        run: swift build --product kalsae -c release
+
+      - name: Emit Android Gradle project (`kalsae build --android`)
+        run: |
+          set -euo pipefail
+          OUTPUT_DIR="${PWD}/dist/android-e2e"
+          .build/release/kalsae build \
+            --android \
+            --android-native-lib "${ANDROID_NATIVE_LIB}" \
+            --android-min-sdk 28 \
+            --android-target-sdk 35 \
+            --config Sources/KalsaeDemo/Resources/kalsae.json \
+            --dist Sources/KalsaeDemo/Resources \
+            --output "${OUTPUT_DIR}"
+          echo "EMIT_DIR=${OUTPUT_DIR}" >> "$GITHUB_ENV"
+          ls -la "${OUTPUT_DIR}"
+
+      - name: Generate Gradle wrapper
+        working-directory: ${{ env.EMIT_DIR }}
+        run: |
+          set -euo pipefail
+          gradle wrapper --gradle-version 8.10 --distribution-type bin
+
+      - name: Assemble debug APK
+        working-directory: ${{ env.EMIT_DIR }}
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Locate and inspect APK
+        working-directory: ${{ env.EMIT_DIR }}
+        run: |
+          set -euo pipefail
+          APK=$(find . -name 'app-debug.apk' -path '*outputs*' | head -n1)
+          if [ -z "$APK" ]; then
+            echo "::error::app-debug.apk not produced."
+            find . -name '*.apk' || true
+            exit 1
+          fi
+          echo "APK_PATH=${EMIT_DIR}/${APK#./}" >> "$GITHUB_ENV"
+          ls -lh "$APK"
+          # `aapt` lives under the chosen build-tools.
+          AAPT=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}" -name aapt -path '*build-tools*35.0.0*' | head -n1)
+          if [ -n "$AAPT" ]; then
+            "$AAPT" dump badging "$APK" | head -n 20
+          fi
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kalsae-android-debug-apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          retention-days: 14

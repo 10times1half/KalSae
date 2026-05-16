@@ -56,6 +56,14 @@ public protocol KSPlatform: Sendable {
     /// 플랫폼에서는 `nil`이다.
     var deepLink: (any KSDeepLinkBackend)? { get }
 
+    /// OS 보안 저장소(자격증명/토큰/API 키) 백엔드. 보안 저장소가 없거나
+    /// 비활성화된 환경(headless WSL 등)에서는 `nil`일 수 있다.
+    var credentials: (any KSCredentialBackend)? { get }
+
+    /// 메뉴 / 트레이 명령 라우터. 5개 플랫폼이 모두 노출한다. 메뉴 백엔드를
+    /// 제공하지 않는 테스트용 더미 플랫폼은 `nil`을 반환할 수 있다.
+    @MainActor var menuCommandRouter: (any KSMenuCommandRouting)? { get }
+
     /// 네이티브 애플리케이션을 부트스트랩하고(NSApplication / Win32 메시지 루프 /
     /// GApplication) 종료될 때까지 실행한다.
     ///
@@ -80,4 +88,10 @@ extension KSPlatform {
 
     /// 기본값: 플랫폼이 딥 링크 백엔드를 노출하지 않는다.
     public var deepLink: (any KSDeepLinkBackend)? { nil }
+
+    /// 기본값: 플랫폼이 보안 저장소 백엔드를 노출하지 않는다.
+    public var credentials: (any KSCredentialBackend)? { nil }
+
+    /// 기본값: 플랫폼이 메뉴 명령 라우터를 노출하지 않는다.
+    @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? { nil }
 }

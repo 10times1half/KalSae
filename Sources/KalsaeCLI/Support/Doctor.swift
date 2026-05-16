@@ -108,16 +108,14 @@ public enum KSDoctor {
         if let path = options.configPath {
             return URL(fileURLWithPath: path, relativeTo: options.projectRoot)
         }
-        let upper = options.projectRoot.appendingPathComponent("Kalsae.json")
-        if fm.fileExists(atPath: upper.path) { return upper }
-        let lower = options.projectRoot.appendingPathComponent("kalsae.json")
-        if fm.fileExists(atPath: lower.path) { return lower }
+        let candidate = options.projectRoot.appendingPathComponent("kalsae.json")
+        if fm.fileExists(atPath: candidate.path) { return candidate }
         return nil
     }
 
     private static func loadConfigIfPresent(configURL: URL?, report: inout KSDoctorReport) -> KSConfig? {
         guard let configURL else {
-            report.warnings.append("Config file not found. Expected Kalsae.json or kalsae.json in project root.")
+            report.warnings.append("Config file not found. Expected kalsae.json in project root.")
             return nil
         }
         do {

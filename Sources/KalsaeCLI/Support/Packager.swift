@@ -52,7 +52,7 @@ public enum KSPackager {
     public struct Options: Sendable {
         public var projectRoot: URL
         public var executablePath: URL  // Built .exe to copy into bundle
-        public var configPath: URL  // Kalsae.json
+        public var configPath: URL  // kalsae.json
         public var frontendDist: URL?  // Dist directory (nil for dev-server only)
         public var output: URL  // dist/<name>-<version>-<arch>/
         public var appName: String
@@ -152,7 +152,7 @@ public enum KSPackager {
                 s += "\n  \(mark(st.loaderEmbedded)) WebView2Loader.dll (RCDATA)"
                 s += "\n  \(mark(st.manifestEmbedded)) RT_MANIFEST"
                 s += "\n  \(mark(st.assetsEmbedded)) frontend assets (RCDATA)"
-                s += "\n  \(mark(st.configEmbedded)) Kalsae.json (RCDATA)"
+                s += "\n  \(mark(st.configEmbedded)) kalsae.json (RCDATA)"
                 s += "\n  \(mark(st.runtimeEmbedded)) kalsae.runtime.json (RCDATA)"
                 s += "\n  \(mark(st.iconEmbedded)) icon"
                 s += "\n  \(mark(st.versionEmbedded)) version metadata"
@@ -215,12 +215,12 @@ public enum KSPackager {
             atomically: false,
             encoding: .utf8)
 
-        // 3. Kalsae.json ?ㅼ젙.
-        let dstConfig = opts.output.appendingPathComponent("Kalsae.json")
+        // 3. kalsae.json 설정.
+        let dstConfig = opts.output.appendingPathComponent("kalsae.json")
         try safeCopy(from: opts.configPath, to: dstConfig, fm: fm)
 
         // 3.1 패키저는 frontend dist 를 항상 `Resources/` 로 복사하므로 소스
-        // `Kalsae.json` 의 `build.frontendDist`(예: "dist")가 그대로 남으면
+        // `kalsae.json` 의 `build.frontendDist`(예: "dist")가 그대로 남으면
         // 런타임에 `<exeDir>/<frontendDist>` 가 존재하지 않아 KSApp.boot 가 dev 서버
         // fallback 으로 빠지면서 흰 화면 + chrome-error 가 된다. release 빌드에서는
         // `security.devtools` 도 안전하게 끈다(KSSecurityConfig.devtools 문서화 동작).
@@ -251,7 +251,7 @@ public enum KSPackager {
             // dst 가 이미 있으면 KSResourceSyncManager.sync 로 size+mtime 비교 증분
             // 복사. 최소 빌드(dst 미존재)는 기존 전체 복사로 폴백.
             // `preserved: []` — 패키저 output 의 `Resources/` 에는 dist 의 frontend
-            // 자산만 들어가고 (`Kalsae.json` 은 step 3 에서 output 루트에 별도 배치),
+            // 자산만 들어가고 (`kalsae.json` 은 step 3 에서 output 루트에 별도 배치),
             // sentinel 보존 대상이 없다.
             if outputInsideDist {
                 // dist 안에 output 이 있을 때는 entry-by-entry 복사로 output
@@ -468,7 +468,7 @@ public enum KSPackager {
                 }
             }
 
-            // 외부 `Kalsae.json` 제거 — RCDATA 임베드가 성공했고 현재 저장소
+            // 외부 `kalsae.json` 제거 — RCDATA 임베드가 성공했고 현재 저장소
             // 런타임은 `KSEmbeddedConfigLoader` (RCDATA 폴백) 를 가지고 있으므로
             // 디스크 사이드카 없이도 부팅이 가능하다. 사이드카가 남아 있으면
             // SwiftPM `<exe>_*.resources/` 의 잔존 `kalsae.json` 과 함께
@@ -481,7 +481,7 @@ public enum KSPackager {
                     try fm.removeItem(at: dstConfig)
                 } catch {
                     warnings.append(
-                        "Standalone post-process: embedded config succeeded but failed to remove external Kalsae.json: \(error)"
+                        "Standalone post-process: embedded config succeeded but failed to remove external kalsae.json: \(error)"
                     )
                 }
             }
@@ -557,10 +557,10 @@ public enum KSPackager {
 
     // MARK: - Packaged config rewrite
 
-    /// 패키저가 만든 `Kalsae.json` 을 패키지 산출물 레이아웃에 맞게 다시 쓴다.
+    /// 패키저가 만든 `kalsae.json` 을 패키지 산출물 레이아웃에 맞게 다시 쓴다.
     ///
     /// 패키저는 frontend dist 폴더를 자체 명명 규칙(`Resources/` for Windows/Linux,
-    /// inline for macOS)으로 복사하기 때문에, 원본 `Kalsae.json` 의
+    /// inline for macOS)으로 복사하기 때문에, 원본 `kalsae.json` 의
     /// `build.frontendDist` 가 다른 이름(예: "dist")으로 남아 있으면 런타임의
     /// `<configDir>/<frontendDist>` 해석이 빗나가 dev 서버 fallback → 흰 화면이 된다.
     ///
@@ -604,7 +604,7 @@ public enum KSPackager {
         let out = try JSONSerialization.data(
             withJSONObject: root,
             options: [.prettyPrinted, .sortedKeys])
-        // Windows: Defender / Search Indexer가 방금 copy 된 Kalsae.json 핸들을
+        // Windows: Defender / Search Indexer가 방금 copy 된 kalsae.json 핸들을
         // 잠시 들고 있을 수 있어 atomic write가 ERROR_SHARING_VIOLATION (Win32 32)
         // 으로 실패할 수 있다. 짧은 retry 로 대응한다 (AGENTS.md §6).
         try retryingTransient {

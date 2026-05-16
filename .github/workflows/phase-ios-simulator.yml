@@ -1,0 +1,80 @@
+name: iOS Packager (Phase iOS-Stable)
+
+# Phase iOS-Stable §5 — host-OS-agnostic iOS .app bundle emitter.
+# Verifies that `KSPackager.runIOS` (pure Swift string emission) builds and
+# that the emitted .app bundle is structurally valid (Info.plist, sanitized
+# Kalsae.json, frontend at root).
+#
+# Real iOS Simulator install / device deploy is NOT run here — the test
+# harness uses a stub Mach-O placeholder. End-to-end Simulator boot is
+# deferred to a follow-up workflow once macos-14 runners are re-enabled.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Sources/KalsaeCLI/Support/PackagerIOS.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Sources/KalsaePlatformIOS/**'
+      - 'Tests/KalsaeCLITests/PackagerIOSAppBundleTests.swift'
+      - 'Tests/KalsaePlatformIOSTests/**'
+      - '.github/workflows/phase-ios-simulator.yml'
+  pull_request:
+    paths:
+      - 'Sources/KalsaeCLI/Support/PackagerIOS.swift'
+      - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
+      - 'Sources/KalsaePlatformIOS/**'
+      - 'Tests/KalsaeCLITests/PackagerIOSAppBundleTests.swift'
+      - 'Tests/KalsaePlatformIOSTests/**'
+      - '.github/workflows/phase-ios-simulator.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  packager:
+    name: iOS Packager (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            setup-swift: true
+            swift-version: swift-6.3.1-release
+            swift-build: 6.3.1-RELEASE
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        if: matrix.setup-swift
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: ${{ matrix.swift-version }}
+          swift-build: ${{ matrix.swift-build }}
+
+      - name: Show Swift Version
+        run: swift --version
+
+      - name: Fetch WebView2 SDK (Windows host only — needed to build kalsae CLI)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./Scripts/fetch-webview2.ps1
+
+      - name: Cache SwiftPM Build
+        uses: actions/cache@v5
+        with:
+          path: .build
+          key: ${{ runner.os }}-ios-packager-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-ios-packager-
+
+      - name: Build kalsae CLI
+        run: swift build --product kalsae -Xswiftc -warnings-as-errors
+
+      - name: Run PackagerIOSAppBundle unit tests
+        run: swift test --filter "PackagerIOSAppBundle" -Xswiftc -warnings-as-errors

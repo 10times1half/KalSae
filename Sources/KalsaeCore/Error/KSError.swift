@@ -170,14 +170,14 @@ extension KSError {
     public static func configNotFound(_ path: String) -> KSError {
         KSError(
             code: .configNotFound,
-            message: "Kalsae.json not found at \(path)",
+            message: "kalsae.json not found at \(path)",
             data: .string(path))
     }
 
     public static func configInvalid(_ reason: String) -> KSError {
         KSError(
             code: .configInvalid,
-            message: "Invalid Kalsae.json: \(reason)")
+            message: "Invalid kalsae.json: \(reason)")
     }
 
     public static func unsupportedPlatform(_ detail: String = "") -> KSError {

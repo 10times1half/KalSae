@@ -128,7 +128,7 @@
 
     /// Routes menu clicks back to subscribers.
     @MainActor
-    public final class KSMacCommandRouter {
+    public final class KSMacCommandRouter: KSMenuCommandRouting {
         public static let shared = KSMacCommandRouter()
 
         public typealias Sink = @MainActor (_ command: String, _ itemID: String?) -> Void

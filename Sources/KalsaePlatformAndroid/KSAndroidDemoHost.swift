@@ -130,6 +130,9 @@
             navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+            credentials: (any KSCredentialBackend)? = nil,
+            secretScope: KSSecretScope = .init(),
+            bundleId: String = "",
             appDirectory: URL? = nil,
             // RFC-008 #2.11: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
             // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
@@ -164,6 +167,9 @@
                 navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
+                credentials: credentials,
+                secretScope: secretScope,
+                bundleId: bundleId,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         }
 

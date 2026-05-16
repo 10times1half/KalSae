@@ -386,6 +386,9 @@
             navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+            credentials: (any KSCredentialBackend)? = nil,
+            secretScope: KSSecretScope = .init(),
+            bundleId: String = "",
             appDirectory: URL? = nil,
             // RFC-008 #2.15: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
             // 있도록 한다. 이 매개변수가 nil이면 새 인스턴스를 만들어
@@ -435,6 +438,9 @@
                 navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
+                credentials: credentials,
+                secretScope: secretScope,
+                bundleId: bundleId,
                 appDirectory: appDirectory)
 
             // `__ks.window.startDrag`는 RFC-005에서 KSBuiltinCommands+Window가

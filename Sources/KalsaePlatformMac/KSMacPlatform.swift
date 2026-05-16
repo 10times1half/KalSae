@@ -26,7 +26,12 @@
                 clipboard: _clipboard,
                 accelerators: _accelerators,
                 autostart: _autostart,
-                deepLink: _deepLink)
+                deepLink: _deepLink,
+                credentials: KSMacCredentialBackend())
+        }
+
+        @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? {
+            KSMacCommandRouter.shared
         }
 
         private let _windows: KSMacWindowBackend
@@ -74,7 +79,9 @@
 
             let window = try KSBootOrchestrator.selectWindow(from: config)
 
-            await commandRegistry.setAllowlist(config.security.commandAllowlist)
+            // default-deny: nil/[] 모두 deny-all 로 강제. 내장 `__ks.*` 명령은
+            // `registerInternal` 경로로 게이트를 우회한다.
+            await commandRegistry.setAllowlist(config.security.commandAllowlist ?? [])
             await commandRegistry.setRateLimit(config.security.commandRateLimit)
 
             let stateStore: KSWindowStateStore? =
@@ -164,18 +171,8 @@
             }
 
             KSMacCommandRouter.shared.clear()
-            KSMacCommandRouter.shared.subscribe { [weak host] command, itemID in
-                guard let host else { return }
-                struct MenuClickPayload: Encodable {
-                    let command: String
-                    let itemID: String?
-                }
-                try? host.emit("menu", payload: MenuClickPayload(command: command, itemID: itemID))
-                let registry = self.commandRegistry
-                Task.detached {
-                    _ = await registry.dispatch(name: command, args: Data("{}".utf8))
-                }
-            }
+            // 메뉴/트레이 클릭 sink 설치는 `KSApp.subscribeMenuRouter(app:)`가
+            // `KSMenuCommandRouting` 프로토콜을 통해 일괄 수행한다.
 
             let autostartBackend: (any KSAutostartBackend)? = config.autostart.map { _ in
                 KSMacAutostartBackend()
@@ -381,6 +378,9 @@
             navigationScope: KSNavigationScope = .init(),
             autostart: (any KSAutostartBackend)? = nil,
             deepLink: (backend: any KSDeepLinkBackend, config: KSDeepLinkConfig)? = nil,
+            credentials: (any KSCredentialBackend)? = nil,
+            secretScope: KSSecretScope = .init(),
+            bundleId: String = "",
             appDirectory: URL? = nil,
             // RFC-008 #2.13: 플랫폼이 공유 백엔드 인스턴스를 주입할 수
             // 있도록 한다. nil이면 기존 동작 유지(새 인스턴스 생성).
@@ -410,6 +410,9 @@
                 navigationScope: navigationScope,
                 autostart: autostart,
                 deepLink: deepLink,
+                credentials: credentials,
+                secretScope: secretScope,
+                bundleId: bundleId,
                 appDirectory: appDirectory ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath))
         }
 

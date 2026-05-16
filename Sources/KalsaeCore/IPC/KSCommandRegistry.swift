@@ -13,6 +13,9 @@ public actor KSCommandRegistry {
     private var allowlist: Set<String>? = nil
     private var policyEvaluator: KSPolicyEvaluator? = nil
     private var metadata: [String: KSCommandMetadata] = [:]
+    /// 내장 (`__ks.*`) 명령처럼 `commandAllowlist` 검사를 우회해야 하는 핸들러
+    /// 이름의 집합. security scope / rate limit / policy evaluator 는 정상 적용된다.
+    private var internalNames: Set<String> = []
 
     // MARK: - Token-bucket rate limiter
 
@@ -70,6 +73,14 @@ public actor KSCommandRegistry {
         handlers[name] = handler
     }
 
+    /// 내장(`__ks.*`) 명령용 등록 경로. 일반 `register` 와 동일하지만
+    /// 해당 이름을 internal 집합에 추가해 `commandAllowlist` 검사를 우회한다.
+    /// 보안 scope / rate limit / policy evaluator 는 그대로 적용된다.
+    public func registerInternal(_ name: String, handler: @escaping Handler) {
+        handlers[name] = handler
+        internalNames.insert(name)
+    }
+
     /// `@KSCommand(permission:)` 매크로가 호출하는 정적 메타데이터 설정자.
     /// 런타임 동작에는 영향을 주지 않으며 (capability 게이팅은
     /// `KSPolicyEvaluator`가 수행), 도구(검증기/바인딩 생성기)에서
@@ -95,6 +106,7 @@ public actor KSCommandRegistry {
     /// 핸들러를 제거한다.
     public func unregister(_ name: String) {
         handlers.removeValue(forKey: name)
+        internalNames.remove(name)
     }
 
     /// 등록된 모든 명령의 이름을 반환한다.
@@ -114,7 +126,9 @@ public actor KSCommandRegistry {
         if !isExempt && !consumeToken() {
             return .failure(.rateLimited(name))
         }
-        if let allowlist, !allowlist.contains(name) {
+        // 내장 명령(`registerInternal` 로 등록)은 사용자 정의 allowlist 검사를 우회한다.
+        // 보안 scope / policy evaluator 는 아래에서 그대로 평가된다.
+        if !internalNames.contains(name), let allowlist, !allowlist.contains(name) {
             return .failure(.commandNotAllowed(name))
         }
         if let evaluator = policyEvaluator {

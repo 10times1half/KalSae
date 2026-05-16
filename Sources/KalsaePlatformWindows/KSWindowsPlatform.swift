@@ -29,7 +29,12 @@
                 clipboard: _clipboard,
                 accelerators: _accelerators,
                 autostart: _autostart,
-                deepLink: _deepLink)
+                deepLink: _deepLink,
+                credentials: KSWindowsCredentialBackend())
+        }
+
+        @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? {
+            KSWindowsCommandRouter.shared
         }
 
         private let _windows: KSWindowsWindowBackend
@@ -72,7 +77,9 @@
         ) async throws(KSError) -> Int32 {
             let window = try KSBootOrchestrator.selectWindow(from: config)
 
-            await commandRegistry.setAllowlist(config.security.commandAllowlist)
+            // default-deny: nil/[] 모두 deny-all 로 강제. 내장 `__ks.*` 명령은
+            // `registerInternal` 경로로 게이트를 우회한다.
+            await commandRegistry.setAllowlist(config.security.commandAllowlist ?? [])
             await commandRegistry.setRateLimit(config.security.commandRateLimit)
 
             let stateStore: KSWindowStateStore? =

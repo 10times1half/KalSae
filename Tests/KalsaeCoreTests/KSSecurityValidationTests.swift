@@ -169,7 +169,7 @@ struct KSNotificationIconPathValidationTests {
         await KSBuiltinCommands.registerNotificationCommands(
             into: registry,
             notifications: backend,
-            scope: KSNotificationScope(),
+            scope: KSNotificationScope(post: true, cancel: true, requestPermission: true),
             fsScope: fsScope,
             fsCtx: makeFsCtx())
         return (registry, backend)

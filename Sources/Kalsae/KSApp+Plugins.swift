@@ -40,15 +40,17 @@ extension KSApp {
         }
 
         // 3. commandAllowlist 경고
-        if let allowlist = config.security.commandAllowlist {
-            let allowedSet = Set(allowlist)
+        //    nil/[] 모두 deny-all. 플러그인이 명시적으로 allowlist 에 등재되지
+        //    않으면 호출이 차단된다.
+        do {
+            let allowedSet = Set(config.security.commandAllowlist ?? [])
             for plugin in plugins {
                 let ns = type(of: plugin).namespace
                 let covered = allowedSet.contains(where: { $0.hasPrefix(ns) || $0 == ns })
                 if !covered {
                     let log = KSLog.logger("kalsae.plugin")
                     log.warning(
-                        "plugin '\(ns)' commands may be blocked: no matching entry in commandAllowlist. Add '\(ns).*' or specific command names to kalsae.json security.commandAllowlist."
+                        "plugin '\(ns)' commands will be blocked: no matching entry in commandAllowlist. Add '\(ns).*' or specific command names to kalsae.json security.commandAllowlist."
                     )
                 }
             }

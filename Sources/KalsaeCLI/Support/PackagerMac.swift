@@ -139,10 +139,10 @@ extension KSPackager {
         try renderMacInfoPlist(opts: opts).write(
             to: plistURL, atomically: true, encoding: .utf8)
 
-        // 3) Kalsae.json
+        // 3) kalsae.json
         // Windows CI에서 Defender 가 방금 만든 파일을 스캔하느라 발생하는
         // ERROR_SHARING_VIOLATION (Win32 32) 회피용 retry copy.
-        let dstConfig = resources.appendingPathComponent("Kalsae.json")
+        let dstConfig = resources.appendingPathComponent("kalsae.json")
         try KSPackager.safeCopy(from: opts.configPath, to: dstConfig, fm: fm)
 
         // 3.1 macOS 는 dist 내용을 Contents/Resources/ 에 인라인 복사한다.
@@ -314,7 +314,7 @@ extension KSPackager {
             try xml.write(to: entitlementsURL, atomically: true, encoding: .utf8)
         } else {
             warnings.append(
-                "--store mas needs either --entitlements <path> or a Kalsae.json "
+                "--store mas needs either --entitlements <path> or a kalsae.json "
                     + "with distribution.target=\"mac-app-store\". Skipping MAS pipeline.")
             return
         }
