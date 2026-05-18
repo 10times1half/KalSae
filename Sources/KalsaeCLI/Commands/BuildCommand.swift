@@ -90,6 +90,20 @@ struct BuildCommand: ParsableCommand {
     var syncResources: Bool = true
 
     @Flag(
+        name: .long,
+        help:
+            "Skip orphan removal during resource sync. Useful for one-off debugging when you have local files in Resources/ that are not in dist."
+    )
+    var noPrune: Bool = false
+
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Windows: stage Swift runtime + VC redist DLLs (swift_Concurrency.dll, swiftCore.dll, vcruntime140.dll, …) next to the built executable so it runs on machines without a Swift toolchain. Default ON. On non-Windows hosts this is a no-op."
+    )
+    var stageRuntime: Bool = true
+
+    @Flag(
         name: .long, inversion: .prefixedNo,
         help: "Automatically run Scripts/fetch-webview2.ps1 when WebView2 SDK is missing (Windows only).")
     var autoFetchWebView2: Bool = true
@@ -459,6 +473,10 @@ struct BuildCommand: ParsableCommand {
                 print("✔  Build complete (\(configuration))")
                 try timer.measure("post-build") {
                     try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+                    if stageRuntime {
+                        _ = try KSWindowsRuntimeStager.stageBuildOutputs(
+                            cwd: cwd, configuration: configuration)
+                    }
                 }
             }
         } else {
@@ -536,6 +554,10 @@ struct BuildCommand: ParsableCommand {
 
             try timer.measure("post-build") {
                 try KSWebView2Provisioner.stageLoaderDLL(cwd: cwd, configuration: configuration)
+                if stageRuntime {
+                    _ = try KSWindowsRuntimeStager.stageBuildOutputs(
+                        cwd: cwd, configuration: configuration)
+                }
             }
         }
 
@@ -1467,6 +1489,8 @@ struct BuildCommand: ParsableCommand {
         let report = try KSResourceSyncManager.sync(
             distURL: distURL,
             resourcesURL: resourcesURL,
+            preservedGlobs: config.build.preserveResources,
+            noPrune: noPrune,
             fm: fm)
 
         if let reason = report.skippedReason {
@@ -1486,6 +1510,23 @@ struct BuildCommand: ParsableCommand {
                 "📁  Synced frontend dist to \(resourcesURL.path) "
                     + "(\(report.copied) copied, \(report.skipped) unchanged, "
                     + "\(report.removed) removed)")
+        }
+        if !report.removedRels.isEmpty {
+            // 최초 N 개만 보여주어 출력 길이를 제한한다 — 사용자가 의도치 않게
+            // 잃은 파일이 있는지 확인하는 디버그 보조 정보.
+            let preview = report.removedRels.prefix(10)
+            for rel in preview {
+                print("    - \(rel)")
+            }
+            let remaining = report.removedRels.count - preview.count
+            if remaining > 0 {
+                print("    … and \(remaining) more")
+            }
+        }
+        if noPrune {
+            print(
+                "ℹ  --no-prune: orphan removal skipped. "
+                    + "Re-run without --no-prune to clean stale resources.")
         }
         if report.failed > 0 {
             print("⚠  Failed to copy \(report.failed) file(s) during sync.")

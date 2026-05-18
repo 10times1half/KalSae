@@ -203,7 +203,7 @@ extension KSFSScope {
     ///   * `*`  — `/`를 제외한 임의 길이 문자열과 일치.
     ///   * `?`  — `/`가 아닌 단일 문자와 일치.
     /// `pattern` 안의 다른 정규식 메타문자는 이스케이프된다.
-    static func glob(pattern: String, matches input: String) -> Bool {
+    public static func glob(pattern: String, matches input: String) -> Bool {
         var rx = "^"
         var i = pattern.startIndex
         while i < pattern.endIndex {

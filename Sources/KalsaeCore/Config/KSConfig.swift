@@ -135,6 +135,16 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
     /// `kalsae build` 시 번들 분석 리포트를 출력한다.
     /// 기본값은 `true` — 개발자가 번들 구성을 인지하도록 돕는다.
     public var bundleReport: Bool
+    /// `kalsae build` 의 `dist → Sources/<target>/Resources/` 증분 sync 중
+    /// orphan 제거에서 **보존**할 항목들의 glob 패턴 목록.
+    ///
+    /// 사용자가 `Resources/` 에 직접 두는 파일(예: `selectors.json`,
+    /// `scripts/**`) 은 dist 에 없으므로 기본 sync 로직이 orphan 으로 간주해
+    /// 삭제한다. 이 목록에 해당하는 상대 경로(forward-slash)는 보존된다.
+    /// 매칭 규칙은 `KSFSScope.glob` 과 동일 (`**`, `*`, `?`).
+    /// 빈 배열이 기본값이며, `kalsae build --no-prune` 으로 일시적으로
+    /// 모든 orphan 제거를 끌 수도 있다.
+    public var preserveResources: [String]
 
     public init(
         frontendDist: String = "dist",
@@ -143,7 +153,8 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
         buildCommand: String? = nil,
         stripSourceMaps: Bool = true,
         stripExtensions: [String] = [],
-        bundleReport: Bool = true
+        bundleReport: Bool = true,
+        preserveResources: [String] = []
     ) {
         self.frontendDist = frontendDist
         self.devServerURL = devServerURL
@@ -152,6 +163,7 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
         self.stripSourceMaps = stripSourceMaps
         self.stripExtensions = stripExtensions
         self.bundleReport = bundleReport
+        self.preserveResources = preserveResources
     }
 
     // 기본값이 있는 필드들을 JSON에서 생략 가능하도록 custom init을 제공한다.
@@ -165,5 +177,7 @@ public struct KSBuildConfig: Codable, Sendable, Equatable {
         self.stripSourceMaps = try c.decodeIfPresent(Bool.self, forKey: .stripSourceMaps) ?? true
         self.stripExtensions = try c.decodeIfPresent([String].self, forKey: .stripExtensions) ?? []
         self.bundleReport = try c.decodeIfPresent(Bool.self, forKey: .bundleReport) ?? true
+        self.preserveResources =
+            try c.decodeIfPresent([String].self, forKey: .preserveResources) ?? []
     }
 }

@@ -137,4 +137,91 @@ struct ResourceSyncManagerTests {
         let result = KSResourceSyncManager.relativize("/foo/bar", base: "/baz")
         #expect(result == "foo/bar")
     }
+
+    // MARK: - preserveResources (A1)
+
+    @Test("preservedGlobs keeps matching leaf file from being pruned")
+    func preserveGlobsKeepsLeafFile() throws {
+        let dist = uniqueDir("dist")
+        let resources = uniqueDir("res")
+        defer {
+            try? FileManager.default.removeItem(at: dist)
+            try? FileManager.default.removeItem(at: resources)
+        }
+        try FileManager.default.createDirectory(at: dist, withIntermediateDirectories: true)
+        try write("{}", to: resources.appendingPathComponent("selectors.json"))
+        try write("orphan", to: resources.appendingPathComponent("gone.txt"))
+
+        let report = try KSResourceSyncManager.sync(
+            distURL: dist,
+            resourcesURL: resources,
+            preservedGlobs: ["selectors.json"])
+
+        #expect(
+            FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("selectors.json").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("gone.txt").path))
+        #expect(report.removed == 1)
+        #expect(report.removedRels == ["gone.txt"])
+    }
+
+    @Test("preservedGlobs keeps subtree under ** pattern")
+    func preserveGlobsKeepsSubtree() throws {
+        let dist = uniqueDir("dist")
+        let resources = uniqueDir("res")
+        defer {
+            try? FileManager.default.removeItem(at: dist)
+            try? FileManager.default.removeItem(at: resources)
+        }
+        try FileManager.default.createDirectory(at: dist, withIntermediateDirectories: true)
+        try write("//", to: resources.appendingPathComponent("scripts/a.js"))
+        try write("//", to: resources.appendingPathComponent("scripts/sub/b.js"))
+        try write("orphan", to: resources.appendingPathComponent("other.txt"))
+
+        let report = try KSResourceSyncManager.sync(
+            distURL: dist,
+            resourcesURL: resources,
+            preservedGlobs: ["scripts/**"])
+
+        #expect(
+            FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("scripts/a.js").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("scripts/sub/b.js").path))
+        #expect(
+            !FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("other.txt").path))
+        #expect(report.removedRels.contains("other.txt"))
+        #expect(!report.removedRels.contains { $0.hasPrefix("scripts") })
+    }
+
+    @Test("noPrune skips orphan removal entirely")
+    func noPruneSkipsOrphanRemoval() throws {
+        let dist = uniqueDir("dist")
+        let resources = uniqueDir("res")
+        defer {
+            try? FileManager.default.removeItem(at: dist)
+            try? FileManager.default.removeItem(at: resources)
+        }
+        try FileManager.default.createDirectory(at: dist, withIntermediateDirectories: true)
+        try write("orphan-a", to: resources.appendingPathComponent("a.txt"))
+        try write("orphan-b", to: resources.appendingPathComponent("nested/b.txt"))
+
+        let report = try KSResourceSyncManager.sync(
+            distURL: dist,
+            resourcesURL: resources,
+            noPrune: true)
+
+        #expect(report.removed == 0)
+        #expect(report.removedRels.isEmpty)
+        #expect(
+            FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("a.txt").path))
+        #expect(
+            FileManager.default.fileExists(
+                atPath: resources.appendingPathComponent("nested/b.txt").path))
+    }
 }

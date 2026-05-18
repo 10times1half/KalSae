@@ -128,6 +128,16 @@ struct DevCommand: ParsableCommand {
             throw ValidationError(error.description)
         }
 
+        // Swift 런타임(swift_Concurrency.dll 등) + VC 재배포 DLL 을 EXE 옆에
+        // 동봉해 Swift toolchain 이 없는 머신에서도 부팅 가능하게 한다.
+        // 호스트 OS 가 Windows 가 아니면 no-op.
+        do {
+            _ = try KSWindowsRuntimeStager.stageBuildOutputs(cwd: cwd, configuration: "debug")
+        } catch let error as ShellError {
+            // dev 루프를 차단하지 않는다 — 경고만.
+            print("\u{26A0}  Runtime DLL staging skipped: \(error.description)")
+        }
+
         let configURL = resolveConfigURLIfPresent(cwd: cwd, fm: fm)
         let appConfig = try loadConfigIfPresent(configURL)
         let plan = KSDevPlan.make(

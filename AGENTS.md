@@ -46,7 +46,7 @@ swift test --no-parallel
 
 | OS | Required setup |
 |---|---|
-| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); `kalsae build` fetches the WebView2 SDK automatically. For bare `swift build`, run `./Scripts/fetch-webview2.ps1` once to populate `Vendor/WebView2/`, then `./Scripts/stage-webview2-loader.ps1` after every build to copy `WebView2Loader.dll` next to the produced executable (otherwise `LoadLibraryW` fails with `0x8007007E`) |
+| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); `kalsae build` fetches the WebView2 SDK automatically and **also auto-stages Swift runtime DLLs** (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`, MSVC redist, …) next to the produced `.exe` via a pure-Swift PE Import Table walker (`KSWindowsRuntimeStager`). Opt out with `--no-stage-runtime`. `kalsae dev` does the same on every rebuild. For bare `swift build`, run `./Scripts/fetch-webview2.ps1` once to populate `Vendor/WebView2/`, then `./Scripts/stage-webview2-loader.ps1` + `./Scripts/stage-windows-cli-runtime.ps1` after every build (otherwise `LoadLibraryW` fails with `0x8007007E` or `swift_Concurrency.dll not found`) |
 | macOS 14+ | none |
 | Linux | `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libsecret-1-dev` |
 | iOS | Xcode 15+ (Swift 6 toolchain) |

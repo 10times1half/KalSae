@@ -208,6 +208,18 @@ public enum KSPackager {
         // 패키지에 항상 포함시킨다.
         copyLoaderDLL(opts: opts, warnings: &warnings)
 
+        // 1.6) Swift 런타임(swift_Concurrency.dll 등) + VC 재배포 DLL.
+        // 패키지가 진짜 standalone 으로 동작하려면(Swift toolchain 미설치 PC
+        // 에서도 실행되려면) EXE 의 import 테이블에 잡힌 swift*/Foundation*/
+        // vcruntime140* DLL 을 같은 폴더에 동봉해야 한다. PE/COFF 헤더를
+        // 직접 파싱해 PowerShell/dumpbin 의존 없이 staging.
+        do {
+            _ = try KSWindowsRuntimeStager.stage(executable: dstExe, destination: opts.output)
+        } catch {
+            warnings.append("Windows runtime DLL staging failed: \(error). "
+                + "The packaged executable may fail on machines without a Swift toolchain.")
+        }
+
         // 2) Side-by-side manifest (DPI awareness, asInvoker)
         let manifestURL = opts.output.appendingPathComponent("\(exeName).manifest")
         try renderManifest(opts: opts).write(
