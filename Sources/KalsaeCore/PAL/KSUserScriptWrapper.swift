@@ -7,8 +7,6 @@
 ///    훅이 표준화되어 있지 않아, `DOMContentLoaded` 리스너로 시점을 맞춘다.
 /// 3. **예외 격리** — 사용자 스크립트의 throw가 페이지 JS를 중단시키지 않도록
 ///    `try/catch`로 감싼다.
-public import Foundation
-
 public enum KSUserScriptWrapper {
     /// 호스트에 실제로 등록할 최종 JS 문자열을 반환한다.
     /// 본문이 비어 있어도 호출자 측에서 source/path 검증을 마쳤다고 가정한다.

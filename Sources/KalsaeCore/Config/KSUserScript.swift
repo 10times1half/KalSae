@@ -6,8 +6,6 @@
 /// 통과해야 한다(default-deny).
 ///
 /// 메인 월드에서 실행되며 페이지 JS와 동일 컨텍스트를 공유한다.
-public import Foundation
-
 public struct KSUserScript: Sendable, Equatable, Codable {
     /// 제거 식별자. 비어 있으면 `KSApp.addUserScript` 호출 시점에 UUID로 자동 채워진다.
     public var id: String
