@@ -83,14 +83,14 @@
         }
 
         public func post(_ notification: KSNotification) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 self._postResult(notification)
             }
             try result.unwrap()
         }
 
         public func cancel(id: String) async {
-            await MainActor.run {
+            Win32App.runOnUIThreadIsolated {
                 guard let aumid = self.aumid else {
                     // AUMID 미등록: 트레이 버블 폴백은 cancel 불가 (SDK 미지원).
                     return

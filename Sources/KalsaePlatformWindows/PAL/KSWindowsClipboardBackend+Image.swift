@@ -15,7 +15,7 @@
         /// `CF_DIBV5`(우선) 또는 `CF_DIB`을 PNG 바이트로 변환해 돌려준다.
         /// 클립보드에 이미지 포맷이 없으면 `nil`.
         public func readImageImpl() async throws(KSError) -> Data? {
-            let result: Result<Data?, KSError> = await MainActor.run {
+            let result: Result<Data?, KSError> = Win32App.runOnUIThread {
                 guard OpenClipboard(nil) else {
                     return .failure(
                         KSError(
@@ -71,8 +71,8 @@
                     message: "writeImage: PNG payload is empty.")
             }
 
-            // 1) PNG → DIB 변환은 COM 작업이라 MainActor에서.
-            let dibResult: Result<Data, KSError> = await MainActor.run {
+            // 1) PNG → DIB 변환은 COM 작업이라 UI 스레드에서.
+            let dibResult: Result<Data, KSError> = Win32App.runOnUIThread {
                 var outPtr: UnsafeMutablePointer<UInt8>? = nil
                 var outLen: size_t = 0
                 let hr = image.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Int32 in
@@ -101,7 +101,7 @@
             let dib = try dibResult.unwrap()
 
             // 2) DIB을 클립보드에 SetClipboardData(CF_DIB).
-            let setResult: Result<Void, KSError> = await MainActor.run {
+            let setResult: Result<Void, KSError> = Win32App.runOnUIThread {
                 guard OpenClipboard(nil) else {
                     return .failure(
                         KSError(

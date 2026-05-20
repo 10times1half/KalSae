@@ -14,7 +14,10 @@
     /// breadcrumb UI를 지원한다. 파일 다이얼로그 구현은
     /// `KSWindowsDialogBackend+Files.swift` + C++ 쉬밌(`kswv2_dialog.cpp`).
     ///
-    /// All native calls run on the UI thread via `MainActor.run { … }`.
+    /// All native calls run on the Win32 UI thread via
+    /// `Win32App.runOnUIThread { … }` (NOT `MainActor.run` — Swift's main
+    /// thread is blocked in `WaitForSingleObject(uiThread)` and would
+    /// deadlock).
     public struct KSWindowsDialogBackend: KSDialogBackend, Sendable {
         public init() {}
 
@@ -24,10 +27,39 @@
             _ options: KSMessageOptions,
             parent: KSWindowHandle?
         ) async throws(KSError) -> KSMessageResult {
-            await MainActor.run {
-                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
-                return Self._messageOnMain(options, parentHWND: raw)
+            let raw = Self._resolveHWND(parent)
+            return Win32App.runOnUIThread {
+                Self._messageOnMain(options, parentHWND: raw)
+            }
+        }
+
+        /// Resolves a `KSWindowHandle` to a raw `HWND` pointer on the Win32 UI
+        /// thread. The lookup itself accesses `@MainActor`-isolated state, but
+        /// we keep the scope as narrow as possible so the surrounding dialog
+        /// call can run on a nonisolated closure (avoiding the stdlib generic
+        /// closure @MainActor trap documented in `+Files.swift`).
+        ///
+        /// Fallback: when `handle` is nil OR the registry has no matching
+        /// HWND, returns `GetActiveWindow()` so the file picker is parented
+        /// to the demo's foreground window. Without this, IFileOpenDialog
+        /// can appear behind the WebView2 surface and look unresponsive.
+        /// Also calls `SetForegroundWindow(hwnd)` to make sure the dialog
+        /// pops to the top.
+        nonisolated
+        private static func _resolveHWND(_ handle: KSWindowHandle?) -> UnsafeMutableRawPointer? {
+            Win32App.runOnUIThreadIsolated {
+                // 명시적 if-let — `Optional.flatMap` / `Optional.map`은
+                // @MainActor 클로저 안에서 호출되면 stdlib 콜백을 통해
+                // dispatch_assert_queue 트랩을 일으킬 수 있다.
+                var hwnd: HWND? = nil
+                if let handle {
+                    hwnd = KSWin32HandleRegistry.shared.hwnd(for: handle)
+                }
+                if hwnd == nil { hwnd = GetActiveWindow() }
+                if hwnd == nil { hwnd = GetForegroundWindow() }
+                guard let hwnd else { return nil }
+                _ = SetForegroundWindow(hwnd)
+                return UnsafeMutableRawPointer(hwnd)
             }
         }
 
@@ -86,10 +118,9 @@
             options: KSOpenFileOptions,
             parent: KSWindowHandle?
         ) async throws(KSError) -> [URL] {
-            let box: KSSendableBox<[URL]> = await MainActor.run {
-                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
-                return KSSendableBox(Self._openFileOnMain(options: options, parentHWND: raw))
+            let raw = Self._resolveHWND(parent)
+            let box: KSSendableBox<[URL]> = Win32App.runOnUIThread {
+                KSSendableBox(Self._openFileOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }
@@ -98,10 +129,9 @@
             options: KSSaveFileOptions,
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
-            let box: KSSendableBox<URL?> = await MainActor.run {
-                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
-                return KSSendableBox(Self._saveFileOnMain(options: options, parentHWND: raw))
+            let raw = Self._resolveHWND(parent)
+            let box: KSSendableBox<URL?> = Win32App.runOnUIThread {
+                KSSendableBox(Self._saveFileOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }
@@ -110,10 +140,9 @@
             options: KSSelectFolderOptions,
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
-            let box: KSSendableBox<URL?> = await MainActor.run {
-                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
-                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
-                return KSSendableBox(Self._selectFolderOnMain(options: options, parentHWND: raw))
+            let raw = Self._resolveHWND(parent)
+            let box: KSSendableBox<URL?> = Win32App.runOnUIThread {
+                KSSendableBox(Self._selectFolderOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }

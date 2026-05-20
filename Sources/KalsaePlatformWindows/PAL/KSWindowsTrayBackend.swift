@@ -24,27 +24,27 @@
         private static let iconUID: UINT = 0xA001
 
         nonisolated public func install(_ config: KSTrayConfig) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 self._installResult(config)
             }
             try result.unwrap()
         }
 
         nonisolated public func setTooltip(_ tooltip: String) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 self._setTooltipResult(tooltip)
             }
             try result.unwrap()
         }
 
         nonisolated public func setMenu(_ items: [KSMenuItem]) async throws(KSError) {
-            await MainActor.run {
+            Win32App.runOnUIThreadIsolated {
                 self.currentMenuItems = items
             }
         }
 
         nonisolated public func remove() async {
-            await MainActor.run {
+            Win32App.runOnUIThreadIsolated {
                 self._removeOnMain()
             }
         }
@@ -208,7 +208,14 @@
         }
 
         /// Copies up to N-1 UTF-16 code units of `s` into `tuple`, NUL-terminating.
-        private static func fill<T>(_ tuple: inout T, _ s: String) {
+        ///
+        /// `nonisolated` is critical: `withUnsafeMutableBytes` is a stdlib
+        /// generic helper, and when invoked from a `@MainActor` context its
+        /// closure is inferred `@MainActor`, which traps via
+        /// `dispatch_assert_queue` on the Win32 UI thread (not Swift's
+        /// dispatch main queue). See `Docs/SECURITY.md` and the memory note
+        /// at `/memories/repo/windows-mainactor-closure-trap.md`.
+        nonisolated private static func fill<T>(_ tuple: inout T, _ s: String) {
             withUnsafeMutableBytes(of: &tuple) { rawBuf in
                 guard let base = rawBuf.baseAddress?.assumingMemoryBound(to: UInt16.self)
                 else { return }
@@ -222,7 +229,7 @@
             }
         }
 
-        private static func fillTooltip(_ data: inout NOTIFYICONDATAW, tooltip: String) {
+        nonisolated private static func fillTooltip(_ data: inout NOTIFYICONDATAW, tooltip: String) {
             Self.fill(&data.szTip, tooltip)
         }
     }

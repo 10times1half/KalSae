@@ -14,7 +14,7 @@
         /// `GetDpiForMonitor`로 각 모니터의 bounds, workArea, scale,
         /// refreshRate, primary 여부를 수집한다.
         public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
-            let result: Result<[KSDisplayInfo], KSError> = await MainActor.run {
+            let result: Result<[KSDisplayInfo], KSError> = Win32App.runOnUIThread {
                 // `EnumDisplayMonitors` 콜백 컨텍스트용 박스 — 콜백 스택에서
                 // 비격리 컨텍스트로 결과를 누적한다.
                 final class DisplayBox { var displays: [KSDisplayInfo] = [] }
@@ -93,14 +93,9 @@
         /// 반환한다. `MonitorFromWindow`로 가장 가까운 모니터를 찾고,
         /// `listDisplays`와 동일한 방식으로 정보를 채운다.
         public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
-            let result: Result<KSDisplayInfo, KSError> = await MainActor.run {
+            let hwnd: HWND = try Self._resolveHWNDForCall(handle, label: "currentDisplay")
+            let result: Result<KSDisplayInfo, KSError> = Win32App.runOnUIThread {
                 do {
-                    let win = try self.windowSync(for: handle)
-                    guard let hwnd = win.hwnd else {
-                        throw KSError(
-                            code: .windowCreationFailed,
-                            message: "currentDisplay: '\(handle.label)' has no HWND")
-                    }
                     guard let hMon = MonitorFromWindow(hwnd, DWORD(MONITOR_DEFAULTTONEAREST)) else {
                         throw KSError(
                             code: .unsupportedPlatform,

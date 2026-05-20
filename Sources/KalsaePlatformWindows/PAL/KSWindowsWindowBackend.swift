@@ -47,7 +47,7 @@
         // MARK: - Lifecycle
 
         public func create(_ config: KSWindowConfig) async throws(KSError) -> KSWindowHandle {
-            let result: Result<KSWindowHandle, KSError> = await MainActor.run {
+            let result: Result<KSWindowHandle, KSError> = Win32App.runOnUIThreadIsolated {
                 do {
                     try Win32App.shared.ensureCOMInitialized()
 
@@ -101,8 +101,8 @@
         }
 
         public func close(_ handle: KSWindowHandle) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
-                // `MainActor.run` 클로저 내부는 typed-throws 추론이 적용되지
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
+                // `runOnUIThreadIsolated` 클로저 내부는 typed-throws 추론이 적용되지
                 // 않으므로 `as? KSError`로 명시 캐스팅한다. window(for:)는
                 // KSError만 엔젯한다.
                 do {
@@ -150,13 +150,20 @@
         }
 
         public func all() async -> [KSWindowHandle] {
-            await MainActor.run {
-                Win32App.shared.allWindows().compactMap { handle(of: $0) }
+            Win32App.runOnUIThreadIsolated {
+                // 명시적 for-loop — `Array.compactMap` 같은 stdlib 제네릭은
+                // @MainActor 클로저를 콜백으로 받으면 Win32 UI 스레드에서
+                // `dispatch_assert_queue` 트랩을 일으킨다.
+                var out: [KSWindowHandle] = []
+                for w in Win32App.shared.allWindows() {
+                    if let h = handle(of: w) { out.append(h) }
+                }
+                return out
             }
         }
 
         public func find(label: String) async -> KSWindowHandle? {
-            await MainActor.run {
+            Win32App.runOnUIThreadIsolated {
                 KSWin32HandleRegistry.shared.handle(for: label)
             }
         }
@@ -297,11 +304,18 @@
             }
         }
 
+        // NOTE: These two helpers used to hop via `await MainActor.run`, but
+        // Kalsae's Win32 host runs the message loop on a dedicated UI thread
+        // while Swift's main thread blocks on `WaitForSingleObject(uiThread)`.
+        // That means `await MainActor.run` never resumes (Swift main is
+        // blocked) and every JS-bridge window call deadlocks until the IPC
+        // 30s timeout fires. Route through `Win32App.runOnUIThreadIsolated`
+        // which dispatches synchronously to the actual Win32 UI thread.
         private func runMain(
             _ handle: KSWindowHandle,
             _ body: @MainActor @Sendable (Win32Window) -> Void
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 do {
                     let w = try self.window(for: handle)
                     body(w)
@@ -319,7 +333,7 @@
             _ handle: KSWindowHandle,
             _ body: @MainActor @Sendable (Win32Window) -> T
         ) async throws(KSError) -> T {
-            let result: Result<T, KSError> = await MainActor.run {
+            let result: Result<T, KSError> = Win32App.runOnUIThreadIsolated {
                 do {
                     let w = try self.window(for: handle)
                     return .success(body(w))

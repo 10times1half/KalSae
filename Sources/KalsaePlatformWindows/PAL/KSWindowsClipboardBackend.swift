@@ -13,7 +13,7 @@
         // MARK: - Text
 
         public func readText() async throws(KSError) -> String? {
-            let result: Result<String?, KSError> = await MainActor.run {
+            let result: Result<String?, KSError> = Win32App.runOnUIThread {
                 guard OpenClipboard(nil) else {
                     return .failure(
                         KSError(
@@ -37,7 +37,7 @@
         }
 
         public func writeText(_ text: String) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThread {
                 guard OpenClipboard(nil) else {
                     return .failure(
                         KSError(
@@ -93,7 +93,7 @@
         // MARK: - Misc
 
         public func clear() async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThread {
                 guard OpenClipboard(nil) else {
                     return .failure(
                         KSError(
@@ -108,7 +108,7 @@
         }
 
         public func hasFormat(_ format: String) async -> Bool {
-            await MainActor.run {
+            Win32App.runOnUIThread {
                 switch format.lowercased() {
                 case "text":
                     return IsClipboardFormatAvailable(UINT(CF_UNICODETEXT))

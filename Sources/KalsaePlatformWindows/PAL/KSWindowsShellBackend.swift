@@ -12,7 +12,7 @@
 
         public func openExternal(_ url: URL) async throws(KSError) {
             let s = url.absoluteString
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThread {
                 let verb = "open"
                 let rc: Int = verb.withUTF16Pointer { verbPtr in
                     s.withUTF16Pointer { urlPtr -> Int in
@@ -48,7 +48,7 @@
                     code: .invalidArgument,
                     message: "showItemInFolder: path contains illegal quote character")
             }
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThread {
                 let app = "explorer.exe"
                 let args = "/select,\"\(path)\""
                 let rc: Int = app.withUTF16Pointer { appPtr in
@@ -72,7 +72,7 @@
 
         public func moveToTrash(_ url: URL) async throws(KSError) {
             let path = url.path
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThread {
                 // SHFILEOPSTRUCT는 이중 null 종료된 경로 목록을 요구한다.
                 var utf16 = Array(path.utf16)
                 utf16.append(0)  // single null at end of path

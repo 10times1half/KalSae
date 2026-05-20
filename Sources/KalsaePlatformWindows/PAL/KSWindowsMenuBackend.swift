@@ -43,7 +43,7 @@
         /// Installs `items` as the menubar of every currently-tracked top-level
         /// window.
         public func installAppMenu(_ items: [KSMenuItem]) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 Self._installAppMenuOnMain(items)
             }
             try result.unwrap()
@@ -53,7 +53,7 @@
             _ handle: KSWindowHandle,
             items: [KSMenuItem]
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 Self._installWindowMenuOnMain(handle: handle, items: items)
             }
             try result.unwrap()
@@ -64,7 +64,7 @@
             at point: KSPoint,
             in handle: KSWindowHandle?
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = Win32App.runOnUIThreadIsolated {
                 Self._showContextMenuOnMain(items: items, at: point, in: handle)
             }
             try result.unwrap()
