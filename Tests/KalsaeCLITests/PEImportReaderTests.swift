@@ -39,7 +39,8 @@ struct PEImportReaderTests {
         /// notepad.exe 는 모든 Windows 버전에 존재한다.
         @Test("Parses a real PE (notepad.exe) and finds KERNEL32")
         func parsesNotepad() throws {
-            let systemRoot = ProcessInfo.processInfo.environment["SystemRoot"]
+            let systemRoot =
+                ProcessInfo.processInfo.environment["SystemRoot"]
                 ?? "C:\\Windows"
             let notepad = URL(fileURLWithPath: systemRoot)
                 .appendingPathComponent("System32")

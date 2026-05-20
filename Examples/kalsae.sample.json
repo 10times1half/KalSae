@@ -152,6 +152,13 @@
     "appUserModelID": "dev.kalsae.demo",
     "defaultIcon": "assets/icon.png"
   },
+  "windowsBundle": {
+    "allowDowngrades": true,
+    "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+    "wix": {
+      "language": ["en-US", "ko-KR"]
+    }
+  },
   "distribution": {
     "target": "developer",
     "appleTeamID": "ABCDE12345",

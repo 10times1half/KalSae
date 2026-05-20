@@ -201,6 +201,14 @@ struct ProjectTemplateTests {
         #expect(
             app.contains("KSApp.bootFromBundle("),
             "App.swift should still call KSApp.bootFromBundle, got: \(app)")
+
+        // `@KSCommand` 매크로 확장은 `Foundation.JSONDecoder` / `Foundation.Data` 등
+        // `Foundation.*` 정규화 참조를 만들어내므로, 사용처 파일에 반드시
+        // `import Foundation` 이 있어야 한다 (없으면 빌드 시 "cannot find 'Foundation'
+        // in scope" 가 매크로 확장 위치에서 발생).
+        #expect(
+            app.contains("import Foundation"),
+            "App.swift must `import Foundation` so @KSCommand expansion compiles, got: \(app)")
     }
 
     // MARK: - 프론트엔드 프리셋
@@ -265,9 +273,21 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.tsx").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.tsx").path))
-        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/vite-env.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/index.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+
+        // ambient .d.ts는 Vite client 타입을 참조해 *.css side-effect import를
+        // 풀어주어야 한다. 또한 baseName이 `App.tsx`와 충돌하지 않도록
+        // `vite-env.d.ts` 명명을 유지한다 (Windows 대소문자 무시 FS 회귀).
+        let viteEnv = try String(
+            contentsOf: root.appendingPathComponent("src/vite-env.d.ts"), encoding: .utf8)
+        #expect(
+            viteEnv.contains("/// <reference types=\"vite/client\" />"),
+            "react vite-env.d.ts must reference vite/client for CSS ambient modules, got: \(viteEnv)")
+        #expect(
+            viteEnv.contains("interface Window") && viteEnv.contains("__KS_"),
+            "react vite-env.d.ts must declare Window.__KS_, got: \(viteEnv)")
     }
 
     @Test("React vite.config outputs into project-root dist")
@@ -308,9 +328,18 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.vue").path))
-        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/vite-env.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/style.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+
+        let viteEnv = try String(
+            contentsOf: root.appendingPathComponent("src/vite-env.d.ts"), encoding: .utf8)
+        #expect(
+            viteEnv.contains("/// <reference types=\"vite/client\" />"),
+            "vue vite-env.d.ts must reference vite/client for CSS ambient modules, got: \(viteEnv)")
+        #expect(
+            viteEnv.contains("interface Window") && viteEnv.contains("__KS_"),
+            "vue vite-env.d.ts must declare Window.__KS_, got: \(viteEnv)")
     }
 
     @Test("Vue vite.config outputs into project-root dist")
@@ -351,9 +380,18 @@ struct ProjectTemplateTests {
         #expect(fm.fileExists(atPath: root.appendingPathComponent("index.html").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/main.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/App.svelte").path))
-        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.d.ts").path))
+        #expect(fm.fileExists(atPath: root.appendingPathComponent("src/vite-env.d.ts").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent("src/app.css").path))
         #expect(fm.fileExists(atPath: root.appendingPathComponent(".gitignore").path))
+
+        let viteEnv = try String(
+            contentsOf: root.appendingPathComponent("src/vite-env.d.ts"), encoding: .utf8)
+        #expect(
+            viteEnv.contains("/// <reference types=\"vite/client\" />"),
+            "svelte vite-env.d.ts must reference vite/client for CSS ambient modules, got: \(viteEnv)")
+        #expect(
+            viteEnv.contains("interface Window") && viteEnv.contains("__KS_"),
+            "svelte vite-env.d.ts must declare Window.__KS_, got: \(viteEnv)")
     }
 
     @Test("Svelte vite.config outputs into project-root dist")

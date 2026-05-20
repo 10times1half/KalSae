@@ -14,17 +14,29 @@
 
     extension KSWindowsDialogBackend {
 
-        @MainActor
+        // NOTE: The dialog helpers are intentionally `nonisolated` even though
+        // they are only invoked on the Win32 UI thread. Under Swift 6, closures
+        // created inside `@MainActor` functions are inferred `@MainActor`. When
+        // such a closure is later invoked by a nonisolated generic stdlib helper
+        // (e.g. `Array.map`, `Array.withUnsafeBufferPointer`,
+        // `String.withCString`), the runtime inserts `swift_task_checkIsolated`
+        // which calls `dispatch_assert_queue(main_queue)`. The Win32 UI thread
+        // is NOT Swift's dispatch main queue (Kalsae owns its own UI thread,
+        // see `Win32App.unsafelyAssumeMainActor`), so the assert traps with
+        // `STATUS_ILLEGAL_INSTRUCTION` (0xC000001D) at `dispatch.dll+0x1EE52`.
+        // Marking these helpers `nonisolated` avoids the inference. Callers in
+        // this file (`openFileOnUI` etc.) remain `@MainActor` for API clarity.
+
+        nonisolated
         static func _openFileOnMain(
             options: KSOpenFileOptions,
-            parent: KSWindowHandle?
+            parentHWND: UnsafeMutableRawPointer?
         ) -> [URL] {
             ensureCOMInitialized()
-            let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
             let title = options.title ?? "Open"
             let dir = options.defaultDirectory?.path ?? ""
 
-            return withFilterSpecs(options.filters) { specs, count in
+            return withFilterSpecs(options.filters) { specs, count -> [URL] in
                 title.withUTF16Pointer { titlePtr in
                     dir.withUTF16Pointer { dirPtr in
                         var paths: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>? = nil
@@ -32,7 +44,7 @@
                         let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
                         let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
                         let hr = KSWV2_DialogOpenFile(
-                            parentHWND.map { UnsafeMutableRawPointer($0) },
+                            parentHWND,
                             titleArg, dirArg,
                             specs, count,
                             options.allowsMultiple ? 1 : 0,
@@ -44,13 +56,12 @@
             }
         }
 
-        @MainActor
+        nonisolated
         static func _saveFileOnMain(
             options: KSSaveFileOptions,
-            parent: KSWindowHandle?
+            parentHWND: UnsafeMutableRawPointer?
         ) -> URL? {
             ensureCOMInitialized()
-            let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
             let title = options.title ?? "Save"
             let dir = options.defaultDirectory?.path ?? ""
             let name = options.defaultFileName ?? ""
@@ -65,7 +76,7 @@
                             let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
                             let nameArg: UnsafePointer<wchar_t>? = name.isEmpty ? nil : namePtr
                             let hr = KSWV2_DialogSaveFile(
-                                parentHWND.map { UnsafeMutableRawPointer($0) },
+                                parentHWND,
                                 titleArg, dirArg, nameArg,
                                 specs, count,
                                 &out, &chosen)
@@ -79,13 +90,12 @@
             }
         }
 
-        @MainActor
+        nonisolated
         static func _selectFolderOnMain(
             options: KSSelectFolderOptions,
-            parent: KSWindowHandle?
+            parentHWND: UnsafeMutableRawPointer?
         ) -> URL? {
             ensureCOMInitialized()
-            let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
             let title = options.title ?? "Select folder"
             let dir = options.defaultDirectory?.path ?? ""
 
@@ -96,7 +106,7 @@
                     let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
                     let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
                     let hr = KSWV2_DialogSelectFolder(
-                        parentHWND.map { UnsafeMutableRawPointer($0) },
+                        parentHWND,
                         titleArg, dirArg,
                         &out, &chosen)
                     if hr != 0 || chosen == 0 || out == nil { return nil }
@@ -111,14 +121,14 @@
 
         /// COM은 STA로 초기화되어 있어야 IFileOpenDialog가 동작한다.
         /// `KSWV2_OleInitializeOnce`는 호출 스레드별 idempotent.
-        @MainActor
+        nonisolated
         private static func ensureCOMInitialized() {
             _ = KSWV2_OleInitializeOnce()
         }
 
         /// 필터 입력을 `KSWV2DialogFilter` 배열로 변환해 작업을 실행한다.
         /// UTF-16 버퍼는 호출 동안 메모리에 고정된다.
-        @MainActor
+        nonisolated
         private static func withFilterSpecs<R>(
             _ filters: [KSFileFilter],
             _ body: (UnsafePointer<KSWV2DialogFilter>?, Int32) -> R
@@ -156,6 +166,7 @@
             }
         }
 
+        nonisolated
         private static func allocateUTF16NullTerminated(
             _ s: String
         ) -> UnsafeMutablePointer<UInt16> {
@@ -170,7 +181,7 @@
 
         /// `KSWV2_DialogOpenFile`이 반환한 wchar_t** 배열을 URL로 변환하고
         /// 메모리를 해제한다.
-        @MainActor
+        nonisolated
         private static func drainPathArray(
             _ array: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>,
             count: Int

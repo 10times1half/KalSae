@@ -6,7 +6,7 @@
 ///   3. PAL DemoHost (`KSDemoHostWithUserScripts`)에 documentStart 시점 주입 등록.
 ///
 /// 런타임 추가는 **다음 navigation부터 적용**된다. 현재 페이지에는 영향을 주지 않는다.
-public import Foundation
+internal import Foundation
 public import KalsaeCore
 
 extension KSApp {

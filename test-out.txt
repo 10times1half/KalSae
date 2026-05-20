@@ -1,0 +1,25 @@
+﻿PID: 21472
+CRASHED: code= (0x)
+--- stderr tail ---
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM already initialized as MTA; re-initializing as STA
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] COM initialized (STA, hr=0x0)
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] Process attached to JobObject (KILL_ON_JOB_CLOSE)
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.app: [KalsaePlatformWindows] Registered window class 'KalsaeWindow' (atom=49964)
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.window: [KalsaePlatformWindows] Created window 'main' hwnd=0x0000000000930a6c
+2026-05-19T23:51:45+0900 info dev.Kalsae.platform.windows.webview: [KalsaePlatformWindows] WebView2 environment: userDataFolder=C:\Users\seoje\AppData\Local/kalsae-demo\WebView2, browserExecutableFolder=<default>
+2026-05-19T23:51:46+0900 info dev.Kalsae.platform.windows.webview: [KalsaePlatformWindows] WebView2 host 'main' ready
+2026-05-19T23:51:46+0900 info dev.Kalsae.kalsae.app: [Kalsae] boot serving=virtualHost(C:/Projects/Kalsae/.build/release/Kalsae_KalsaeDemo.resources/Resources) startURL=https://app.kalsae/index.html devServerURL=about:blank
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaeDemo] handler/0: entered app.openFile handler
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [Kalsae] openFile/A: about to postJob
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [Kalsae] openFile/A2: postJob returned
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [Kalsae] openFile/B: inside postJob (UI thread) ??calling openFileOnUI
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaeDemo] handler/1: returning success
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] _openFileOnMain/1: pre ensureCOMInitialized
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] _openFileOnMain/2: post ensureCOMInitialized
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] _openFileOnMain/2a: title='Pick a file' dir='' filters=2
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] _openFileOnMain/2a1: pre withFilterSpecs call
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] withFilterSpecs/W1: entered, filters.count=2
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] withFilterSpecs/W2: entries.count=2
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] withFilterSpecs/W3: specs allocated
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] withFilterSpecs/W4.0.a: begin entry name='Text' exts=["txt", "md"]
+2026-05-19T23:51:48+0900 error dev.Kalsae.crashtrace: [KalsaePlatformWindows] withFilterSpecs/W4.0.b: namePtr ok

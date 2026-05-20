@@ -157,6 +157,62 @@ struct BuildCommand: ParsableCommand {
     var nsisSigntoolCmd: String? = nil
 
     @Flag(
+        name: .long,
+        help:
+            "Generate an MSI installer (.wxs + .msi via WiX Toolset v3) after packaging. Windows-only."
+    )
+    var msi: Bool = false
+
+    @Option(
+        name: .long,
+        help:
+            "Override the MSI UpgradeCode. Default: deterministic UUIDv5 of `<productName>.exe.app.<arch>` in DNS namespace (Tauri-compatible)."
+    )
+    var msiUpgradeCode: String? = nil
+
+    @Option(
+        name: .long,
+        help:
+            "Comma-separated MSI language tags (e.g. en-US,ko-KR). Default: en-US, or kalsae.json windows.wix.language."
+    )
+    var msiLanguage: String? = nil
+
+    @Option(
+        name: .long,
+        help:
+            "Path to MSI installer top banner BMP (493x58). Overrides kalsae.json windows.wix.bannerPath."
+    )
+    var msiBanner: String? = nil
+
+    @Option(
+        name: .long,
+        help:
+            "Path to MSI installer dialog background BMP (493x312). Overrides kalsae.json windows.wix.dialogImagePath."
+    )
+    var msiDialogImage: String? = nil
+
+    @Option(
+        name: .long,
+        help:
+            "Windows: codesign the MSI installer after light.exe. Same template syntax as --signtool-cmd (also accepts Tauri-style %1). Requires --msi."
+    )
+    var msiSigntoolCmd: String? = nil
+
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Automatically download WiX Toolset v3.14 when --msi is on and candle.exe/light.exe are missing (Windows only). Default ON."
+    )
+    var autoFetchWix: Bool = true
+
+    @Flag(
+        name: .long,
+        help:
+            "Cache WiX binaries under <project>/.kalsae/tools/ instead of %LOCALAPPDATA%. Useful for CI/Docker."
+    )
+    var useLocalToolsDir: Bool = false
+
+    @Flag(
         name: .long, inversion: .prefixedNo,
         help: "Print stage-by-stage wall-clock timings after the build (default ON).")
     var timings: Bool = true
@@ -837,6 +893,161 @@ struct BuildCommand: ParsableCommand {
             } else if nsisSigntoolCmd != nil {
                 print("⚠  --nsis-signtool-cmd has no effect without --nsis; skipping.")
             }
+
+            if msi {
+                try runPackageMSI(
+                    config: config,
+                    info: info,
+                    cwd: cwd,
+                    fm: fm,
+                    outputURL: outputURL,
+                    archEnum: archEnum)
+            } else if msiSigntoolCmd != nil {
+                print("⚠  --msi-signtool-cmd has no effect without --msi; skipping.")
+            }
+        }
+
+        /// WiX v3 MSI 패키저.
+        ///
+        /// 호출 시점: `runPackageWindows`의 NSIS 블록 직후. 기존 산출물 폴더
+        /// (`dist/<App>-<ver>-<arch>/`)를 staging 디렉터리로 사용하고
+        /// `.wxs` + `.msi`를 그 부모 디렉터리에 만든다.
+        private func runPackageMSI(
+            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager,
+            outputURL: URL, archEnum: KSPackager.Architecture
+        ) throws {
+            let wixCfg = config.windowsBundle?.wix
+            // UpgradeCode 결정.
+            let upgrade: UUID = {
+                if let cli = msiUpgradeCode,
+                    !cli.isEmpty,
+                    let u = UUID(uuidString: cli)
+                {
+                    return u
+                }
+                if let s = wixCfg?.upgradeCode,
+                    !s.isEmpty,
+                    let u = UUID(uuidString: s)
+                {
+                    return u
+                }
+                return KSUUIDv5.wixUpgradeCode(
+                    productName: info.appName, arch: archEnum.rawValue)
+            }()
+
+            // 언어 결정 — CLI > kalsae.json > en-US.
+            let langs: [String] = {
+                if let cli = msiLanguage,
+                    !cli.isEmpty
+                {
+                    return cli.split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespaces) }
+                        .filter { !$0.isEmpty }
+                }
+                if let l = wixCfg?.language {
+                    let tags = l.tags
+                    if !tags.isEmpty { return tags }
+                }
+                return ["en-US"]
+            }()
+            var localePaths: [String: String] = [:]
+            if let l = wixCfg?.language {
+                for tag in langs {
+                    if let p = l.localePath(for: tag) {
+                        localePaths[tag] = URL(fileURLWithPath: p, relativeTo: cwd).path
+                    }
+                }
+            }
+
+            // Banner / Dialog 이미지.
+            let bannerPath: URL? = {
+                if let cli = msiBanner, !cli.isEmpty {
+                    return URL(fileURLWithPath: cli, relativeTo: cwd)
+                }
+                if let s = wixCfg?.bannerPath, !s.isEmpty {
+                    return URL(fileURLWithPath: s, relativeTo: cwd)
+                }
+                return nil
+            }()
+            let dialogPath: URL? = {
+                if let cli = msiDialogImage, !cli.isEmpty {
+                    return URL(fileURLWithPath: cli, relativeTo: cwd)
+                }
+                if let s = wixCfg?.dialogImagePath, !s.isEmpty {
+                    return URL(fileURLWithPath: s, relativeTo: cwd)
+                }
+                return nil
+            }()
+            let iconURL: URL? = {
+                if let icn = icon, !icn.isEmpty {
+                    return URL(fileURLWithPath: icn, relativeTo: cwd)
+                }
+                return nil
+            }()
+
+            // WebView2 부트스트래퍼 파일명 (NSIS 블록과 동일 로직).
+            let bootstrapName: String? =
+                bootstrapper.map { URL(fileURLWithPath: $0).lastPathComponent }
+                ?? KSPackager.detectBootstrapperFileName(in: outputURL)
+
+            // Fragment paths.
+            let fragmentURLs: [URL] =
+                (wixCfg?.fragmentPaths ?? []).map { URL(fileURLWithPath: $0, relativeTo: cwd) }
+
+            let allowDowngrades = config.windowsBundle?.allowDowngrades ?? true
+            let publisher = nsisPublisher ?? info.identifier
+            let productVersion: String =
+                wixCfg?.version.map(KSWiXTemplate.normalizeVersion)
+                ?? KSWiXTemplate.normalizeVersion(info.version)
+
+            let templateOpts = KSWiXTemplate.Options(
+                appName: info.appName,
+                version: productVersion,
+                identifier: info.identifier,
+                publisher: publisher,
+                architecture: archEnum,
+                sourceDir: outputURL,
+                productCode: UUID(),
+                upgradeCode: upgrade,
+                iconPath: iconURL,
+                allowDowngrades: allowDowngrades,
+                bannerPath: bannerPath,
+                dialogImagePath: dialogPath,
+                webView2BootstrapperFileName: bootstrapName,
+                webView2BootstrapperSilent: true,
+                componentRefs: wixCfg?.componentRefs ?? [],
+                componentGroupRefs: wixCfg?.componentGroupRefs ?? [],
+                featureRefs: wixCfg?.featureRefs ?? [],
+                featureGroupRefs: wixCfg?.featureGroupRefs ?? [],
+                mergeRefs: wixCfg?.mergeRefs ?? [])
+
+            let wixOpts = KSPackager.WiXOptions(
+                template: templateOpts,
+                languages: langs,
+                localePaths: localePaths,
+                fragmentPaths: fragmentURLs,
+                autoFetchWiX: autoFetchWix,
+                useLocalToolsDir: useLocalToolsDir,
+                projectRoot: cwd)
+
+            print("🛠️   Generating MSI installer (WiX v3)…")
+            let report = try KSPackager.runWiX(wixOpts)
+            print(report.description)
+
+            // MSI 사이닝.
+            if let template = msiSigntoolCmd, !template.isEmpty {
+                if report.installerPaths.isEmpty {
+                    print("⚠  --msi-signtool-cmd: light.exe did not produce an installer; skipping.")
+                } else {
+                    for path in report.installerPaths {
+                        try KSSigntoolHook.run(
+                            template: template,
+                            file: URL(fileURLWithPath: path),
+                            label: "signtool (msi)", dryrun: dryrun)
+                    }
+                }
+            }
+            _ = fm
         }
 
         /// Microsoft Store MSIX 패키저 (RFC-008 Phase 2).

@@ -25,16 +25,23 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> KSMessageResult {
             await MainActor.run {
-                Self._messageOnMain(options, parent: parent)
+                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+                return Self._messageOnMain(options, parentHWND: raw)
             }
         }
 
-        @MainActor
+        // NOTE: `_messageOnMain` is `nonisolated` (not `@MainActor`) even though
+        // it must run on the Win32 UI thread. See the rationale in
+        // `KSWindowsDialogBackend+Files.swift`: closures created inside a
+        // `@MainActor` function are inferred `@MainActor` and trigger
+        // `dispatch_assert_queue` when invoked by generic stdlib helpers, which
+        // traps because the Win32 UI thread is not Swift's dispatch main queue.
+        nonisolated
         private static func _messageOnMain(
             _ options: KSMessageOptions,
-            parent: KSWindowHandle?
+            parentHWND: UnsafeMutableRawPointer?
         ) -> KSMessageResult {
-            let parentHWND = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
             let combined: String = {
                 if let detail = options.detail, !detail.isEmpty {
                     return "\(options.message)\n\n\(detail)"
@@ -58,7 +65,9 @@
 
             let result = options.title.withUTF16Pointer { title in
                 combined.withUTF16Pointer { msg in
-                    MessageBoxW(parentHWND, msg, title, flags)
+                    MessageBoxW(
+                        parentHWND.map { HWND(OpaquePointer($0)) },
+                        msg, title, flags)
                 }
             }
 
@@ -78,7 +87,9 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> [URL] {
             let box: KSSendableBox<[URL]> = await MainActor.run {
-                KSSendableBox(Self._openFileOnMain(options: options, parent: parent))
+                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+                return KSSendableBox(Self._openFileOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }
@@ -88,7 +99,9 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
             let box: KSSendableBox<URL?> = await MainActor.run {
-                KSSendableBox(Self._saveFileOnMain(options: options, parent: parent))
+                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+                return KSSendableBox(Self._saveFileOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }
@@ -98,7 +111,9 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
             let box: KSSendableBox<URL?> = await MainActor.run {
-                KSSendableBox(Self._selectFolderOnMain(options: options, parent: parent))
+                let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+                let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+                return KSSendableBox(Self._selectFolderOnMain(options: options, parentHWND: raw))
             }
             return box.value
         }
@@ -115,28 +130,36 @@
         public static func messageOnUI(
             _ options: KSMessageOptions, parent: KSWindowHandle? = nil
         ) -> KSMessageResult {
-            _messageOnMain(options, parent: parent)
+            let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+            let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+            return _messageOnMain(options, parentHWND: raw)
         }
 
         @MainActor
         public static func openFileOnUI(
             _ options: KSOpenFileOptions, parent: KSWindowHandle? = nil
         ) -> [URL] {
-            _openFileOnMain(options: options, parent: parent)
+            let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+            let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+            return _openFileOnMain(options: options, parentHWND: raw)
         }
 
         @MainActor
         public static func saveFileOnUI(
             _ options: KSSaveFileOptions, parent: KSWindowHandle? = nil
         ) -> URL? {
-            _saveFileOnMain(options: options, parent: parent)
+            let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+            let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+            return _saveFileOnMain(options: options, parentHWND: raw)
         }
 
         @MainActor
         public static func selectFolderOnUI(
             _ options: KSSelectFolderOptions, parent: KSWindowHandle? = nil
         ) -> URL? {
-            _selectFolderOnMain(options: options, parent: parent)
+            let hwnd = parent.flatMap { KSWin32HandleRegistry.shared.hwnd(for: $0) }
+            let raw = hwnd.map { UnsafeMutableRawPointer($0) }
+            return _selectFolderOnMain(options: options, parentHWND: raw)
         }
 
         // MARK: - File dialog implementation — see `KSWindowsDialogBackend+Files.swift`.

@@ -6,12 +6,12 @@ internal import Foundation
 
 extension KSApp {
 
-    /// Virtual host used when serving local assets.
+    /// 로컬 자산을 제공할 때 사용하는 가상 호스트.
     public static let virtualHost = "app.kalsae"
 
-    /// Returns a script that injects a CSP `<meta>` tag as early as possible.
-    /// Platform hosts register this as a document-created script so it runs
-    /// before page HTML parsing completes.
+    /// CSP `<meta>` 태그를 가능한 한 빨리 삽입하는 스크립트를 반환합니다.
+    /// 플랫폼 호스트는 이 스크립트를 document-created 스크립트로 등록하여
+    /// 페이지 HTML 파싱이 완료되기 전에 실행되도록 합니다.
     internal static func cspInjectionScript(_ csp: String) -> String {
         KSBootOrchestrator.cspInjectionScript(csp)
     }
@@ -20,17 +20,17 @@ extension KSApp {
         KSBootOrchestrator.isDirectory(url)
     }
 
-    /// Treat non-empty `http://` and `https://` URLs as remote dev-server origins.
-    /// Empty strings and `about:blank` are treated as "no dev server configured".
+    /// 비어 있지 않은 `http://` 및 `https://` URL을 원격 dev 서버 오리진으로 취급합니다.
+    /// 빈 문자열과 `about:blank`는 "dev 서버 미설정"으로 간주합니다.
     internal static func isRemoteURL(_ s: String) -> Bool {
         KSBootOrchestrator.isRemoteURL(s)
     }
 
-    /// Best-effort reachability probe for a dev-server origin. Issues a single
-    /// `HEAD` (falling back to `GET`) and returns whether *any* HTTP response
-    /// was received within `timeout` seconds. Network errors, DNS failures, and
-    /// timeouts all return `false` — even non-2xx responses count as
-    /// "something is listening", which is enough to prefer the dev server.
+    /// dev 서버 오리진에 대한 최선 노력(Best-effort) 연결 가능성 프로브.
+    /// 단일 `HEAD` 요청을 보내고(`GET`으로 폴백) `timeout` 초 이내에
+    /// *어떤* HTTP 응답이라도 수신되었는지 여부를 반환합니다. 네트워크 오류,
+    /// DNS 실패, 타임아웃은 모두 `false`를 반환합니다. 2xx가 아닌 응답도
+    /// "무언가가 수신 중이다"로 간주하여 dev 서버를 우선하도록 합니다.
     ///
     /// 동기 함수다 — `decideServingMode` 가 동기이므로 `DispatchSemaphore` 로
     /// 결과를 기다린다. `decideServingMode` 는 부팅 1회만 호출되므로 1.5s
@@ -56,8 +56,8 @@ extension KSApp {
         req.httpMethod = "HEAD"
 
         let semaphore = DispatchSemaphore(value: 0)
-        // `nonisolated(unsafe)` so a single-shot mutation inside the URLSession
-        // delegate queue is reachable here without crossing isolation boundaries.
+        // `nonisolated(unsafe)`를 사용하여 URLSession 델리게이트 큐 내부의
+        // 단일 변이(single-shot mutation)가 격리 경계를 넘지 않고 접근 가능하도록 함.
         nonisolated(unsafe) var ok = false
         let task = session.dataTask(with: req) { _, response, error in
             if error == nil, response is HTTPURLResponse {
@@ -109,8 +109,8 @@ extension KSApp {
             because no frontend source could be reached.</p>\
             </body></html>
             """
-        // RFC 2397 - characters allowed: any printable except `#`, `%`, and
-        // some others. Percent-encode minimally for safety.
+        // RFC 2397 — 허용 문자: `#`, `%` 등을 제외한 모든 인쇄 가능 문자.
+        // 안전을 위해 최소한으로 퍼센트 인코딩.
         let allowed = CharacterSet.urlPathAllowed
             .union(.urlQueryAllowed)
             .union(CharacterSet(charactersIn: "<>\"' "))

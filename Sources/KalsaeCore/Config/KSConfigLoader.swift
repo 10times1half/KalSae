@@ -106,7 +106,8 @@ public enum KSConfigLoader {
     private static func validateUserScripts(_ scope: KSUserScriptsScope) throws(KSError) {
         if scope.allowOrigins.isEmpty && !scope.scripts.isEmpty {
             throw KSError.configInvalid(
-                "security.userScripts.scripts is non-empty but security.userScripts.allowOrigins is empty (default-deny)")
+                "security.userScripts.scripts is non-empty but security.userScripts.allowOrigins is empty (default-deny)"
+            )
         }
         var seenIDs: Set<String> = []
         for (idx, s) in scope.scripts.enumerated() {
@@ -126,7 +127,8 @@ public enum KSConfigLoader {
             if let p = s.path, hasPath {
                 if p.contains("..") || p.hasPrefix("/") || p.hasPrefix("\\") {
                     throw KSError.configInvalid(
-                        "security.userScripts.scripts[\(idx)] \(tag): path must be a relative resourceRoot path without '..'")
+                        "security.userScripts.scripts[\(idx)] \(tag): path must be a relative resourceRoot path without '..'"
+                    )
                 }
             }
             if s.origins.isEmpty {
@@ -136,7 +138,8 @@ public enum KSConfigLoader {
             for o in s.origins {
                 if !scope.permits(originPattern: o) {
                     throw KSError.configInvalid(
-                        "security.userScripts.scripts[\(idx)] \(tag): origin '\(o)' is not in security.userScripts.allowOrigins")
+                        "security.userScripts.scripts[\(idx)] \(tag): origin '\(o)' is not in security.userScripts.allowOrigins"
+                    )
                 }
             }
         }

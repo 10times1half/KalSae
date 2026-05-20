@@ -14,11 +14,15 @@ public import Foundation
 ///
 /// 실제 인증서/키 관리는 사용자가 책임지며, 이 hook은 단순 명령 실행기다.
 public enum KSSigntoolHook {
-    /// `{file}` 플레이스홀더를 치환한 최종 명령줄을 반환한다.
+    /// `{file}` 또는 `%1` (Tauri 호환) 플레이스홀더를 치환한 최종 명령줄을 반환한다.
+    /// 두 플레이스홀더 모두 없으면 명령 끝에 따옴표로 감싸 추가한다.
     public static func render(template: String, file: URL) -> String {
         let path = file.path
         if template.contains("{file}") {
             return template.replacingOccurrences(of: "{file}", with: "\"\(path)\"")
+        }
+        if template.contains("%1") {
+            return template.replacingOccurrences(of: "%1", with: "\"\(path)\"")
         }
         return "\(template) \"\(path)\""
     }

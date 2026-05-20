@@ -131,8 +131,8 @@ public struct ProjectTemplate {
                     resource: "App.tsx", ext: "tmpl", subdirectory: "react",
                     destination: directory.appendingPathComponent("src/App.tsx")),
                 .init(
-                    resource: "app.d.ts", ext: "tmpl", subdirectory: "react",
-                    destination: directory.appendingPathComponent("src/app.d.ts")),
+                    resource: "vite-env.d.ts", ext: "tmpl", subdirectory: "react",
+                    destination: directory.appendingPathComponent("src/vite-env.d.ts")),
                 .init(
                     resource: "index.css", ext: "tmpl", subdirectory: "react",
                     destination: directory.appendingPathComponent("src/index.css")),
@@ -167,8 +167,8 @@ public struct ProjectTemplate {
                     resource: "App.vue", ext: "tmpl", subdirectory: "vue",
                     destination: directory.appendingPathComponent("src/App.vue")),
                 .init(
-                    resource: "app.d.ts", ext: "tmpl", subdirectory: "vue",
-                    destination: directory.appendingPathComponent("src/app.d.ts")),
+                    resource: "vite-env.d.ts", ext: "tmpl", subdirectory: "vue",
+                    destination: directory.appendingPathComponent("src/vite-env.d.ts")),
                 .init(
                     resource: "style.css", ext: "tmpl", subdirectory: "vue",
                     destination: directory.appendingPathComponent("src/style.css")),
@@ -200,8 +200,8 @@ public struct ProjectTemplate {
                     resource: "App.svelte", ext: "tmpl", subdirectory: "svelte",
                     destination: directory.appendingPathComponent("src/App.svelte")),
                 .init(
-                    resource: "app.d.ts", ext: "tmpl", subdirectory: "svelte",
-                    destination: directory.appendingPathComponent("src/app.d.ts")),
+                    resource: "vite-env.d.ts", ext: "tmpl", subdirectory: "svelte",
+                    destination: directory.appendingPathComponent("src/vite-env.d.ts")),
                 .init(
                     resource: "app.css", ext: "tmpl", subdirectory: "svelte",
                     destination: directory.appendingPathComponent("src/app.css")),

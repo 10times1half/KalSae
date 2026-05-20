@@ -24,8 +24,7 @@
 param(
     [string]$Executable = "",
     [Parameter(Mandatory = $true)]
-    [string]$Destination,
-    [switch]$Verbose
+    [string]$Destination
 )
 
 $ErrorActionPreference = 'Stop'
@@ -80,18 +79,29 @@ Write-Host "[stage] dumpbin     = $dumpbinPath"
 
 $searchDirs = [System.Collections.Generic.List[string]]::new()
 
-# (a) swift.exe 옆 디렉터리 (compnerd/gha-setup-swift 가 PATH 에 등록).
+# (a) swift.exe 옆 디렉터리 검색. **중요**: Runtimes 디렉터리(릴리스/비-Asserts
+#     빌드의 런타임 DLL)를 Toolchains 디렉터리(+Asserts 변종일 수 있음)보다
+#     **먼저** 우선하도록 정렬한다. +Asserts 토큰체인이 설치된 머신에서는
+#     Toolchains\<ver>+Asserts\usr\bin\dispatch.dll 에 libdispatch 내부 assert
+#     (__builtin_trap → STATUS_ILLEGAL_INSTRUCTION 0xc000001d) 이 활성화된 변종이
+#     들어 있어, 사소한 contract 위반에도 배포 바이너리가 강제 종료된다.
+#     Runtimes\<ver>\usr\bin 에는 동일 ABI 의 비-Asserts 변종이 있으므로 이 쪽을
+#     선호한다.
 $swift = Get-Command swift.exe -ErrorAction SilentlyContinue
 if ($swift) {
     $swiftDir = Split-Path -Parent $swift.Source
-    $searchDirs.Add($swiftDir)
     Write-Host "[stage] swift bin   = $swiftDir"
 
-    # (b) 같은 설치의 Runtimes\<ver>\usr\bin 도 후보로 추가.
+    # (b) Runtimes\<ver>\usr\bin 을 먼저 추가한다.
+    #     설치 레이아웃은 buildslave 마다 다르다:
+    #       - .../Toolchains/<ver>/usr/bin             ← compnerd/gha-setup-swift
+    #       - .../Swift/Toolchains/<ver>/usr/bin       ← Swift.org Windows installer (6.3+)
+    #     Runtimes 디렉터리는 Swift\Runtimes 또는 <install>\Runtimes 위치에 있다.
     $maybeRuntimes = @(
         (Join-Path (Split-Path -Parent $swiftDir) 'Runtimes'),
         (Join-Path (Split-Path -Parent (Split-Path -Parent $swiftDir)) 'Runtimes'),
-        (Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $swiftDir))) 'Runtimes')
+        (Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $swiftDir))) 'Runtimes'),
+        (Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $swiftDir)))) 'Runtimes')
     )
     foreach ($r in $maybeRuntimes) {
         if (Test-Path $r) {
@@ -102,6 +112,9 @@ if ($swift) {
                 }
         }
     }
+
+    # (c) swift.exe 옆 디렉터리는 fallback 으로 마지막에 추가한다.
+    $searchDirs.Add($swiftDir)
 }
 
 # (c) Windows System32 (vcruntime140.dll 등이 여기에 있을 수 있음).
@@ -201,7 +214,7 @@ while ($queue.Count -gt 0) {
         if ($visited.Contains($depLower)) { continue }
         $visited.Add($depLower) | Out-Null
         if (-not (Test-Whitelisted -Name $dep)) {
-            if ($Verbose) { Write-Host "  skip (sys) : $dep" }
+            if ($VerbosePreference -ne 'SilentlyContinue') { Write-Host "  skip (sys) : $dep" }
             continue
         }
         $resolved = Find-Dll -Name $dep

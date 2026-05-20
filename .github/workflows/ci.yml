@@ -150,21 +150,41 @@ jobs:
           swift build -c release --product kalsae-demo -Xswiftc -warnings-as-errors
           swift build -c release --product kalsae       -Xswiftc -warnings-as-errors
 
+          # Stage WebView2Loader.dll into .build/release/ (bare swift build does not).
+          ./Scripts/stage-webview2-loader.ps1 -Configuration release
+
+          # Stage Swift runtime + MSVC redist DLLs next to kalsae-demo.exe so it
+          # runs on a clean Windows machine (no Swift toolchain installed).
+          ./Scripts/stage-windows-cli-runtime.ps1 `
+            -Executable .\.build\release\kalsae-demo.exe `
+            -Destination .\.build\release
+
           $releaseDir = (Resolve-Path .build\release).Path
           $demoExe    = Join-Path $releaseDir 'kalsae-demo.exe'
           $demoRes    = Join-Path $releaseDir 'Kalsae_KalsaeDemo.resources'
           $cliExe     = Join-Path $releaseDir 'kalsae.exe'
           $loader     = Join-Path $releaseDir 'WebView2Loader.dll'
 
-          if (-not (Test-Path $demoExe)) { Write-Error "missing $demoExe"; exit 1 }
-          if (-not (Test-Path $demoRes)) { Write-Error "missing $demoRes"; exit 1 }
-          if (-not (Test-Path $cliExe))  { Write-Error "missing $cliExe";  exit 1 }
+          if (-not (Test-Path $demoExe))  { Write-Error "missing $demoExe";  exit 1 }
+          if (-not (Test-Path $demoRes))  { Write-Error "missing $demoRes";  exit 1 }
+          if (-not (Test-Path $cliExe))   { Write-Error "missing $cliExe";   exit 1 }
+          if (-not (Test-Path $loader))   { Write-Error "missing $loader (stage-webview2-loader.ps1 failed)"; exit 1 }
 
           # kalsae-demo: exe 단독으로는 리소스 번들을 못 찾으므로 폴더째 zip.
+          # WebView2Loader.dll + Swift runtime DLLs (swiftCore.dll, Foundation.dll,
+          # swift_Concurrency.dll, MSVC redist 등) 모두 동봉.
           New-Item -ItemType Directory -Force -Path dist\kalsae-demo | Out-Null
           Copy-Item $demoExe dist\kalsae-demo\ -Force
           Copy-Item $demoRes dist\kalsae-demo\ -Recurse -Force
-          if (Test-Path $loader) { Copy-Item $loader dist\kalsae-demo\ -Force }
+          Copy-Item $loader  dist\kalsae-demo\ -Force
+          # Staged runtime DLLs sit alongside kalsae-demo.exe in .build/release.
+          Get-ChildItem $releaseDir -Filter '*.dll' -File `
+            | Where-Object { $_.Name -ne 'WebView2Loader.dll' } `
+            | Copy-Item -Destination dist\kalsae-demo\ -Force
+
+          Write-Host "=== dist\kalsae-demo contents ==="
+          Get-ChildItem dist\kalsae-demo -File | Select-Object Name, Length | Format-Table -AutoSize
+
           Compress-Archive `
             -Path dist\kalsae-demo\* `
             -DestinationPath dist\kalsae-demo-windows-x64.zip `

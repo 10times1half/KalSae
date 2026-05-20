@@ -214,10 +214,24 @@ public enum KSPackager {
         // vcruntime140* DLL 을 같은 폴더에 동봉해야 한다. PE/COFF 헤더를
         // 직접 파싱해 PowerShell/dumpbin 의존 없이 staging.
         do {
-            _ = try KSWindowsRuntimeStager.stage(executable: dstExe, destination: opts.output)
+            let staged = try KSWindowsRuntimeStager.stage(
+                executable: dstExe, destination: opts.output)
+            // staged == 0 이고 EXE 가 화이트리스트 DLL 에 의존하는 상태로
+            // 패키지가 완성되면 다른 PC 에서 `swiftCore.dll not found` 다이얼로그로
+            // 끝난다. 사용자가 빌드 로그를 놓치더라도 Report.description 에 한 줄
+            // 남도록 warnings 에 명시한다.
+            if staged == 0, KSWindowsRuntimeStager.hasWhitelistedImports(executable: dstExe) {
+                warnings.append(
+                    "Windows runtime DLL staging produced 0 files but the executable "
+                        + "imports Swift/Foundation/VC runtime DLLs. "
+                        + "The packaged app will fail with `swiftCore.dll not found` "
+                        + "on machines without a Swift toolchain. "
+                        + "Ensure the toolchain's `Runtimes\\<ver>\\usr\\bin` is on PATH.")
+            }
         } catch {
-            warnings.append("Windows runtime DLL staging failed: \(error). "
-                + "The packaged executable may fail on machines without a Swift toolchain.")
+            warnings.append(
+                "Windows runtime DLL staging failed: \(error). "
+                    + "The packaged executable may fail on machines without a Swift toolchain.")
         }
 
         // 2) Side-by-side manifest (DPI awareness, asInvoker)

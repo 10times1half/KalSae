@@ -1,6 +1,5 @@
 #if os(Windows)
     public import KalsaeCore
-    public import Foundation
 
     extension KSWindowsDemoHost: KSDemoHostWithUserScripts {
         /// 래핑이 끝난 IIFE를 `AddScriptToExecuteOnDocumentCreated`로 등록한다.

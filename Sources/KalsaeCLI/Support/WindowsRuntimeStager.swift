@@ -46,6 +46,7 @@ public enum KSWindowsRuntimeStager {
             // 화이트리스트 밖이면 다시 처리하지 않는다.
             var queue: [URL] = [executable]
             var visited = Set<String>()
+            var unresolved: [String] = []
             var staged = 0
 
             while !queue.isEmpty {
@@ -68,6 +69,10 @@ public enum KSWindowsRuntimeStager {
                     guard let source = findDLL(named: dep, in: searchDirs, fm: fm) else {
                         // 못 찾아도 hard-fail 하지 않는다: 시스템 DLL 일 수 있고,
                         // CRT 가 OS 에 사전 설치돼 있을 수도 있다.
+                        // 단, Swift/Foundation 처럼 진짜 필요한 DLL 이 빠진 채
+                        // dist 가 만들어지면 다른 PC 에서 `swiftCore.dll not found`
+                        // 다이얼로그로 끝나므로 어떤 이름이 못 잡혔는지 로그에는 남긴다.
+                        unresolved.append(dep)
                         continue
                     }
                     let dst = dest.appendingPathComponent(dep)
@@ -92,6 +97,13 @@ public enum KSWindowsRuntimeStager {
             if staged > 0 {
                 print("📎  Staged \(staged) Windows runtime DLL\(staged == 1 ? "" : "s") → \(dest.path)")
             }
+            if !unresolved.isEmpty {
+                let names = unresolved.sorted().joined(separator: ", ")
+                print(
+                    "⚠  Swift runtime DLL\(unresolved.count == 1 ? "" : "s") not located on host "
+                        + "(packaged app may fail with `<name>.dll not found` on other PCs): \(names). "
+                        + "Ensure the Swift toolchain's `Runtimes/<ver>/usr/bin` is on PATH.")
+            }
             return staged
         #else
             _ = executable
@@ -110,6 +122,18 @@ public enum KSWindowsRuntimeStager {
             if lowerName.hasPrefix(prefix) { return true }
         }
         return whitelistExact.contains(lowerName)
+    }
+
+    /// `executable` 의 PE import 테이블에 화이트리스트 DLL 이 하나라도
+    /// 포함돼 있는지. Packager 가 `stage` 결과가 0 일 때 진짜로 staging 이
+    /// 필요했는지(= 경고를 띄울지) 판정하는 데 사용.
+    ///
+    /// 파싱 실패 시 false (조용히 통과 — staging 실패는 이미 별도 경고).
+    public static func hasWhitelistedImports(executable: URL) -> Bool {
+        guard let deps = try? KSPEImportReader.importedDLLs(at: executable) else {
+            return false
+        }
+        return deps.contains { isWhitelisted($0.lowercased()) }
     }
 
     /// `hasPrefix` 검사용 (모두 소문자). 끝은 `.dll` 로 끝난다는 전제.
@@ -139,12 +163,24 @@ public enum KSWindowsRuntimeStager {
     #if os(Windows)
         /// Swift 런타임 / VC 재배포 DLL 을 검색할 디렉터리 후보.
         ///
-        /// 순서:
-        ///   1. `swift.exe` 가 위치한 디렉터리 (PATH 에서 검색)
-        ///   2. 그 인근 `Runtimes/<ver>/usr/bin`
-        ///   3. `%SystemRoot%\System32` (vcruntime fallback)
-        ///   4. VS Build Tools 의 VC redist 디렉터리 (`Microsoft.VC*.CRT`)
-        private static func discoverSearchDirs(fm: FileManager) -> [URL] {
+        /// 순서 (Runtimes 우선):
+        ///   1. `swift.exe` 인근 `Runtimes/<ver>/usr/bin` (`swift.exe` 부모에서
+        ///      위로 6 단계 검색) — **비-Asserts** 변종이 여기에 있다.
+        ///   2. `swift.exe` 가 위치한 디렉터리 (PATH 에서 검색) — fallback.
+        ///      주의: 공식 swift.org Windows installer 는 `Toolchains\<ver>+Asserts`
+        ///      에 +Asserts 변종 dispatch.dll 을 둘 수 있다. 이 DLL 은 libdispatch
+        ///      내부 assert 가 활성화돼 사소한 contract 위반에도 __builtin_trap →
+        ///      STATUS_ILLEGAL_INSTRUCTION (0xc000001d) 으로 강제 종료된다.
+        ///      배포 바이너리에는 Runtimes 쪽 비-Asserts 변종을 동봉해야 한다.
+        ///   3. `%PATH%` 에 등록된 모든 디렉터리 (swift.org 공식 인스톨러는
+        ///      `Runtimes\<ver>\usr\bin` 을 PATH 에 직접 추가하므로 휴리스틱 워크업이
+        ///      빗나가도 여기서 잡힌다)
+        ///   4. `%SystemRoot%\System32` (vcruntime fallback)
+        ///   5. VS Build Tools 의 VC redist 디렉터리 (`Microsoft.VC*.CRT`)
+        static func discoverSearchDirs(
+            fm: FileManager,
+            env: [String: String] = ProcessInfo.processInfo.environment
+        ) -> [URL] {
             var dirs: [URL] = []
             var seen = Set<String>()
 
@@ -155,12 +191,16 @@ public enum KSWindowsRuntimeStager {
                 }
             }
 
-            // 1) swift.exe via PATH
-            if let swiftDir = locateSwiftDir(fm: fm) {
-                add(swiftDir)
-                // 2) sibling Runtimes/<ver>/usr/bin (walk up 1–3 levels)
+            // 1) swift.exe 인근 Runtimes/<ver>/usr/bin (먼저 추가).
+            // 공식 swift.org Windows installer 는
+            // `<install>\Toolchains\<ver>\usr\bin\swift.exe` 와
+            // `<install>\Runtimes\<ver>\usr\bin\swiftCore.dll` 레이아웃이므로
+            // swiftDir 에서 4 단계 위 (`<install>`) 에 도달해야 `Runtimes` 형제가
+            // 보인다. 6 으로 잡아 chocolatey/scoop/MS Store 변형도 흡수.
+            let swiftDir = locateSwiftDir(fm: fm, env: env)
+            if let swiftDir {
                 var anchor = swiftDir
-                for _ in 0..<3 {
+                for _ in 0..<6 {
                     anchor = anchor.deletingLastPathComponent()
                     let runtimes = anchor.appendingPathComponent("Runtimes")
                     if let entries = try? fm.contentsOfDirectory(
@@ -173,18 +213,28 @@ public enum KSWindowsRuntimeStager {
                         }
                     }
                 }
+                // 2) swift.exe 디렉터리 (fallback — +Asserts 변종일 수 있음).
+                add(swiftDir)
             }
 
-            // 3) System32 (vcruntime140.dll 등)
-            let systemRoot = ProcessInfo.processInfo.environment["SystemRoot"]
-                ?? "C:\\Windows"
+            // 3) %PATH% 전체 — Swift Windows installer 가 Runtimes\<ver>\usr\bin 을
+            // PATH 에 등록하므로, 워크업이 실패해도 여기서 잡힌다.
+            // 비 화이트리스트 DLL 은 어차피 `isWhitelisted()` 에서 거르므로 안전.
+            if let pathEnv = env["PATH"] {
+                for entry in pathEnv.split(separator: ";") {
+                    let trimmed = entry.trimmingCharacters(in: .whitespaces)
+                    if trimmed.isEmpty { continue }
+                    add(URL(fileURLWithPath: trimmed))
+                }
+            }
+
+            // 4) System32 (vcruntime140.dll 등)
+            let systemRoot = env["SystemRoot"] ?? "C:\\Windows"
             add(URL(fileURLWithPath: systemRoot).appendingPathComponent("System32"))
 
-            // 4) VS Build Tools redist
-            let pf = ProcessInfo.processInfo.environment["ProgramFiles"]
-                ?? "C:\\Program Files"
-            let pfx = ProcessInfo.processInfo.environment["ProgramFiles(x86)"]
-                ?? "C:\\Program Files (x86)"
+            // 5) VS Build Tools redist
+            let pf = env["ProgramFiles"] ?? "C:\\Program Files"
+            let pfx = env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)"
             for base in [pf, pfx] {
                 let vs = URL(fileURLWithPath: base)
                     .appendingPathComponent("Microsoft Visual Studio")
@@ -218,16 +268,58 @@ public enum KSWindowsRuntimeStager {
             return dirs
         }
 
-        private static func locateSwiftDir(fm: FileManager) -> URL? {
-            guard let path = ProcessInfo.processInfo.environment["PATH"] else { return nil }
-            for entry in path.split(separator: ";") {
-                let dir = URL(fileURLWithPath: String(entry))
-                let candidate = dir.appendingPathComponent("swift.exe")
-                if fm.fileExists(atPath: candidate.path) {
-                    return dir
+        private static func locateSwiftDir(fm: FileManager, env: [String: String]) -> URL? {
+            // 1) PATH 직접 스캔.
+            if let path = env["PATH"] {
+                for entry in path.split(separator: ";") {
+                    let dir = URL(fileURLWithPath: String(entry))
+                    let candidate = dir.appendingPathComponent("swift.exe")
+                    if fm.fileExists(atPath: candidate.path) {
+                        return dir
+                    }
                 }
             }
-            return nil
+            // 2) Swift 6.3.x Windows installer 처럼 `swift.exe` 가 `%PATH%` 가
+            //    아니라 `App Paths` 레지스트리에만 등록된 경우 PATH 스캔이 실패한다.
+            //    `where.exe` 는 CreateProcess 와 동일하게 App Paths / PATHEXT 까지
+            //    참조하므로 폴백으로 사용한다.
+            return locateViaWhereExe("swift.exe", fm: fm)
+        }
+
+        /// `%SystemRoot%\System32\where.exe <name>` 의 첫 줄에서 디렉터리를
+        /// 추출한다. 어떤 실패든 nil 로 흡수 — 상위 `stage()` 가 미해결 DLL
+        /// 경고를 별도로 출력한다.
+        private static func locateViaWhereExe(_ name: String, fm: FileManager) -> URL? {
+            let systemRoot =
+                ProcessInfo.processInfo.environment["SystemRoot"]
+                ?? "C:\\Windows"
+            let whereExe = URL(fileURLWithPath: systemRoot)
+                .appendingPathComponent("System32/where.exe")
+            guard fm.fileExists(atPath: whereExe.path) else { return nil }
+
+            let proc = Process()
+            proc.executableURL = whereExe
+            proc.arguments = [name]
+            let outPipe = Pipe()
+            proc.standardOutput = outPipe
+            proc.standardError = Pipe()
+            do {
+                try proc.run()
+                proc.waitUntilExit()
+            } catch {
+                return nil
+            }
+            guard proc.terminationStatus == 0 else { return nil }
+
+            let data = outPipe.fileHandleForReading.readDataToEndOfFile()
+            guard let out = String(data: data, encoding: .utf8) else { return nil }
+            let firstLine =
+                out.split(whereSeparator: { $0 == "\r" || $0 == "\n" })
+                .first.map(String.init) ?? ""
+            let exePath = firstLine.trimmingCharacters(in: .whitespaces)
+            if exePath.isEmpty { return nil }
+            let dir = URL(fileURLWithPath: exePath).deletingLastPathComponent()
+            return fm.fileExists(atPath: dir.path) ? dir : nil
         }
     #endif
 

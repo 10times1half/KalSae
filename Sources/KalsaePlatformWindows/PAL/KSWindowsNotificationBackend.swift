@@ -34,8 +34,46 @@
         @MainActor
         public func setAppUserModelID(_ aumid: String) {
             self.aumid = aumid
+            _ = Self._winrtSetAUMID(aumid)
+        }
+
+        // NOTE: The `_winrt*` helpers are intentionally `nonisolated` even
+        // though they execute on the Win32 UI thread. Under Swift 6, closures
+        // created inside a `@MainActor` function are inferred `@MainActor`.
+        // When stdlib helpers like `String.withCString(encodedAs:)` invoke
+        // those closures back, the runtime inserts `swift_task_checkIsolated`
+        // → `dispatch_assert_queue(main_queue)` which traps with
+        // `STATUS_ILLEGAL_INSTRUCTION` (0xC000001D) because the Win32 UI
+        // thread is not Swift's dispatch main queue. See
+        // `KSWindowsDialogBackend+Files.swift` for the same pattern.
+        nonisolated
+        private static func _winrtSetAUMID(_ aumid: String) -> Int32 {
             aumid.withCString(encodedAs: UTF16.self) { ptr in
-                _ = KSWV2_SetAppUserModelID(ptr)
+                KSWV2_SetAppUserModelID(ptr)
+            }
+        }
+
+        nonisolated
+        private static func _winrtShowToast(
+            aumid: String, title: String, body: String, id: String
+        ) -> Int32 {
+            aumid.withCString(encodedAs: UTF16.self) { aumidPtr -> Int32 in
+                title.withCString(encodedAs: UTF16.self) { titlePtr in
+                    body.withCString(encodedAs: UTF16.self) { bodyPtr in
+                        id.withCString(encodedAs: UTF16.self) { tagPtr in
+                            KSWV2_ShowToast(aumidPtr, titlePtr, bodyPtr, tagPtr)
+                        }
+                    }
+                }
+            }
+        }
+
+        nonisolated
+        private static func _winrtCancelToast(aumid: String, id: String) {
+            aumid.withCString(encodedAs: UTF16.self) { aumidPtr in
+                id.withCString(encodedAs: UTF16.self) { tagPtr in
+                    _ = KSWV2_CancelToast(aumidPtr, tagPtr)
+                }
             }
         }
 
@@ -57,11 +95,7 @@
                     // AUMID 미등록: 트레이 버블 폴백은 cancel 불가 (SDK 미지원).
                     return
                 }
-                aumid.withCString(encodedAs: UTF16.self) { aumidPtr in
-                    id.withCString(encodedAs: UTF16.self) { tagPtr in
-                        _ = KSWV2_CancelToast(aumidPtr, tagPtr)
-                    }
-                }
+                Self._winrtCancelToast(aumid: aumid, id: id)
             }
         }
 
@@ -88,16 +122,8 @@
         private func _postOnMain(_ n: KSNotification) throws(KSError) {
             // 1. AUMID가 등록되어 있으면 WinRT 토스트를 먼저 시도한다.
             if let aumid {
-                let hr = aumid.withCString(encodedAs: UTF16.self) { aumidPtr -> Int32 in
-                    n.title.withCString(encodedAs: UTF16.self) { titlePtr in
-                        let body = n.body ?? ""
-                        return body.withCString(encodedAs: UTF16.self) { bodyPtr in
-                            n.id.withCString(encodedAs: UTF16.self) { tagPtr in
-                                KSWV2_ShowToast(aumidPtr, titlePtr, bodyPtr, tagPtr)
-                            }
-                        }
-                    }
-                }
+                let hr = Self._winrtShowToast(
+                    aumid: aumid, title: n.title, body: n.body ?? "", id: n.id)
                 if hr >= 0 { return }  // S_OK or S_FALSE
                 // 실패 시 버블로 폴백한다.
             }

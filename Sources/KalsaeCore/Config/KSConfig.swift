@@ -26,6 +26,9 @@ public struct KSConfig: Codable, Sendable, Equatable {
     public var autostart: KSAutostartConfig?
     /// 선택적 딥링크/커스텀 URL 스킴 설정.
     public var deepLink: KSDeepLinkConfig?
+    /// 선택적 Windows 전용 번들/MSI/NSIS/사이닝 옵션.
+    /// JSON 키는 `windowsBundle` — 창 목록 `windows`와 충돌을 피한다.
+    public var windowsBundle: KSWindowsConfig?
     /// 선택적 스토어 배포 메타데이터 (RFC-008).
     /// 생략 시 `KSDistributionConfig.default` (`target = .developer`).
     public var distribution: KSDistributionConfig
@@ -50,6 +53,7 @@ public struct KSConfig: Codable, Sendable, Equatable {
         notifications: KSNotificationConfig? = nil,
         autostart: KSAutostartConfig? = nil,
         deepLink: KSDeepLinkConfig? = nil,
+        windowsBundle: KSWindowsConfig? = nil,
         distribution: KSDistributionConfig = .default,
         permissions: KSPermissionsConfig = .denied,
         capabilities: KSCapabilitiesConfig? = nil
@@ -63,6 +67,7 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.notifications = notifications
         self.autostart = autostart
         self.deepLink = deepLink
+        self.windowsBundle = windowsBundle
         self.distribution = distribution
         self.permissions = permissions
         self.capabilities = capabilities
@@ -81,6 +86,7 @@ public struct KSConfig: Codable, Sendable, Equatable {
         self.notifications = try c.decodeIfPresent(KSNotificationConfig.self, forKey: .notifications)
         self.autostart = try c.decodeIfPresent(KSAutostartConfig.self, forKey: .autostart)
         self.deepLink = try c.decodeIfPresent(KSDeepLinkConfig.self, forKey: .deepLink)
+        self.windowsBundle = try c.decodeIfPresent(KSWindowsConfig.self, forKey: .windowsBundle)
         self.distribution =
             try c.decodeIfPresent(KSDistributionConfig.self, forKey: .distribution) ?? .default
         self.permissions =
