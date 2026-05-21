@@ -29,6 +29,8 @@
         }
 
         public func register(scheme: String) throws(KSError) {
+            let log = KSLog.logger("platform.windows.deepLink")
+            log.info("register: enter scheme='\(scheme)' identifier='\(identifier)'")
             if KSWindowsAppPackageContext.isMSIXPackaged() {
                 // RFC-008 P2: MSIX 메니페스트 `windows.protocol` 선언이 이미
                 // 스견하므로 HKCU\Software\Classes 쓰기는 안전하게 생략.
@@ -36,20 +38,31 @@
                 print(
                     "⚠  KSWindowsDeepLinkBackend.register(\"\(scheme)\"): no-op under MSIX "
                         + "(scheme is declared in AppxManifest `windows.protocol`).")
+                log.info("register: MSIX no-op exit scheme='\(scheme)'")
                 return
             }
             let s = try Self.normalizeScheme(scheme)
-            let exe = try KSWindowsModule.resolvePath()
+            let exe: String
+            do {
+                exe = try KSWindowsModule.resolvePath()
+            } catch {
+                log.error("register: resolvePath failed: \(error)")
+                throw error
+            }
+            log.info("register: exe='\(exe)' normalized='\(s)'")
             let command = "\"\(exe)\" \"%1\""
 
             let base = "Software\\Classes\\\(s)"
             try Self.writeStringValue(
                 keyPath: base, valueName: "", value: "URL:\(identifier)")
+            log.debug("register: wrote (default)=URL:\(identifier) at \(base)")
             try Self.writeStringValue(
                 keyPath: base, valueName: "URL Protocol", value: "")
+            log.debug("register: wrote URL Protocol at \(base)")
             try Self.writeStringValue(
                 keyPath: "\(base)\\shell\\open\\command",
                 valueName: "", value: command)
+            log.info("register: success scheme='\(scheme)' command=\(command)")
         }
 
         public func unregister(scheme: String) throws(KSError) {

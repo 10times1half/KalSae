@@ -169,7 +169,16 @@
 
         func show() {
             guard let hwnd else { return }
-            _ = ShowWindow(hwnd, SW_SHOW)
+            // 최소화된 상태면 복원, 아니면 단순 표시. 둘 다 SW_HIDE 이후
+            // 다시 가시화한다. 트레이에서 "Show Window"를 클릭한 사용자가
+            // 기대하는 "보이게 + 앞으로" 의미를 충족하기 위해 마지막에
+            // SetForegroundWindow 를 한 번 친다 (z-order 보정).
+            if IsIconic(hwnd) {
+                _ = ShowWindow(hwnd, SW_RESTORE)
+            } else {
+                _ = ShowWindow(hwnd, SW_SHOW)
+            }
+            _ = SetForegroundWindow(hwnd)
             _ = UpdateWindow(hwnd)
         }
 

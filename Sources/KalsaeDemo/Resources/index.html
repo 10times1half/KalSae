@@ -134,14 +134,14 @@
     <div class="card">
       <h3>Window (advanced)</h3>
       <div class="row">
-        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"flag":true}'>Always-on-top ON</button>
-        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"flag":false}'>Always-on-top OFF</button>
+        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"enabled":true}'>Always-on-top ON</button>
+        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"enabled":false}'>Always-on-top OFF</button>
         <button class="act" id="setTitleBtn">Set title → random</button>
         <button class="act" data-win="hide">Hide</button>
         <button class="act" data-win="show">Show</button>
         <button class="act" data-win="reload">Reload</button>
-        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"level":1.25}'>Zoom 125%</button>
-        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"level":1.0}'>Zoom 100%</button>
+        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"factor":1.25}'>Zoom 125%</button>
+        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"factor":1.0}'>Zoom 100%</button>
       </div>
     </div>
 
@@ -171,14 +171,6 @@
         <button class="act" id="shellTrash">Move to trash</button>
       </div>
       <pre id="shellOut">(no result yet)</pre>
-    </div>
-
-    <div class="card">
-      <h3>Capture preview</h3>
-      <div class="row">
-        <button class="act" id="capBtn">Capture window</button>
-      </div>
-      <img id="capImg" alt="capture preview" style="max-width:100%;margin-top:8px;border:1px solid #2a2e3a;border-radius:6px;display:none" />
     </div>
 
     <div class="card">
@@ -408,16 +400,6 @@
       if (!p) { set($("shellOut"), "pick a file with Open File\u2026 first"); return; }
       try { await KS.shell.moveToTrash(p); set($("shellOut"), "trashed " + p); }
       catch (e) { set($("shellOut"), "ERR: " + fmt(e)); }
-    });
-
-    // Capture preview → base64 PNG
-    $("capBtn").addEventListener("click", async () => {
-      try {
-        const b64 = await KS.invoke("__ks.window.capturePreview", { format: "png" });
-        const img = $("capImg");
-        img.src = "data:image/png;base64," + b64;
-        img.style.display = "block";
-      } catch (e) { console.error(e); }
     });
 
     // Displays

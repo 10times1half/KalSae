@@ -621,6 +621,14 @@ public final class KSApp {
             return (b, dlc)
         }()
 
+        // `app.platform.deepLink` / `.autostart`가 `KSApp.boot` 경로에서도
+        // backend를 반영하도록 플랫폼 인스턴스에 부착한다.
+        if let attachable = platform as? any KSPlatformLifecycleAttach {
+            attachable.attachLifecycleBackends(
+                autostart: autostartBackend,
+                deepLink: builtDeepLinkBackend)
+        }
+
         // 모든 플랫폼: JS `__ks.*` 내장 명령 등록.
         // RFC-008 #2.11~2.15: `KSPlatform`이 보유한 백엔드 인스턴스를 그대로
         // 주입해 데모 호스트가 새 인스턴스를 만들지 않도록 한다. 이로써
@@ -714,6 +722,10 @@ public final class KSApp {
         urls.append(contentsOf: backend.extractURLs(fromArgs: args, forSchemes: dlc.schemes))
         var seen: Set<String> = []
         struct Payload: Encodable { let url: String }
+        let log = KSLog.logger("kalsae.app")
+        if !urls.isEmpty {
+            log.info("dispatchDeepLinkURLs: \(urls.count) URL(s) — \(urls)")
+        }
         for u in urls {
             if !seen.insert(u).inserted { continue }
             // 보안: 악의적인 명령줄 인자나 두 번째 인스턴스 전달로 인한

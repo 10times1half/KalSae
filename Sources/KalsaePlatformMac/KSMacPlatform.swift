@@ -8,7 +8,7 @@
     /// `WKWebView`에 대한 Phase 1의 IPC 계약을 검증할 수 있는
     /// 기본 기능을 부팅한다. 전체 PAL 커버리지(다이얼로그, 트레이, 메뉴, 알림)는
     /// 이후 단계에서 추가될 예정이다.
-    public final class KSMacPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
+    public final class KSMacPlatform: KSPlatformComponentsProvider, KSPlatformLifecycleAttach, @unchecked Sendable {
         public var name: String { "macOS (AppKit + WKWebView)" }
 
         public let commandRegistry: KSCommandRegistry
@@ -57,6 +57,14 @@
             self._shell = KSMacShellBackend()
             self._clipboard = KSMacClipboardBackend()
             self._accelerators = nil
+        }
+
+        public func attachLifecycleBackends(
+            autostart: (any KSAutostartBackend)?,
+            deepLink: (any KSDeepLinkBackend)?
+        ) {
+            if let autostart { _autostart = autostart }
+            if let deepLink { _deepLink = deepLink }
         }
 
         public func run(

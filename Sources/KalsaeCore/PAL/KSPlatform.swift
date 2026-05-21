@@ -95,3 +95,21 @@ extension KSPlatform {
     /// 기본값: 플랫폼이 메뉴 명령 라우터를 노출하지 않는다.
     @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? { nil }
 }
+
+/// `KSApp.boot()` 경로에서 `config.autostart` / `config.deepLink`를 기반으로
+/// 동적으로 생성된 백엔드를 플랫폼 인스턴스에 부착하기 위한 후크.
+///
+/// `KSPlatform.run()` 경로는 자체적으로 백엔드를 구성하지만,
+/// `KSApp.boot()`는 플랫폼 외부에서 백엔드를 구성한 뒤 이 메서드를 통해
+/// 주입한다. 이렇게 해야 `app.platform.deepLink` / `app.platform.autostart`가
+/// 두 경로 모두에서 동일하게 반영된다.
+///
+/// 클래스로 한정된 프로토콜이며, 구현 클래스의 nonisolated 가변
+/// 백엔드 슬롯을 채우는 것이 일반적이다.
+public protocol KSPlatformLifecycleAttach: AnyObject {
+    /// `KSApp.boot` 중에 호출. `nil` 값은 변경 없음을 의미한다.
+    func attachLifecycleBackends(
+        autostart: (any KSAutostartBackend)?,
+        deepLink: (any KSDeepLinkBackend)?
+    )
+}

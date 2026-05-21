@@ -300,15 +300,18 @@
 
             // 5) 메시지 펌프. WM_HOTKEY 는 `hotKeyHandlerNonisolated` 가
             //    설정되어 있을 때만 라우팅한다 (accelerator 백엔드가
-            //    설치한다). MainActor 격리된 핸들러는 unsafeBitCast 로
-            //    nonisolated 함수로 캐스트하여 호출한다 — 호출 대상은
-            //    Swift main 으로의 디스패치만 수행한다고 가정.
+            //    설치한다). 핸들러 클로저는 `((Int32) -> Void)?` 로 타입
+            //    삭제되어 격리가 보이지 않지만, 내부 본체는
+            //    `KSWindowsAcceleratorBackend.entries` (@MainActor) 를 접근하므로
+            //    `dispatch_assert_queue` 트랩이 발생한다. WNDPROC 와 동일하게
+            //    `unsafelyAssumeMainActor` 래퍼로 호출해 트랩을 우회한다.
             var msg = MSG()
             while GetMessageW(&msg, nil, 0, 0) {
                 if msg.message == UINT(WM_HOTKEY),
                     let handler = Win32App.hotKeyHandlerNonisolated
                 {
-                    handler(Int32(msg.wParam))
+                    let hkid = Int32(msg.wParam)
+                    Win32App.unsafelyAssumeMainActor { handler(hkid) }
                 }
                 _ = TranslateMessage(&msg)
                 _ = DispatchMessageW(&msg)

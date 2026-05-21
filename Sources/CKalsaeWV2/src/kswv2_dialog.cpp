@@ -244,50 +244,62 @@ extern "C" int32_t KSWV2_DialogSelectFolder(
     *out_path = nullptr;
     *out_chosen = 0;
 
-    // IFileOpenDialog 생성 (폴더 선택 모드)
-    ComPtr<IFileOpenDialog> dialog;
-    HRESULT hr = CoCreateInstance(
-        CLSID_FileOpenDialog,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&dialog));
-    if (FAILED(hr)) return static_cast<int32_t>(hr);
+    // 사용자가 선택한 항목이 가상 셸 폴더(예: "This PC", 라이브러리,
+    // OneDrive placeholder)일 때 SIGDN_FILESYSPATH 가 throw 하거나 COM
+    // 모달 펌프 내부에서 예외가 새어 나오는 경우가 있어, 본체 전체를
+    // C++/SEH 양쪽에서 래핑해 graceful HRESULT 로 변환한다.
+    try {
+        // IFileOpenDialog 생성 (폴더 선택 모드)
+        ComPtr<IFileOpenDialog> dialog;
+        HRESULT hr = CoCreateInstance(
+            CLSID_FileOpenDialog,
+            nullptr,
+            CLSCTX_INPROC_SERVER,
+            IID_PPV_ARGS(&dialog));
+        if (FAILED(hr)) return static_cast<int32_t>(hr);
 
-    // 폴더 선택 모드로 설정
-    FILEOPENDIALOGOPTIONS opts = FOS_FORCEFILESYSTEM |
-                                  FOS_PATHMUSTEXIST |
-                                  FOS_PICKFOLDERS;
-    dialog->SetOptions(opts);
+        // 폴더 선택 모드로 설정
+        FILEOPENDIALOGOPTIONS opts = FOS_FORCEFILESYSTEM |
+                                      FOS_PATHMUSTEXIST |
+                                      FOS_PICKFOLDERS;
+        dialog->SetOptions(opts);
 
-    // 제목 설정
-    if (title) dialog->SetTitle(title);
+        // 제목 설정
+        if (title) dialog->SetTitle(title);
 
-    // 기본 폴더 설정
-    if (default_dir) {
-        ComPtr<IShellItem> folder;
-        hr = SHCreateItemFromParsingName(
-            default_dir, nullptr, IID_PPV_ARGS(&folder));
-        if (SUCCEEDED(hr) && folder) {
-            dialog->SetFolder(folder.Get());
+        // 기본 폴더 설정
+        if (default_dir) {
+            ComPtr<IShellItem> folder;
+            hr = SHCreateItemFromParsingName(
+                default_dir, nullptr, IID_PPV_ARGS(&folder));
+            if (SUCCEEDED(hr) && folder) {
+                dialog->SetFolder(folder.Get());
+            }
         }
+
+        // 다이얼로그 표시
+        hr = dialog->Show(reinterpret_cast<HWND>(hwnd));
+        if (FAILED(hr)) return 0;  // 사용자 취소
+
+        // 선택된 폴더 경로 가져오기
+        ComPtr<IShellItem> result;
+        hr = dialog->GetResult(&result);
+        if (FAILED(hr) || !result) return static_cast<int32_t>(hr);
+
+        LPWSTR path = nullptr;
+        hr = result->GetDisplayName(SIGDN_FILESYSPATH, &path);
+        if (FAILED(hr) || !path) return static_cast<int32_t>(hr);
+
+        *out_path = KSWV2_WcsDupCopy(path, wcslen(path));
+        CoTaskMemFree(path);
+        *out_chosen = 1;
+
+        return 0;
+    } catch (const std::exception &) {
+        // C++ 표준 예외 — graceful 실패.
+        return E_FAIL;
+    } catch (...) {
+        // SEH/_com_error/기타 — graceful 실패.
+        return E_FAIL;
     }
-
-    // 다이얼로그 표시
-    hr = dialog->Show(reinterpret_cast<HWND>(hwnd));
-    if (FAILED(hr)) return 0;  // 사용자 취소
-
-    // 선택된 폴더 경로 가져오기
-    ComPtr<IShellItem> result;
-    hr = dialog->GetResult(&result);
-    if (FAILED(hr) || !result) return static_cast<int32_t>(hr);
-
-    LPWSTR path = nullptr;
-    hr = result->GetDisplayName(SIGDN_FILESYSPATH, &path);
-    if (FAILED(hr) || !path) return static_cast<int32_t>(hr);
-
-    *out_path = KSWV2_WcsDupCopy(path, wcslen(path));
-    CoTaskMemFree(path);
-    *out_chosen = 1;
-
-    return 0;
 }

@@ -38,6 +38,30 @@ import Kalsae
 
     // MARK: - Entry point
 
+    /// 단일 인스턴스 콜백과 부팅된 `KSApp`을 연결하는 작은 라우터.
+    /// `KSApp.singleInstance`는 `boot(...)` **전에** 호출해야 하지만
+    /// argv는 부팅된 `app`에서만 처리할 수 있다. 부팅 전 도착한 argv는
+    /// 보관해 두었다가 `bind(app)`에서 흘려보낸다.
+    @MainActor
+    final class DeepLinkRouter {
+        private var app: KSApp?
+        private var pending: [[String]] = []
+        func receive(_ args: [String]) {
+            if let app {
+                app.dispatchDeepLinkURLs(args: args)
+            } else {
+                pending.append(args)
+            }
+        }
+        func bind(_ app: KSApp) {
+            self.app = app
+            for args in pending {
+                app.dispatchDeepLinkURLs(args: args)
+            }
+            pending.removeAll()
+        }
+    }
+
     @main
     struct Demo {
         static func main() async {
@@ -60,6 +84,21 @@ import Kalsae
                 print("ResourceRoot: <auto: configDir + config.build.frontendDist>")
             }
 
+            // 단일 인스턴스 + 딥링크 라우터.
+            // 두 번째 실행은 argv를 기본 인스턴스에 전달한 뒤 종료한다.
+            // 기본 인스턴스는 도착한 argv를 `dispatchDeepLinkURLs`로 흘려
+            // `__ks.deepLink.openURL` 이벤트를 발생시킨다.
+            let router = DeepLinkRouter()
+            switch KSApp.singleInstance(identifier: "dev.kalsae.demo") { args in
+                router.receive(args)
+            } {
+            case .relayed:
+                print("Another instance is primary; relayed args and exiting.")
+                return
+            case .primary:
+                break
+            }
+
             let app = try await KSApp.boot(
                 configURL: configURL,
                 resourceRoot: resolved.resourceRoot
@@ -68,6 +107,12 @@ import Kalsae
                 await _ksRegister_greet(into: registry)
                 await _ksRegister_ping(into: registry)
             }
+
+            // 부팅 직후 라우터를 바인딩하고 자기 자신의 argv를 한 번 흘려
+            // (예: `kalsae-demo.exe kalsae-demo://hello`로 직접 기동된 경우)
+            // 페이지가 첫 URL을 관찰할 수 있도록 한다.
+            router.bind(app)
+            app.dispatchDeepLinkURLs(args: CommandLine.arguments)
 
             print("Booted \(app.config.app.name) v\(app.config.app.version)")
             print("Platform: \(app.platform.name)")
@@ -121,16 +166,24 @@ import Kalsae
                 return .success(Data("{}".utf8))
             }
 
-            // Show/hide the main window via the existing `__ks.window.*` builtins;
-            // exposed as plain commands so tray menu entries can target them.
+            // Show/hide the main window. **Recursive registry dispatch
+            // (`await app.registry.dispatch("__ks.window.show")`) hangs on
+            // actor reentrancy when invoked from another registry handler
+            // — call the platform window backend directly instead.**
             await app.registry.register("app.showWindow") { [app] _ in
-                _ = await app.registry.dispatch(
-                    name: "__ks.window.show", args: Data("{}".utf8))
+                let windows = app.platform.windows
+                guard let h = await windows.all().first else {
+                    return .success(Data("{}".utf8))
+                }
+                try? await windows.show(h)
                 return .success(Data("{}".utf8))
             }
             await app.registry.register("app.hideWindow") { [app] _ in
-                _ = await app.registry.dispatch(
-                    name: "__ks.window.hide", args: Data("{}".utf8))
+                let windows = app.platform.windows
+                guard let h = await windows.all().first else {
+                    return .success(Data("{}".utf8))
+                }
+                try? await windows.hide(h)
                 return .success(Data("{}".utf8))
             }
 

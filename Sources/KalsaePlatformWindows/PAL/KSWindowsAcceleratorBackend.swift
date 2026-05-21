@@ -1,24 +1,29 @@
 #if os(Windows)
     internal import WinSDK
     public import KalsaeCore
+    internal import Foundation
 
     /// Win32 `RegisterHotKey` / `WM_HOTKEY` 기반의 `KSAcceleratorBackend` 구현체.
     /// 여기에 등록된 단축키는 시스템 전역(foreground 앱과 무관하게)에서 동작한다.
     ///
-    /// 등록은 반드시 UI 스레드(`Win32App.runMessageLoop`이 실행 중인 스레드)에서
-    /// 이루어져야 한다. `@MainActor` 격리로 이를 강제한다.
-    @MainActor
-    public final class KSWindowsAcceleratorBackend: KSAcceleratorBackend {
+    /// `RegisterHotKey(nil, ...)` 는 호출 스레드의 메시지 큐에 `WM_HOTKEY` 를
+    /// 게시하므로 반드시 UI 스레드(메시지 펌프를 도는 스레드)에서 호출해야
+    /// 한다. 따라서 실제 Win32 호출만 `Win32App.runOnUIThread` 로 위임하고,
+    /// 클래스 자체는 nonisolated 로 유지해 `async` 메서드가 blocked main
+    /// thread 의 MainActor executor 로 hop 하지 않도록 한다.
+    public final class KSWindowsAcceleratorBackend: KSAcceleratorBackend, @unchecked Sendable {
         private struct Entry {
             let hotKeyID: Int32
             let handler: @Sendable () -> Void
         }
 
+        private let lock = NSLock()
         private var entries: [String: Entry] = [:]
         private var nextID: Int32 = 1
+        private var routerInstalled: Bool = false
         private let log = KSLog.logger("platform.windows.accelerator")
 
-        public nonisolated init() {}
+        public init() {}
 
         public func register(
             id: String,
@@ -34,50 +39,103 @@
                     message: "Could not parse accelerator: \(accelerator)")
             }
 
-            try installHotKeyRouterIfNeeded()
+            installHotKeyRouterIfNeeded()
 
-            let hotKeyID = nextID
-            nextID &+= 1
+            let hotKeyID: Int32 = locked {
+                let id = nextID
+                nextID &+= 1
+                return id
+            }
 
             let modifiers = UINT(parsed.modifiers | UInt32(MOD_NOREPEAT))
             let vk = UINT(parsed.vk)
 
-            guard RegisterHotKey(nil, hotKeyID, modifiers, vk) else {
-                let err = GetLastError()
+            // RegisterHotKey 는 UI 스레드 (메시지 펌프 소유) 에서만 의미가 있다.
+            let ok = Win32App.runOnUIThread { () -> Bool in
+                RegisterHotKey(nil, hotKeyID, modifiers, vk)
+            }
+            guard ok else {
+                let err = Win32App.runOnUIThread { GetLastError() }
                 throw KSError(
                     code: .platformInitFailed,
                     message: "RegisterHotKey failed for '\(accelerator)' (GetLastError=\(err))")
             }
 
-            entries[id] = Entry(hotKeyID: hotKeyID, handler: handler)
+            locked {
+                entries[id] = Entry(hotKeyID: hotKeyID, handler: handler)
+            }
             log.info("Registered hot-key '\(accelerator)' as id='\(id)' (hkid=\(hotKeyID))")
         }
 
         public func unregister(id: String) async throws(KSError) {
-            guard let entry = entries.removeValue(forKey: id) else { return }
-            if !UnregisterHotKey(nil, entry.hotKeyID) {
-                log.warning("UnregisterHotKey returned false for id='\(id)' (GetLastError=\(GetLastError()))")
+            let entry: Entry? = locked { entries.removeValue(forKey: id) }
+            guard let entry else { return }
+            let ok = Win32App.runOnUIThread { () -> Bool in
+                UnregisterHotKey(nil, entry.hotKeyID)
+            }
+            if !ok {
+                log.warning("UnregisterHotKey returned false for id='\(id)'")
             }
         }
 
         public func unregisterAll() async throws(KSError) {
-            for (id, entry) in entries {
-                if !UnregisterHotKey(nil, entry.hotKeyID) {
-                    log.warning("UnregisterHotKey returned false for id='\(id)' (GetLastError=\(GetLastError()))")
+            let snapshot: [String: Entry] = locked {
+                let s = entries
+                entries.removeAll()
+                return s
+            }
+            for (id, entry) in snapshot {
+                let ok = Win32App.runOnUIThread { () -> Bool in
+                    UnregisterHotKey(nil, entry.hotKeyID)
+                }
+                if !ok {
+                    log.warning("UnregisterHotKey returned false for id='\(id)'")
                 }
             }
-            entries.removeAll()
         }
 
         // MARK: - Internal
 
-        private func installHotKeyRouterIfNeeded() throws(KSError) {
-            guard Win32App.shared.hotKeyHandler == nil else { return }
-            Win32App.shared.hotKeyHandler = { [weak self] hkid in
+        /// `NSLock.lock/unlock` 는 async 컨텍스트에서 호출 시
+        /// `unavailable from asynchronous contexts` 컴파일 에러가 발생한다.
+        /// nonisolated 동기 헬퍼로 감싸 호출 시점의 isolation 을 끊는다.
+        private func locked<T>(_ body: () -> T) -> T {
+            lock.lock()
+            defer { lock.unlock() }
+            return body()
+        }
+
+        private func installHotKeyRouterIfNeeded() {
+            let shouldInstall: Bool = locked {
+                if routerInstalled { return false }
+                routerInstalled = true
+                return true
+            }
+            guard shouldInstall else { return }
+
+            // UI 스레드 펌프가 직접 읽는 nonisolated 미러에 클로저를 심는다.
+            // `Win32App.shared.hotKeyHandler` (@MainActor) 경유는 blocked
+            // main thread 로 hop 하므로 사용 불가. 클로저는 UI 스레드에서
+            // `Win32App.unsafelyAssumeMainActor` 안에서 호출되므로 nonisolated
+            // 함수로 노출해도 안전하다.
+            //
+            // 클로저 body 는 `for ... where ...` 같은 stdlib sugar 를 피해
+            // 명시적 for+if 로 풀어 dispatch_assert_queue 트랩을 방지한다
+            // (`/memories/repo/windows-mainactor-closure-trap.md`).
+            Win32App.hotKeyHandlerNonisolated = { [weak self] hkid in
                 guard let self else { return }
-                for entry in self.entries.values where entry.hotKeyID == hkid {
-                    entry.handler()
-                    return
+                let found: (@Sendable () -> Void)? = self.locked {
+                    var match: (@Sendable () -> Void)? = nil
+                    for entry in self.entries.values {
+                        if entry.hotKeyID == hkid {
+                            match = entry.handler
+                            break
+                        }
+                    }
+                    return match
+                }
+                if let found {
+                    found()
                 }
             }
         }

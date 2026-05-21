@@ -133,10 +133,16 @@ extension KSApp {
             // 레지스트리로 분배. 메뉴 구동 명령은 인자 없는
             // `@KSCommand`로 설계되어 있다.
             let registry = app.registry
+            let log = KSLog.logger("kalsae.app.router")
+            log.debug("sink: enqueue command=\(command) itemID=\(itemID ?? "<nil>")")
             Task.detached {
-                _ = await registry.dispatch(
+                let result = await registry.dispatch(
                     name: command,
                     args: Data("{}".utf8))
+                switch result {
+                case .success: log.debug("sink: success command=\(command)")
+                case .failure(let e): log.error("sink: failure command=\(command) error=\(e)")
+                }
             }
         }
     }

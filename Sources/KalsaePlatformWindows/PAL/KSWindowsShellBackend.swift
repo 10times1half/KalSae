@@ -1,5 +1,6 @@
 #if os(Windows)
     internal import WinSDK
+    internal import CKalsaeWV2
     public import KalsaeCore
     public import Foundation
 
@@ -73,29 +74,30 @@
 
         public func moveToTrash(_ url: URL) async throws(KSError) {
             let path = url.path
-            let result: Result<Void, KSError> = Win32App.runOnUIThread {
-                // SHFILEOPSTRUCT는 이중 null 종료된 경로 목록을 요구한다.
-                var utf16 = Array(path.utf16)
-                utf16.append(0)  // single null at end of path
-                utf16.append(0)  // double null to mark end of list
+            // SHFileOperationW 는 내부적으로 자체 모달 메시지 루프를 돌리므로
+            // UI 스레드에서 호출하면 우리 펌프에 재진입(reentrant)하여
+            // 데드락이 발생한다. 호출자(Task) 스레드에서 직접 실행한다.
+            // OleInitialize 는 per-thread idempotent (Dialog backend 와 동일).
+            _ = KSWV2_OleInitializeOnce()
 
-                let hr: Int32 = utf16.withUnsafeBufferPointer { buf -> Int32 in
-                    var op = SHFILEOPSTRUCTW()
-                    op.wFunc = UINT(FO_DELETE)
-                    op.pFrom = buf.baseAddress
-                    op.fFlags = FILEOP_FLAGS(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI)
-                    return Int32(SHFileOperationW(&op))
-                }
-                if hr != 0 {
-                    return .failure(
-                        KSError(
-                            code: .ioFailed,
-                            message: "SHFileOperationW(FO_DELETE) failed (rc=\(hr)) for \(path)",
-                            data: .int(Int(hr))))
-                }
-                return .success(())
+            // SHFILEOPSTRUCT는 이중 null 종료된 경로 목록을 요구한다.
+            var utf16 = Array(path.utf16)
+            utf16.append(0)  // single null at end of path
+            utf16.append(0)  // double null to mark end of list
+
+            let hr: Int32 = utf16.withUnsafeBufferPointer { buf -> Int32 in
+                var op = SHFILEOPSTRUCTW()
+                op.wFunc = UINT(FO_DELETE)
+                op.pFrom = buf.baseAddress
+                op.fFlags = FILEOP_FLAGS(FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI)
+                return Int32(SHFileOperationW(&op))
             }
-            try result.unwrap()
+            if hr != 0 {
+                throw KSError(
+                    code: .ioFailed,
+                    message: "SHFileOperationW(FO_DELETE) failed (rc=\(hr)) for \(path)",
+                    data: .int(Int(hr)))
+            }
         }
     }
 #endif

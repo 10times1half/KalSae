@@ -105,9 +105,14 @@
             }
             if Int32(msg) == WM_COMMAND {
                 let id = UInt32(wparam & 0xFFFF)
+                let log = KSLog.logger("platform.windows.tray")
                 let entry = KSWin32MenuRegistry.shared.resolve(id: id)
+                log.debug("WM_COMMAND id=\(id) command=\(entry.command ?? "<nil>") itemID=\(entry.itemID ?? "<nil>")")
                 if let cmd = entry.command {
                     KSWindowsCommandRouter.shared.dispatch(command: cmd, itemID: entry.itemID)
+                    log.debug("WM_COMMAND dispatched command=\(cmd)")
+                } else {
+                    log.warning("WM_COMMAND id=\(id) had no registered command")
                 }
                 return true
             }

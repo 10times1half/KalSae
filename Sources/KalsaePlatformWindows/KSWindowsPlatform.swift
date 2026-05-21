@@ -10,7 +10,7 @@
     /// 클립보드, 셸, 액셀러레이터, 자동시작, 딥링크, 단일 인스턴스,
     /// 윈도우 상태 영속화. 모든 PAL 서비스가 Win32에 완전히 연결되어 있다.
     // @unchecked: Win32 thread confinement (HWND affinity) — actor cannot model OS thread binding
-    public final class KSWindowsPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
+    public final class KSWindowsPlatform: KSPlatformComponentsProvider, KSPlatformLifecycleAttach, @unchecked Sendable {
         public var name: String { "Windows (Win32 + WebView2)" }
 
         public let commandRegistry: KSCommandRegistry
@@ -60,6 +60,14 @@
             self._shell = KSWindowsShellBackend()
             self._clipboard = KSWindowsClipboardBackend()
             self._accelerators = KSWindowsAcceleratorBackend()
+        }
+
+        public func attachLifecycleBackends(
+            autostart: (any KSAutostartBackend)?,
+            deepLink: (any KSDeepLinkBackend)?
+        ) {
+            if let autostart { _autostart = autostart }
+            if let deepLink { _deepLink = deepLink }
         }
 
         public func run(
@@ -189,15 +197,23 @@
 
             KSWindowsCommandRouter.shared.clear()
             KSWindowsCommandRouter.shared.subscribe { [weak host] command, itemID in
-                guard let host else { return }
+                let log = KSLog.logger("platform.windows.router")
+                log.info("sink enter command=\(command) itemID=\(itemID ?? "<nil>")")
+                guard let host else {
+                    log.warning("sink: host released; dropping command=\(command)")
+                    return
+                }
                 struct MenuClickPayload: Encodable {
                     let command: String
                     let itemID: String?
                 }
                 try? host.emit("menu", payload: MenuClickPayload(command: command, itemID: itemID))
+                log.debug("sink emitted JS menu event command=\(command)")
                 let registry = self.commandRegistry
                 Task.detached {
+                    log.info("sink dispatch enter command=\(command)")
                     _ = await registry.dispatch(name: command, args: Data("{}".utf8))
+                    log.info("sink dispatch exit command=\(command)")
                 }
             }
 

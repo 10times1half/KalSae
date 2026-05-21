@@ -98,6 +98,8 @@
                 parentHWND: UnsafeMutableRawPointer?
             ) -> URL?
         {
+            let log = KSLog.logger("platform.windows.dialog")
+            log.debug("selectFolder: enter parent=\(parentHWND.map { String(describing: $0) } ?? "nil")")
             ensureCOMInitialized()
             let title = options.title ?? "Select folder"
             let dir = options.defaultDirectory?.path ?? ""
@@ -108,14 +110,20 @@
                     var chosen: Int32 = 0
                     let titleArg: UnsafePointer<wchar_t>? = title.isEmpty ? nil : titlePtr
                     let dirArg: UnsafePointer<wchar_t>? = dir.isEmpty ? nil : dirPtr
+                    log.debug("selectFolder: calling KSWV2_DialogSelectFolder")
                     let hr = KSWV2_DialogSelectFolder(
                         parentHWND,
                         titleArg, dirArg,
                         &out, &chosen)
+                    log.debug("selectFolder: returned hr=\(hr) chosen=\(chosen) outNil=\(out == nil)")
                     if hr != 0 || chosen == 0 || out == nil { return nil }
                     let path = UnsafePointer(out!).toString()
+                    log.debug("selectFolder: path raw length=\(path.count)")
                     KSWV2_Free(out)
-                    return path.isEmpty ? nil : URL(fileURLWithPath: path)
+                    if path.isEmpty { return nil }
+                    let url = URL(fileURLWithPath: path)
+                    log.debug("selectFolder: URL ok")
+                    return url
                 }
             }
         }

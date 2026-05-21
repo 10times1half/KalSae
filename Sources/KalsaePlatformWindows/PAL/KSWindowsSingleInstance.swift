@@ -96,15 +96,30 @@
                 log.warning("GetModuleHandleW(nil) returned NULL; single-instance relay disabled")
                 return .primary
             }
-            let atom = className.withUTF16Pointer { namePtr -> ATOM in
-                var wc = WNDCLASSEXW()
-                wc.cbSize = UINT(MemoryLayout<WNDCLASSEXW>.size)
-                wc.lpfnWndProc = { hwnd, msg, wparam, lparam in
-                    Self.receiverWndProc(hwnd, msg, wparam, lparam)
+
+            // 수신 윈도우는 메시지 펌프가 도는 스레드에 살아야 한다.
+            // 부팅 후 Swift main thread는 `WaitForSingleObject(uiThread)`로
+            // 영구 blocked되므로 거기서 만들면 WM_COPYDATA가 영원히 처리되지
+            // 않는다. 전용 Win32 UI 스레드(`Win32App.ensureUIThread`)에서
+            // 클래스 등록과 윈도우 생성을 모두 수행한다.
+            do {
+                try Win32App.ensureUIThread()
+            } catch {
+                log.warning("ensureUIThread failed (\(error)); single-instance relay disabled")
+                return .primary
+            }
+
+            let atom: ATOM = Win32App.runOnUIThread {
+                className.withUTF16Pointer { namePtr -> ATOM in
+                    var wc = WNDCLASSEXW()
+                    wc.cbSize = UINT(MemoryLayout<WNDCLASSEXW>.size)
+                    wc.lpfnWndProc = { hwnd, msg, wparam, lparam in
+                        Self.receiverWndProc(hwnd, msg, wparam, lparam)
+                    }
+                    wc.hInstance = instance
+                    wc.lpszClassName = namePtr
+                    return RegisterClassExW(&wc)
                 }
-                wc.hInstance = instance
-                wc.lpszClassName = namePtr
-                return RegisterClassExW(&wc)
             }
             guard atom != 0 else {
                 log.warning(
@@ -113,15 +128,16 @@
                 return .primary
             }
 
-            // This is a comment to indicate the start of the patch context
             // HWND_MESSAGE = -3. 사용자에게 보이지 않으면서 WM_COPYDATA를
-            // 받을 수 있는 메시지 전용 윈도우를 생성한다.
+            // 받을 수 있는 메시지 전용 윈도우를 UI 스레드에서 생성한다.
             let hwndMessage = HWND(bitPattern: -3)
-            let hwnd = className.withUTF16Pointer { namePtr -> HWND? in
-                CreateWindowExW(
-                    0, namePtr, namePtr,
-                    0, 0, 0, 0, 0,
-                    hwndMessage, nil, instance, nil)
+            let hwnd: HWND? = Win32App.runOnUIThread {
+                className.withUTF16Pointer { namePtr -> HWND? in
+                    CreateWindowExW(
+                        0, namePtr, namePtr,
+                        0, 0, 0, 0, 0,
+                        hwndMessage, nil, instance, nil)
+                }
             }
             if hwnd == nil {
                 log.warning("CreateWindowExW(HWND_MESSAGE) failed (GetLastError=\(GetLastError())); relay disabled")
@@ -172,7 +188,13 @@
             className: String,
             log: Logger
         ) {
-            let target: HWND? = className.withUTF16Pointer { FindWindowExW(nil, nil, $0, nil) }
+            // 수신자는 HWND_MESSAGE에 부착된 메시지 전용 윈도우이므로
+            // 데스크톱 윈도우 목록에는 노출되지 않는다. `FindWindowExW`의
+            // hwndParent로 반드시 HWND_MESSAGE(-3)를 지정해야 한다.
+            let hwndMessage = HWND(bitPattern: -3)
+            let target: HWND? = className.withUTF16Pointer {
+                FindWindowExW(hwndMessage, nil, $0, nil)
+            }
             guard let target else {
                 log.warning("Could not locate primary single-instance window; arguments not forwarded")
                 return

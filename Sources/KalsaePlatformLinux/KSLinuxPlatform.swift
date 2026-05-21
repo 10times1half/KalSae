@@ -8,7 +8,7 @@
     /// 알림, 자동시작, 딥링크)이 동작 중이다. 트레이는 AppIndicator3이
     /// 필요하여 스터브로 남아 있다; 단일 인스턴스는 `KSLinuxSingleInstance`를 통해 노출된다.
     // @unchecked: GTK main thread confinement — actor unsuitable for OS main-loop binding
-    public final class KSLinuxPlatform: KSPlatformComponentsProvider, @unchecked Sendable {
+    public final class KSLinuxPlatform: KSPlatformComponentsProvider, KSPlatformLifecycleAttach, @unchecked Sendable {
         public var name: String { "Linux (GTK4 + WebKitGTK 6.0)" }
 
         public let commandRegistry: KSCommandRegistry
@@ -56,6 +56,14 @@
             self._shell = KSLinuxShellBackend()
             self._clipboard = KSLinuxClipboardBackend()
             self._accelerators = KSLinuxAcceleratorBackend()
+        }
+
+        public func attachLifecycleBackends(
+            autostart: (any KSAutostartBackend)?,
+            deepLink: (any KSDeepLinkBackend)?
+        ) {
+            if let autostart { _autostart = autostart }
+            if let deepLink { _deepLink = deepLink }
         }
 
         public func run(
