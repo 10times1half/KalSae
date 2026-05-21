@@ -156,8 +156,18 @@ _🇰🇷 iOS/Android PAL 및 테스트 타겟이 추가됨._
 - Use `.when(platforms: [.windows])` etc. in `Package.swift` linker/cxx flags.
 - Use `#if os(Windows)` / `os(macOS)` / `os(Linux)` / `os(iOS)` / `os(Android)` in source files.
 
+### Adding a new desktop platform
+
+새 데스크톱 플랫폼(예: BSD, Haiku 등)을 추가할 때 PAL 클래스는
+`KSPlatformComponentsProvider`뿐 아니라 **`KSPlatformLifecycleAttach`도
+반드시 준수**해야 한다. 이를 빠뜨리면 `KSApp.boot(configURL:)` 경로에서
+`app.platform.deepLink` / `.autostart`가 항상 `nil`이 되어 PAL
+capabilities가 false로 보고된다. 배경은
+`/memories/repo/ksapp-boot-vs-run-asymmetry.md` 참고.
+
 _🇰🇷 typed throws + bare catch 우선. 액터 대안은 NSLock. public 노출 파일은_
 _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
+_새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
 
 ---
 
@@ -189,6 +199,16 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
     nonisolated 헬퍼를 분리하거나 명시적 for-loop / if-let으로 풀어야 한다.
   - 자세한 패턴은 `/memories/repo/windows-mainactor-closure-trap.md` 및
     `KSWindowsDialogBackend+Files.swift` 상단 주석 참고.
+- **메시지 전용(HWND_MESSAGE) 윈도우는 UI 스레드에서만 생성**: 메시지 펌프
+  가 도는 스레드 = 전용 Win32 UI 스레드. 부팅 후 Swift main thread는 영구
+  blocked이므로 거기서 만든 윈도우의 WM은 영원히 dispatch되지 않는다.
+  `KSApp.singleInstance`처럼 `boot()` **전에** 호출되는 경로라도 윈도우
+  생성 시점에는 `Win32App.ensureUIThread()` → `Win32App.runOnUIThread {
+  RegisterClassExW + CreateWindowExW(HWND_MESSAGE, ...) }` 패턴을 따를 것.
+  또한 두 번째 인스턴스에서 그 윈도우를 찾을 때는 `FindWindowExW(nil,
+  ...)`로는 HWND_MESSAGE 자식이 검색되지 않는다 — parent로 반드시
+  `HWND_MESSAGE`(-3)를 전달해야 한다. 자세한 함정과 수정 예시는
+  `/memories/repo/windows-single-instance-pumping.md` 참고.
 - **다이얼로그 부모 자동 보정**: `KS.dialog.openFile/saveFile/selectFolder`는
   `parent` 인자가 nil이거나 registry에 없는 핸들이면 `GetActiveWindow()` →
   `GetForegroundWindow()` 폴백 후 `SetForegroundWindow(hwnd)`로 z-order를
@@ -206,9 +226,13 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   `installSecurityHandlers(allowPopups:openExternal:)` installs a WKUIDelegate
   (popup blocking + media-capture deny) and WKNavigationDelegate (external URL
   routing) — wired in `runOnMain()` (see [Docs/SECURITY.md](Docs/SECURITY.md)).
-- **Known gaps:** `installFileDropEmitter` is a best-effort warning stub;
-  proper external file-drop forwarding requires NSWindow draggingDestination
-  integration (deferred).
+- **File drop emitter:** `installFileDropEmitter` is wired via a `WKWebView`
+  subclass (`KSMacWebView`) that overrides `NSDraggingDestination` methods
+  (`draggingEntered` / `draggingUpdated` / `draggingExited` /
+  `performDragOperation`). When the pasteboard contains `fileURL` items the
+  override fires the bridge handler (kind/x/y/paths — screen-pixel `Int32`,
+  matching Windows) and skips super so WebCore never sees the drop. Pair with
+  `setAllowExternalDrop(false)` to avoid double-firing the HTML5 `drop` event.
 
 ### Linux
 
@@ -283,7 +307,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   Source: [PackagerAndroid.swift](Sources/KalsaeCLI/Support/PackagerAndroid.swift).
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows = 풍 PAL. **Swift main thread가 blocked되어 있으므로 `await MainActor.run` 금지 → `Win32App.runOnUIThread` 사용**. macOS = 풍 PAL (보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = 풍 PAL (라우터/컨텍스트 메뉴 포함; `run()`은 영구 미지원 — JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._
+_🇰🇷 Windows = 풍 PAL. **Swift main thread가 blocked되어 있으므로 `await MainActor.run` 금지 → `Win32App.runOnUIThread` 사용**. macOS = 풍 PAL (보안 핸들러 + 파일 드롭 emitter 적용 — `KSMacWebView` 서브클래스). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = 풍 PAL (라우터/컨텍스트 메뉴 포함; `run()`은 영구 미지원 — JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._
 
 ---
 
@@ -315,9 +339,18 @@ _🇰🇷 Windows = 풍 PAL. **Swift main thread가 blocked되어 있으므로 `
     `kalsae build --android`, and assembles a real `app-debug.apk` via Gradle.
     The Swift version here intentionally diverges from Windows CI's 6.3.1
     because the Swift Android SDK does not yet ship for 6.3.x.
-- iOS CI is not yet configured in `.github/workflows/`.
+- **iOS CI** (`phase-ios-simulator.yml`) has two jobs:
+  - Windows job: builds `kalsae` CLI and runs `PackagerIOSAppBundle*` unit
+    tests (pure Swift string emission — host-OS-agnostic).
+  - macOS job (`macos-14`): compiles `KalsaePlatformIOS` + `KalsaeIOSSample`
+    for the iOS Simulator destination via `xcodebuild build` against the
+    SwiftPM scheme. Catches iOS-only compile regressions but does not boot
+    the simulator or run runtime tests (deferred).
+- Store distribution workflows (`store-ios-appstore.yml`, `store-macos-mas.yml`,
+  `store-macos-devid.yml`, `store-windows-msix.yml`) are `workflow_dispatch`
+  only and require repo secrets — they do not run on push/PR.
 
-_🇰🇷 Windows CI는 Swift 6.3.1 고정. Android E2E CI는 Ubuntu + Swift 6.2 (Swift Android SDK 가용 버전). 성능 단언은 `CI` 환경변수로 완화._
+_🇰🇷 Windows CI는 Swift 6.3.1 고정. Android E2E CI는 Ubuntu + Swift 6.2 (Swift Android SDK 가용 버전). iOS CI는 Windows(Packager 유닛) + macos-14(Simulator 컴파일) 2-job. 성능 단언은 `CI` 환경변수로 완화._
 
 ---
 

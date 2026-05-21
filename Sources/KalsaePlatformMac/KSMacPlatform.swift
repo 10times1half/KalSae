@@ -361,9 +361,25 @@
         public func setAllowExternalDrop(_ allow: Bool) {
             webview.setAllowExternalDrop(allow)
         }
-        // RFC-008 §2.2: 파일 드롭 emitter 설치(현재 best-effort 경고 stub).
+        // RFC-008 §2.2: 외부 파일 드롭 이벤트를 `__ks.file.drop` JS 이벤트로 emit.
+        // 일반적으로 `setAllowExternalDrop(false)`와 함께 호출되어 HTML5 drop을
+        // 비활성화하고 네이티브 이미터가 단일 진실의 원천이 되도록 한다.
         public func installFileDropEmitter() throws(KSError) {
-            try webview.installFileDropEmitter()
+            let bridge = self.bridge
+            webview.installFileDropEmitter { kind, x, y, paths in
+                struct Payload: Encodable {
+                    let kind: String
+                    let x: Int32
+                    let y: Int32
+                    let paths: [String]
+                }
+                try? bridge.emit(
+                    event: "__ks.file.drop",
+                    payload: Payload(kind: kind, x: x, y: y, paths: paths))
+                // Windows PAL과 동일: `.drop` 시에만 paths 비어 있으면 거부,
+                // `.enter` / `.leave`는 항상 수락.
+                return kind != "drop" || !paths.isEmpty
+            }
         }
         // RFC-008 §2.3: 팝업 차단 + 외부 URL 라우팅 + 권한 거부 핸들러.
         public func installSecurityHandlers(

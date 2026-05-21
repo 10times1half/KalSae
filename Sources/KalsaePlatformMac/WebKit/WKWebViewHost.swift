@@ -7,7 +7,7 @@
 
     @MainActor
     public final class WKWebViewHost: KSWebViewBackend {
-        internal let webView: WKWebView
+        internal let webView: KSMacWebView
         private let userContentController: WKUserContentController
         private let log: Logger = KSLog.logger("platform.mac.webview")
         private var inbound: ((String) -> Void)?
@@ -66,7 +66,7 @@
                 forMainFrameOnly: false)
             ucc.addUserScript(userScript)
 
-            self.webView = WKWebView(frame: .zero, configuration: config)
+            self.webView = KSMacWebView(frame: .zero, configuration: config)
             self.webView.autoresizingMask = [.width, .height]
 
             // post-creation 토글 (`isInspectable` 등).
@@ -422,16 +422,31 @@
 
         /// RFC-008 §2.2 — 외부 파일 드롭 이벤트를 JS로 emit.
         ///
-        /// macOS에서는 WKWebView가 NSView로서 자체 드래그 처리를 한다. 본
-        /// 메서드는 `setAllowExternalDrop(false)`와 함께 쓰일 때 의미가 있으나,
-        /// macOS WKWebView는 NSDraggingDestination을 외부에서 가로채는 공식
-        /// API가 없어 NSWindow 단위로만 가능하다. v1에서는 **best-effort 경고**로
-        /// 등록만 받고 실제 emit은 다음 릴리스에서 NSWindow draggingDestination
-        /// 통합으로 다룬다.
-        public func installFileDropEmitter() throws(KSError) {
-            log.warning(
-                "macOS installFileDropEmitter() is a stub — file drop forwarding requires "
-                    + "NSWindow draggingDestination integration; tracked as Phase 4 follow-up.")
+        /// `KSMacWebView` 서브클래스가 `NSDraggingDestination` 메서드를
+        /// 가로채 핸들러를 호출한다. 좌표는 윈도우 로컬 NSPoint를 스크린
+        /// 좌표 `Int32` 픽셀로 변환해 Windows PAL과 동일한 페이로드 스키마
+        /// (`{kind, x, y, paths}`)를 emit 한다. 윈도우가 아직 attach 되지
+        /// 않았으면 로컬 좌표를 그대로 사용한다.
+        ///
+        /// 일반적으로 `setAllowExternalDrop(false)`와 함께 호출해야 한다 —
+        /// 그렇지 않으면 HTML5 drop 이벤트와 네이티브 이미터가 동시에 발화
+        /// 한다. 단, 본 메서드 호출 자체는 HTML5 경로를 비활성화하지 않는다.
+        ///
+        /// - Parameter handler: 드래그 이벤트 콜백. `kind`는 `"enter"` /
+        ///   `"leave"` / `"drop"`. 반환값은 `drop`에서만 의미가 있으며
+        ///   `false`이면 OS에 거부를 알린다.
+        internal func installFileDropEmitter(
+            handler: @escaping @MainActor (String, Int32, Int32, [String]) -> Bool
+        ) {
+            webView.fileDropHandler = { [weak webView] kind, point, paths in
+                let screen: NSPoint
+                if let win = webView?.window {
+                    screen = win.convertPoint(toScreen: point)
+                } else {
+                    screen = point
+                }
+                return handler(kind, Int32(screen.x), Int32(screen.y), paths)
+            }
         }
 
         // MARK: - 확장 PAL 인터페이스
