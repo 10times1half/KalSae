@@ -62,63 +62,22 @@ public enum KSUUIDv5 {
         var h4: UInt32 = 0xC3D2_E1F0
 
         // ── 패딩 ──
-        var msg = message
-        let bitLen = UInt64(message.count) * 8
+        var msg: [UInt8] = message
+        let bitLen: UInt64 = UInt64(message.count) * 8
         msg.append(0x80)
         while msg.count % 64 != 56 { msg.append(0x00) }
         for i in (0..<8).reversed() {
-            msg.append(UInt8((bitLen >> (UInt64(i) * 8)) & 0xFF))
+            let shift: UInt64 = UInt64(i) * 8
+            let byte: UInt8 = UInt8((bitLen >> shift) & 0xFF)
+            msg.append(byte)
         }
 
         // ── 64바이트 블록 처리 ──
-        var idx = 0
+        var idx: Int = 0
         while idx < msg.count {
-            var w = [UInt32](repeating: 0, count: 80)
-            for j in 0..<16 {
-                let off = idx + j * 4
-                w[j] =
-                    (UInt32(msg[off]) << 24)
-                    | (UInt32(msg[off + 1]) << 16)
-                    | (UInt32(msg[off + 2]) << 8)
-                    | UInt32(msg[off + 3])
-            }
-            for j in 16..<80 {
-                w[j] = rotl(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1)
-            }
-            var a = h0
-            var b = h1
-            var c = h2
-            var d = h3
-            var e = h4
-            for j in 0..<80 {
-                let f: UInt32
-                let k: UInt32
-                switch j {
-                case 0..<20:
-                    f = (b & c) | ((~b) & d)
-                    k = 0x5A82_7999
-                case 20..<40:
-                    f = b ^ c ^ d
-                    k = 0x6ED9_EBA1
-                case 40..<60:
-                    f = (b & c) | (b & d) | (c & d)
-                    k = 0x8F1B_BCDC
-                default:
-                    f = b ^ c ^ d
-                    k = 0xCA62_C1D6
-                }
-                let temp = rotl(a, 5) &+ f &+ e &+ k &+ w[j]
-                e = d
-                d = c
-                c = rotl(b, 30)
-                b = a
-                a = temp
-            }
-            h0 = h0 &+ a
-            h1 = h1 &+ b
-            h2 = h2 &+ c
-            h3 = h3 &+ d
-            h4 = h4 &+ e
+            sha1ProcessBlock(
+                msg: msg, idx: idx,
+                h0: &h0, h1: &h1, h2: &h2, h3: &h3, h4: &h4)
             idx += 64
         }
 
@@ -135,6 +94,65 @@ public enum KSUUIDv5 {
     @inline(__always)
     private static func rotl(_ x: UInt32, _ n: UInt32) -> UInt32 {
         (x << n) | (x >> (32 - n))
+    }
+
+    /// SHA-1 단일 64 바이트 블록 처리. `sha1` 본체에서 분리되어 type-checker가
+    /// 풀어야 할 식 그래프를 작게 유지한다 (성능/동작 변화 없음).
+    private static func sha1ProcessBlock(
+        msg: [UInt8], idx: Int,
+        h0: inout UInt32, h1: inout UInt32, h2: inout UInt32,
+        h3: inout UInt32, h4: inout UInt32
+    ) {
+        var w: [UInt32] = [UInt32](repeating: 0, count: 80)
+        for j in 0..<16 {
+            let off: Int = idx + j * 4
+            let b0: UInt32 = UInt32(msg[off]) << 24
+            let b1: UInt32 = UInt32(msg[off + 1]) << 16
+            let b2: UInt32 = UInt32(msg[off + 2]) << 8
+            let b3: UInt32 = UInt32(msg[off + 3])
+            w[j] = b0 | b1 | b2 | b3
+        }
+        for j in 16..<80 {
+            let x: UInt32 = w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16]
+            w[j] = rotl(x, 1)
+        }
+        var a: UInt32 = h0
+        var b: UInt32 = h1
+        var c: UInt32 = h2
+        var d: UInt32 = h3
+        var e: UInt32 = h4
+        for j in 0..<80 {
+            let f: UInt32
+            let k: UInt32
+            switch j {
+            case 0..<20:
+                f = (b & c) | ((~b) & d)
+                k = 0x5A82_7999
+            case 20..<40:
+                f = b ^ c ^ d
+                k = 0x6ED9_EBA1
+            case 40..<60:
+                f = (b & c) | (b & d) | (c & d)
+                k = 0x8F1B_BCDC
+            default:
+                f = b ^ c ^ d
+                k = 0xCA62_C1D6
+            }
+            let t1: UInt32 = rotl(a, 5) &+ f
+            let t2: UInt32 = t1 &+ e
+            let t3: UInt32 = t2 &+ k
+            let temp: UInt32 = t3 &+ w[j]
+            e = d
+            d = c
+            c = rotl(b, 30)
+            b = a
+            a = temp
+        }
+        h0 = h0 &+ a
+        h1 = h1 &+ b
+        h2 = h2 &+ c
+        h3 = h3 &+ d
+        h4 = h4 &+ e
     }
 }
 

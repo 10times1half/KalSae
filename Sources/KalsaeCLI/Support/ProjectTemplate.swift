@@ -247,20 +247,22 @@ public struct ProjectTemplate {
     /// `{{KALSAE_VERSION}}` 를 처리한다.
     func substitute(_ raw: String) -> String {
         let b = buildDefaults
-        let devCommandJSON = b.devCommand.map { "\"\($0)\"" } ?? "null"
-        let buildCommandJSON = b.buildCommand.map { "\"\($0)\"" } ?? "null"
-        return
-            raw
-            .replacingOccurrences(of: "{{NAME}}", with: name)
-            .replacingOccurrences(of: "{{NAME_LOWER}}", with: name.lowercased())
-            .replacingOccurrences(of: "{{IDENTIFIER}}", with: identifier)
-            .replacingOccurrences(of: "{{FRONTEND_DIST}}", with: b.frontendDist)
-            .replacingOccurrences(of: "{{DEV_SERVER_URL}}", with: b.devServerURL)
-            .replacingOccurrences(of: "{{DEV_COMMAND}}", with: devCommandJSON)
-            .replacingOccurrences(of: "{{BUILD_COMMAND}}", with: buildCommandJSON)
-            .replacingOccurrences(of: "{{APP_VERSION}}", with: KSVersion.current)
-            .replacingOccurrences(of: "{{KALSAE_VERSION}}", with: KSVersion.current)
-            .replacingOccurrences(of: "{{KALSAE_DEPENDENCY}}", with: kalsaeDependencyLine)
+        let devCommandJSON: String = b.devCommand.map { "\"\($0)\"" } ?? "null"
+        let buildCommandJSON: String = b.buildCommand.map { "\"\($0)\"" } ?? "null"
+        // 체인된 `replacingOccurrences` 호출은 Swift type-checker가 풀어야 할
+        // 식 그래프를 폭발적으로 키우므로 (1초+), 순차 var 할당으로 분리한다.
+        var s: String = raw
+        s = s.replacingOccurrences(of: "{{NAME}}", with: name)
+        s = s.replacingOccurrences(of: "{{NAME_LOWER}}", with: name.lowercased())
+        s = s.replacingOccurrences(of: "{{IDENTIFIER}}", with: identifier)
+        s = s.replacingOccurrences(of: "{{FRONTEND_DIST}}", with: b.frontendDist)
+        s = s.replacingOccurrences(of: "{{DEV_SERVER_URL}}", with: b.devServerURL)
+        s = s.replacingOccurrences(of: "{{DEV_COMMAND}}", with: devCommandJSON)
+        s = s.replacingOccurrences(of: "{{BUILD_COMMAND}}", with: buildCommandJSON)
+        s = s.replacingOccurrences(of: "{{APP_VERSION}}", with: KSVersion.current)
+        s = s.replacingOccurrences(of: "{{KALSAE_VERSION}}", with: KSVersion.current)
+        s = s.replacingOccurrences(of: "{{KALSAE_DEPENDENCY}}", with: kalsaeDependencyLine)
+        return s
     }
 
     /// `Package.swift` 의 `dependencies:` 배열에 들어갈 한 줄.

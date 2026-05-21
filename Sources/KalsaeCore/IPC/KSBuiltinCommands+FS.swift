@@ -220,6 +220,35 @@ extension KSBuiltinCommands {
                 createdAtSecondsSince1970: created)
         }
 
+        // 타입 체커 부하 분산을 위해 후반부 핸들러는 별도 헬퍼로 분리.
+        await Self.registerFSCommandsExtra(
+            into: registry, scope: scope, appDirectory: appDirectory)
+    }
+
+    /// `registerFSCommands`의 후반부(readDir/createDir/remove/rename/copyFile)
+    /// 핸들러 등록 헬퍼. 단일 본문 비대화로 인한 Swift 타입 체크 시간 증가를
+    /// 피하기 위해 분리한 것이며 호출자는 `registerFSCommands`뿐이다.
+    private static func registerFSCommandsExtra(
+        into registry: KSCommandRegistry,
+        scope: KSFSScope,
+        appDirectory: URL
+    ) async {
+        let ctx = KSFSScope.ExpansionContext.current(appDirectory: appDirectory)
+
+        @Sendable
+        func resolve(_ raw: String) throws(KSError) -> URL {
+            let expanded = KSFSScope.expand(raw, in: ctx)
+            let url = URL(fileURLWithPath: expanded).standardizedFileURL
+            let absolute = url.path
+            guard scope.permits(absolutePath: absolute, in: ctx) else {
+                throw KSError(
+                    code: .fsScopeDenied,
+                    message: "fs scope denies path '\(raw)'",
+                    data: .string(absolute))
+            }
+            return url
+        }
+
         await register(registry, "__ks.fs.readDir") { (args: FSReadDirArg) throws(KSError) -> FSReadDirResult in
             let root = try resolve(args.path)
             let recursive = args.recursive == true

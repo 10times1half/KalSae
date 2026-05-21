@@ -89,9 +89,9 @@ import Kalsae
             // 기본 인스턴스는 도착한 argv를 `dispatchDeepLinkURLs`로 흘려
             // `__ks.deepLink.openURL` 이벤트를 발생시킨다.
             let router = DeepLinkRouter()
-            switch KSApp.singleInstance(identifier: "dev.kalsae.demo") { args in
+            switch KSApp.singleInstance(identifier: "dev.kalsae.demo", onSecondInstance: { args in
                 router.receive(args)
-            } {
+            }) {
             case .relayed:
                 print("Another instance is primary; relayed args and exiting.")
                 return

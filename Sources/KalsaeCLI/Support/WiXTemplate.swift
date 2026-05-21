@@ -9,7 +9,7 @@
 ///
 /// 스키마는 WiX v3 (`http://schemas.microsoft.com/wix/2006/wi`). v4/v5는 별도 RFC.
 public import Foundation
-public import KalsaeCore
+import KalsaeCore
 
 public enum KSWiXTemplate {
     public struct Options: Sendable {

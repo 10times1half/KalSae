@@ -136,6 +136,23 @@ extension KSBuiltinCommands {
             try await windows.reload(h)
             return Empty()
         }
+        // 타입 체커 부하를 줄이기 위해 나머지 핸들러는 별도 헬퍼로 분리.
+        await Self.registerWindowCommandsExtra(
+            into: registry, windows: windows, resolver: resolver,
+            fsScope: fsScope, fsCtx: fsCtx, navigationScope: navigationScope)
+    }
+
+    /// `registerWindowCommands`의 후반부(테마/줌/멀티윈도우/디스플레이 등) 핸들러
+    /// 등록 헬퍼. 단일 함수 본문이 비대해져 Swift 타입 체크 시간이 길어지는
+    /// 것을 피하기 위해 분리한 것이며, 호출자는 `registerWindowCommands`뿐이다.
+    private static func registerWindowCommandsExtra(
+        into registry: KSCommandRegistry,
+        windows: any KSWindowBackend,
+        resolver: WindowResolver,
+        fsScope: KSFSScope,
+        fsCtx: KSFSScope.ExpansionContext,
+        navigationScope: KSNavigationScope
+    ) async {
         await register(registry, "__ks.window.setTheme") { (args: ThemeArg) throws(KSError) -> Empty in
             let h = try await resolver.resolve(window: args.window)
             try await windows.setTheme(h, theme: args.theme)

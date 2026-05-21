@@ -10,6 +10,8 @@ struct BuildCommand: ParsableCommand {
         abstract: "Build the project for release."
     )
 
+    // MARK: - 기본 빌드 옵션
+
     @Flag(name: .shortAndLong, help: "Build in debug configuration instead of release.")
     var debug: Bool = false
 
@@ -20,6 +22,8 @@ struct BuildCommand: ParsableCommand {
         name: [.customShort("j"), .long],
         help: "Maximum number of parallel swift build jobs (default: CPU count).")
     var jobs: Int? = nil
+
+    // MARK: - 패키징 옵션
 
     @Flag(
         name: .long, inversion: .prefixedNo,
@@ -53,6 +57,8 @@ struct BuildCommand: ParsableCommand {
             "When --standalone is on but no PE editor (ResourceHacker / rcedit) is on PATH, fall back to compatibility layout instead of failing the build. Off by default — without this flag, missing PE editors hard-error so a 'standalone' build is never silently identical to a regular build."
     )
     var standaloneAllowFallback: Bool = false
+
+    // MARK: - 경로/출력 옵션
 
     @Option(
         name: .long,
@@ -96,6 +102,8 @@ struct BuildCommand: ParsableCommand {
     )
     var noPrune: Bool = false
 
+    // MARK: - Windows 전용 옵션
+
     @Flag(
         name: .long, inversion: .prefixedNo,
         help:
@@ -118,6 +126,8 @@ struct BuildCommand: ParsableCommand {
     )
     var autoFetchResourceHacker: Bool = true
 
+    // MARK: - 빌드 제어 옵션
+
     @Flag(name: .long, help: "Remove .build/ and the package output directory before building.")
     var clean: Bool = false
 
@@ -132,6 +142,8 @@ struct BuildCommand: ParsableCommand {
     @Flag(name: .long, help: "Print the build/package commands without executing them.")
     var dryrun: Bool = false
 
+    // MARK: - Windows 인스톨러 옵션 (NSIS)
+
     @Flag(
         name: .long,
         help: "Generate an NSIS installer (.nsi + .exe via makensis) after packaging. Windows-only.")
@@ -141,6 +153,8 @@ struct BuildCommand: ParsableCommand {
         name: .long,
         help: "Hint passed to the NSIS template Publisher field (default: app.identifier).")
     var nsisPublisher: String? = nil
+
+    // MARK: - 코드사이닝 및 MSI 옵션
 
     @Option(
         name: .long,
@@ -212,6 +226,8 @@ struct BuildCommand: ParsableCommand {
     )
     var useLocalToolsDir: Bool = false
 
+    // MARK: - 타이밍/성능 옵션
+
     @Flag(
         name: .long, inversion: .prefixedNo,
         help: "Print stage-by-stage wall-clock timings after the build (default ON).")
@@ -228,6 +244,8 @@ struct BuildCommand: ParsableCommand {
             "Run frontend build in parallel with `swift build` (Phase 2). Default ON when `build.buildCommand` is set; ignored otherwise. The first swift build runs against current Resources/; if sync-resources changes any file afterwards, an incremental finalize pass re-bundles them."
     )
     var parallelBuild: Bool = true
+
+    // MARK: - 배포/스토어 옵션 (RFC-008)
 
     @Option(
         name: .long,
@@ -268,6 +286,8 @@ struct BuildCommand: ParsableCommand {
     )
     var provisionProfile: String? = nil
 
+    // MARK: - iOS App Store 옵션
+
     @Option(
         name: .long,
         help: "iOS: path to .xcodeproj or .xcworkspace. Required with --store ios-appstore."
@@ -298,6 +318,8 @@ struct BuildCommand: ParsableCommand {
     )
     var ascIssuer: String? = nil
 
+    // MARK: - MSIX 옵션
+
     @Option(
         name: .long,
         help:
@@ -326,6 +348,7 @@ struct BuildCommand: ParsableCommand {
     var msixSigntoolCmd: String? = nil
 
     // MARK: - Android (RFC-007)
+
 
     @Flag(
         name: .long,
@@ -442,6 +465,10 @@ struct BuildCommand: ParsableCommand {
         help: "Linux: .deb Maintainer field — 'Name <email@host>'. Required with --linux-format deb.")
     var linuxMaintainer: String? = nil
 
+    /// 명령줄 인자의 유효성을 `swift-argument-parser`의 기본 파싱 이후에 추가 검증한다.
+    /// - `--jobs`가 양의 정수인지 확인
+    /// - `--webview2-install-mode`가 허용된 값 중 하나인지 확인 (대시 제거 후 비교로 사용자 실수 완화)
+    /// - `--store`가 유효한 distribution target 문자열인지 확인
     func validate() throws {
         if let jobs, jobs < 1 {
             throw ValidationError("--jobs must be a positive integer (got \(jobs)).")
@@ -634,38 +661,6 @@ struct BuildCommand: ParsableCommand {
         try emitTimings(timer, cwd: cwd)
     }
 
-    private func emitTimings(_ timer: KSBuildTimings, cwd: URL) throws {
-        if timings {
-            print(timer.summary())
-        }
-        guard let rel = timingsJson, !rel.isEmpty else { return }
-        let url = URL(fileURLWithPath: rel, relativeTo: cwd)
-        do {
-            let data = try timer.jsonData()
-            try FileManager.default.createDirectory(
-                at: url.deletingLastPathComponent(),
-                withIntermediateDirectories: true)
-            try data.write(to: url, options: .atomic)
-            print("📝  Timings written to \(url.path)")
-        } catch {
-            // 사용자가 명시적으로 --timings-json 을 지정했으므로 실패는 hard error.
-            // 빌드 산출물은 이미 생성된 시점이지만, 사용자에게 보고 실패를 분명히 알려야 한다.
-            throw ValidationError(
-                "Failed to write timings JSON to \(url.path): \(error)")
-        }
-    }
-
-    private func runClean(cwd: URL, fm: FileManager) throws {
-        let buildDir = cwd.appendingPathComponent(".build")
-        let distDir = cwd.appendingPathComponent("dist")
-        for url in [buildDir, distDir] {
-            guard fm.fileExists(atPath: url.path) else { continue }
-            print("🧹  Removing \(url.path)")
-            if dryrun { continue }
-            try fm.removeItem(at: url)
-        }
-    }
-
     private func runPackage(configuration: String, configURL: URL, config: KSConfig) throws {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
@@ -744,471 +739,14 @@ struct BuildCommand: ParsableCommand {
 
     /// `--store` CLI 플래그가 `kalsae.json distribution.target` 보다 우선한다.
     /// 양쪽 미지정이면 `.developer`.
-    private func resolveDistributionTarget(config: KSConfig) -> KSDistributionTarget {
+    func resolveDistributionTarget(config: KSConfig) -> KSDistributionTarget {
         if let raw = store, let parsed = KSDistributionTarget.parse(raw) {
             return parsed
         }
         return config.distribution.target
     }
 
-    #if os(Windows)
-        private func runPackageWindows(
-            configuration: String, configURL: URL, config: KSConfig,
-            info: AppInfo, cwd: URL, fm: FileManager
-        ) throws {
-            guard let policy = KSPackager.WebView2Policy(rawValue: webview2.lowercased()) else {
-                throw ValidationError("--webview2 must be one of: evergreen | fixed | auto")
-            }
-            let installMode = webview2InstallMode.flatMap(parseInstallMode)
-            guard let archEnum = KSPackager.Architecture(rawValue: arch.lowercased()) else {
-                throw ValidationError("--arch must be one of: x64 | arm64 | x86")
-            }
-
-            let buildDir = cwd.appendingPathComponent(".build/\(configuration)")
-            let exeURL = buildDir.appendingPathComponent("\(info.executableName).exe")
-            guard fm.fileExists(atPath: exeURL.path) else {
-                throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
-            }
-
-            // dist 해석은 sync 경로(syncFrontendResourcesIfNeeded)와 동일한 헬퍼를 써
-            // --config 가 외부 디렉터리를 가리키더라도 cwd 기준으로 일관되게 처리.
-            let distURL: URL? = {
-                let resolved = KSBuildPlan.resolveDistURL(
-                    config: config, configURL: configURL, cwd: cwd, distOverride: dist)
-                return fm.fileExists(atPath: resolved.path) ? resolved : nil
-            }()
-
-            let vendorRoot: URL? = {
-                let r = cwd.appendingPathComponent("Vendor/WebView2/runtimes")
-                    .appendingPathComponent(archEnum.vendorRuntimeFolder)
-                return fm.fileExists(atPath: r.path) ? r : nil
-            }()
-
-            let outputURL: URL = {
-                if let o = output {
-                    // 사용자가 명시한 --output 은 그대로 존중. standalone 토글 시 같은 폴더를
-                    // 공유하면 fingerprint mismatch 로 자동 wipe 후 재생성됨 (Packager.swift §3.1).
-                    return URL(fileURLWithPath: o, relativeTo: cwd)
-                }
-                // standalone 빌드는 일반 빌드와 산출물 내용이 다르므로 (PE 리소스 embed 후
-                // 외부 파일 제거) 기본 출력 경로를 분리해 두 빌드를 동시에 보존한다.
-                let suffix = standalone ? "-standalone" : ""
-                return cwd.appendingPathComponent(
-                    "dist/\(info.appName)-\(info.version)-\(archEnum.rawValue)\(suffix)")
-            }()
-
-            // standalone 빌드면 ResourceHacker 가용성을 보장 (없으면 자동 fetch).
-            // PATH 또는 사용자 캐시(`%LOCALAPPDATA%\Kalsae\Tools\ResourceHacker\`) 에서
-            // 찾고, 없으면 angusj.com 에서 직접 zip 을 받아 캐시에 설치한다.
-            let resourceHackerPath: URL? = {
-                guard standalone else { return nil }
-                do {
-                    return try KSResourceHackerProvisioner.ensure(
-                        cwd: cwd, autoFetch: autoFetchResourceHacker)
-                } catch {
-                    print("⚠️   ResourceHacker auto-fetch failed: \(error)")
-                    return KSResourceHackerProvisioner.locate()
-                }
-            }()
-
-            let opts = KSPackager.Options(
-                projectRoot: cwd,
-                executablePath: exeURL,
-                configPath: configURL,
-                frontendDist: distURL,
-                output: outputURL,
-                appName: info.appName,
-                version: info.version,
-                identifier: info.identifier,
-                architecture: archEnum,
-                policy: policy,
-                standalone: standalone,
-                standaloneAllowFallback: standaloneAllowFallback,
-                webView2InstallMode: installMode,
-                iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                vendorRuntimeRoot: vendorRoot,
-                bootstrapperPath: bootstrapper.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                zip: zip,
-                stripSourceMaps: config.build.stripSourceMaps,
-                stripExtensions: config.build.stripExtensions,
-                resourceHackerPath: resourceHackerPath)
-
-            let modeLabel = installMode?.rawValue ?? "(legacy policy: \(policy.rawValue))"
-            print(
-                "📦  Packaging \(info.appName) v\(info.version) (\(archEnum.rawValue), mode: \(modeLabel), standalone: \(standalone))"
-            )
-            let report: KSPackager.Report
-            do {
-                report = try KSPackager.run(opts)
-            } catch let err as KSPackager.StandaloneToolsMissingError {
-                // standalone hard-error 를 사용자 친화적인 ValidationError 로 승격.
-                throw ValidationError(err.message)
-            }
-            print(report.description)
-
-            // 패키지된 exe 코드사이닝 hook (P3-2). NSIS 인스톨러보다 먼저 수행해야
-            // 인스톨러가 이미 서명된 바이너리를 포장하게 된다.
-            if let template = signtoolCmd, !template.isEmpty {
-                let pkgExe = outputURL.appendingPathComponent("\(info.appName).exe")
-                guard fm.fileExists(atPath: pkgExe.path) else {
-                    throw ValidationError(
-                        "--signtool-cmd: packaged executable not found at \(pkgExe.path)")
-                }
-                try KSSigntoolHook.run(
-                    template: template, file: pkgExe,
-                    label: "signtool (exe)", dryrun: dryrun)
-            }
-
-            if nsis {
-                // bootstrapper가 함께 패키지된 경우(파일명만 알면 됨)에는 NSIS 인스톨러가
-                // WebView2 evergreen 부트스트랩을 silent 호출하도록 한다.
-                let bootstrapName: String? =
-                    bootstrapper.map { URL(fileURLWithPath: $0).lastPathComponent }
-                    ?? KSPackager.detectBootstrapperFileName(in: outputURL)
-                let nsisOpts = KSNSISTemplate.Options(
-                    appName: info.appName,
-                    version: info.version,
-                    identifier: info.identifier,
-                    publisher: nsisPublisher ?? info.identifier,
-                    architecture: archEnum,
-                    sourceDir: outputURL,
-                    iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                    webView2BootstrapperFileName: bootstrapName)
-                print("🛠️   Generating NSIS installer script…")
-                let nsisReport = try KSPackager.runNSIS(nsisOpts)
-                print(nsisReport.description)
-
-                // NSIS 인스톨러 코드사이닝 hook (P3-2). makensis가 실제로 .exe를
-                // 산출했을 때만(installerPath가 nil이 아닐 때) 실행한다.
-                if let template = nsisSigntoolCmd, !template.isEmpty {
-                    if let installerPath = nsisReport.installerPath {
-                        try KSSigntoolHook.run(
-                            template: template,
-                            file: URL(fileURLWithPath: installerPath),
-                            label: "signtool (installer)", dryrun: dryrun)
-                    } else {
-                        print("⚠  --nsis-signtool-cmd: makensis did not produce an installer; skipping.")
-                    }
-                }
-            } else if nsisSigntoolCmd != nil {
-                print("⚠  --nsis-signtool-cmd has no effect without --nsis; skipping.")
-            }
-
-            if msi {
-                try runPackageMSI(
-                    config: config,
-                    info: info,
-                    cwd: cwd,
-                    fm: fm,
-                    outputURL: outputURL,
-                    archEnum: archEnum)
-            } else if msiSigntoolCmd != nil {
-                print("⚠  --msi-signtool-cmd has no effect without --msi; skipping.")
-            }
-        }
-
-        /// WiX v3 MSI 패키저.
-        ///
-        /// 호출 시점: `runPackageWindows`의 NSIS 블록 직후. 기존 산출물 폴더
-        /// (`dist/<App>-<ver>-<arch>/`)를 staging 디렉터리로 사용하고
-        /// `.wxs` + `.msi`를 그 부모 디렉터리에 만든다.
-        private func runPackageMSI(
-            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager,
-            outputURL: URL, archEnum: KSPackager.Architecture
-        ) throws {
-            let wixCfg = config.windowsBundle?.wix
-            // UpgradeCode 결정.
-            let upgrade: UUID = {
-                if let cli = msiUpgradeCode,
-                    !cli.isEmpty,
-                    let u = UUID(uuidString: cli)
-                {
-                    return u
-                }
-                if let s = wixCfg?.upgradeCode,
-                    !s.isEmpty,
-                    let u = UUID(uuidString: s)
-                {
-                    return u
-                }
-                return KSUUIDv5.wixUpgradeCode(
-                    productName: info.appName, arch: archEnum.rawValue)
-            }()
-
-            // 언어 결정 — CLI > kalsae.json > en-US.
-            let langs: [String] = {
-                if let cli = msiLanguage,
-                    !cli.isEmpty
-                {
-                    return cli.split(separator: ",")
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-                        .filter { !$0.isEmpty }
-                }
-                if let l = wixCfg?.language {
-                    let tags = l.tags
-                    if !tags.isEmpty { return tags }
-                }
-                return ["en-US"]
-            }()
-            var localePaths: [String: String] = [:]
-            if let l = wixCfg?.language {
-                for tag in langs {
-                    if let p = l.localePath(for: tag) {
-                        localePaths[tag] = URL(fileURLWithPath: p, relativeTo: cwd).path
-                    }
-                }
-            }
-
-            // Banner / Dialog 이미지.
-            let bannerPath: URL? = {
-                if let cli = msiBanner, !cli.isEmpty {
-                    return URL(fileURLWithPath: cli, relativeTo: cwd)
-                }
-                if let s = wixCfg?.bannerPath, !s.isEmpty {
-                    return URL(fileURLWithPath: s, relativeTo: cwd)
-                }
-                return nil
-            }()
-            let dialogPath: URL? = {
-                if let cli = msiDialogImage, !cli.isEmpty {
-                    return URL(fileURLWithPath: cli, relativeTo: cwd)
-                }
-                if let s = wixCfg?.dialogImagePath, !s.isEmpty {
-                    return URL(fileURLWithPath: s, relativeTo: cwd)
-                }
-                return nil
-            }()
-            let iconURL: URL? = {
-                if let icn = icon, !icn.isEmpty {
-                    return URL(fileURLWithPath: icn, relativeTo: cwd)
-                }
-                return nil
-            }()
-
-            // WebView2 부트스트래퍼 파일명 (NSIS 블록과 동일 로직).
-            let bootstrapName: String? =
-                bootstrapper.map { URL(fileURLWithPath: $0).lastPathComponent }
-                ?? KSPackager.detectBootstrapperFileName(in: outputURL)
-
-            // Fragment paths.
-            let fragmentURLs: [URL] =
-                (wixCfg?.fragmentPaths ?? []).map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-
-            let allowDowngrades = config.windowsBundle?.allowDowngrades ?? true
-            let publisher = nsisPublisher ?? info.identifier
-            let productVersion: String =
-                wixCfg?.version.map(KSWiXTemplate.normalizeVersion)
-                ?? KSWiXTemplate.normalizeVersion(info.version)
-
-            let templateOpts = KSWiXTemplate.Options(
-                appName: info.appName,
-                version: productVersion,
-                identifier: info.identifier,
-                publisher: publisher,
-                architecture: archEnum,
-                sourceDir: outputURL,
-                productCode: UUID(),
-                upgradeCode: upgrade,
-                iconPath: iconURL,
-                allowDowngrades: allowDowngrades,
-                bannerPath: bannerPath,
-                dialogImagePath: dialogPath,
-                webView2BootstrapperFileName: bootstrapName,
-                webView2BootstrapperSilent: true,
-                componentRefs: wixCfg?.componentRefs ?? [],
-                componentGroupRefs: wixCfg?.componentGroupRefs ?? [],
-                featureRefs: wixCfg?.featureRefs ?? [],
-                featureGroupRefs: wixCfg?.featureGroupRefs ?? [],
-                mergeRefs: wixCfg?.mergeRefs ?? [])
-
-            let wixOpts = KSPackager.WiXOptions(
-                template: templateOpts,
-                languages: langs,
-                localePaths: localePaths,
-                fragmentPaths: fragmentURLs,
-                autoFetchWiX: autoFetchWix,
-                useLocalToolsDir: useLocalToolsDir,
-                projectRoot: cwd)
-
-            print("🛠️   Generating MSI installer (WiX v3)…")
-            let report = try KSPackager.runWiX(wixOpts)
-            print(report.description)
-
-            // MSI 사이닝.
-            if let template = msiSigntoolCmd, !template.isEmpty {
-                if report.installerPaths.isEmpty {
-                    print("⚠  --msi-signtool-cmd: light.exe did not produce an installer; skipping.")
-                } else {
-                    for path in report.installerPaths {
-                        try KSSigntoolHook.run(
-                            template: template,
-                            file: URL(fileURLWithPath: path),
-                            label: "signtool (msi)", dryrun: dryrun)
-                    }
-                }
-            }
-            _ = fm
-        }
-
-        /// Microsoft Store MSIX 패키저 (RFC-008 Phase 2).
-        ///
-        /// 호출 시점: `runPackageWindows` 가 끝난 직후. 기존 산출물 폴더
-        /// (`dist/<App>-<ver>-<arch>/`) 를 **staging 디렉터리로 그대로 사용**한다.
-        /// MSIX 매니페스트와 Assets/ 만 추가 작성하고 MakeAppx 를 호출한다.
-        private func runPackageMSIX(
-            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
-        ) throws {
-            guard let publisher = publisher, !publisher.isEmpty else {
-                throw ValidationError(
-                    "--store win-store requires --publisher (e.g. "
-                        + "'CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR'). The CN must "
-                        + "match your Microsoft Partner Center registration.")
-            }
-            guard
-                let archEnum = KSPackager.MSIXArchitecture(rawValue: arch.lowercased())
-                    ?? msixArchFallback(arch.lowercased())
-            else {
-                throw ValidationError(
-                    "MSIX --arch must be one of: x64 | x86 | arm64 (got '\(arch)')")
-            }
-
-            // staging dir 는 일반 Windows 산출물과 동일 경로.
-            let stagingURL: URL = {
-                if let o = output {
-                    return URL(fileURLWithPath: o, relativeTo: cwd)
-                }
-                let suffix = standalone ? "-standalone" : ""
-                return cwd.appendingPathComponent(
-                    "dist/\(info.appName)-\(info.version)-\(arch.lowercased())\(suffix)")
-            }()
-            guard fm.fileExists(atPath: stagingURL.path) else {
-                throw ValidationError(
-                    "MSIX staging directory not found: \(stagingURL.path) "
-                        + "(expected the base Windows package to exist).")
-            }
-
-            // Assets/ 디렉터리 보장 (사용자 제공 우선, 없으면 placeholder 1x1 PNG).
-            let assetsDst = stagingURL.appendingPathComponent("Assets")
-            try fm.createDirectory(at: assetsDst, withIntermediateDirectories: true)
-            try installMSIXAssets(
-                userAssets: msixAssets.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                destination: assetsDst, fm: fm)
-
-            // AppxManifest.xml 작성.
-            let deepLinkSchemes = config.deepLink?.schemes ?? []
-            let startupID: String? =
-                config.autostart != nil
-                ? "\(info.identifier).Autostart"
-                : nil
-            let msixInput = KSPackager.MSIXInput(
-                appName: info.appName,
-                version: info.version,
-                identifier: info.identifier,
-                publisher: publisher,
-                displayName: info.appName,
-                publisherDisplayName: publisherDisplayName ?? deriveCN(from: publisher) ?? info.appName,
-                description: nil,
-                architecture: archEnum,
-                includesWebView2RuntimeDependency: webview2.lowercased() == "evergreen",
-                deepLinkSchemes: deepLinkSchemes,
-                startupTaskID: startupID,
-                startupTaskDisplayName: startupID.map { _ in "\(info.appName) (auto-start)" })
-            let manifestURL = stagingURL.appendingPathComponent("AppxManifest.xml")
-            let xml = KSPackager.renderAppxManifest(msixInput)
-            try xml.write(to: manifestURL, atomically: true, encoding: .utf8)
-            print("📝  AppxManifest.xml written (\(xml.count) bytes)")
-
-            // MakeAppx + signtool.
-            let msixOut = stagingURL.deletingLastPathComponent()
-                .appendingPathComponent("\(info.appName)-\(info.version)-\(arch.lowercased()).msix")
-            let plan = KSPackager.planMSIXPipeline(
-                .init(
-                    stagingDir: stagingURL,
-                    outputMSIX: msixOut,
-                    signtoolTemplate: msixSigntoolCmd))
-            print("📦  MSIX pipeline (\(plan.count) step(s))")
-            var warnings: [String] = []
-            try KSPackager.executeMSIXSteps(plan, dryRun: dryrun, warnings: &warnings)
-            for w in warnings { print("⚠  \(w)") }
-            if !dryrun && fm.fileExists(atPath: msixOut.path) {
-                print("✅  \(msixOut.path)")
-            }
-        }
-
-        /// `x86_64` / `x64` 등 별칭을 MSIX arch 로 매핑.
-        private func msixArchFallback(_ raw: String) -> KSPackager.MSIXArchitecture? {
-            switch raw {
-            case "x86_64", "x86-64", "amd64": return .x64
-            case "i386", "i686": return .x86
-            default: return nil
-            }
-        }
-
-        /// `"CN=Acme Inc, O=..., C=KR"` → `"Acme Inc"`. 실패 시 nil.
-        private func deriveCN(from dn: String) -> String? {
-            for raw in dn.split(separator: ",") {
-                let part = raw.trimmingCharacters(in: .whitespaces)
-                if part.lowercased().hasPrefix("cn=") {
-                    return String(part.dropFirst(3))
-                }
-            }
-            return nil
-        }
-
-        /// 사용자 Assets 디렉터리가 있으면 복사, 없으면 placeholder PNG 5종 생성.
-        private func installMSIXAssets(
-            userAssets: URL?, destination: URL, fm: FileManager
-        ) throws {
-            let required = [
-                "Square150x150Logo.png",
-                "Square44x44Logo.png",
-                "Wide310x150Logo.png",
-                "StoreLogo.png",
-                "SplashScreen.png",
-            ]
-            if let src = userAssets, fm.fileExists(atPath: src.path) {
-                for name in required {
-                    let s = src.appendingPathComponent(name)
-                    let d = destination.appendingPathComponent(name)
-                    if fm.fileExists(atPath: s.path) {
-                        if fm.fileExists(atPath: d.path) { try fm.removeItem(at: d) }
-                        try fm.copyItem(at: s, to: d)
-                    } else {
-                        if !fm.fileExists(atPath: d.path) {
-                            try Self.placeholderPNG.write(to: d)
-                        }
-                        print("⚠  Missing MSIX asset \(name); using placeholder.")
-                    }
-                }
-            } else {
-                for name in required {
-                    let d = destination.appendingPathComponent(name)
-                    if !fm.fileExists(atPath: d.path) {
-                        try Self.placeholderPNG.write(to: d)
-                    }
-                }
-                print(
-                    "⚠  --msix-assets not provided; using placeholder PNGs for all 5 MSIX images. "
-                        + "Replace before Partner Center submission.")
-            }
-        }
-
-        /// 1x1 투명 PNG (transparent), 67 bytes. WACK 는 사이즈를 엄밀히 보지 않지만
-        /// Partner Center 제출 전에는 반드시 실제 사이즈로 교체해야 한다.
-        private static let placeholderPNG: Data = Data([
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-            0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41,
-            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00,
-            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE,
-            0x42, 0x60, 0x82,
-        ])
-    #endif
-
-    private func parseInstallMode(_ raw: String) -> KSPackager.WebView2InstallMode? {
+    func parseInstallMode(_ raw: String) -> KSPackager.WebView2InstallMode? {
         let normalized = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "-", with: "")
             .lowercased()
@@ -1226,535 +764,5 @@ struct BuildCommand: ParsableCommand {
         default:
             return nil
         }
-    }
-
-    #if os(macOS)
-        private func runPackageMacOS(
-            configuration: String, configURL: URL,
-            info: AppInfo, cwd: URL, fm: FileManager
-        ) throws {
-            // arch 매핑: --arch x64/x86 → x86_64, arm64 → arm64, "universal" 새로 허용.
-            let archEnum: KSPackager.MacArchitecture
-            switch arch.lowercased() {
-            case "arm64": archEnum = .arm64
-            case "x64", "x86_64", "x86-64": archEnum = .x86_64
-            case "universal": archEnum = .universal
-            default:
-                throw ValidationError("--arch on macOS must be: arm64 | x86_64 | universal (got '\(arch)')")
-            }
-
-            let buildDir = cwd.appendingPathComponent(".build/\(configuration)")
-            let exeURL = buildDir.appendingPathComponent(info.executableName)
-            guard fm.fileExists(atPath: exeURL.path) else {
-                throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
-            }
-
-            // dist 해석은 sync 경로와 동일한 헬퍼를 써 cwd 기준 일관성 보장 (Windows와 동일).
-            let distURL: URL? = {
-                let resolved = KSBuildPlan.resolveDistURL(
-                    config: config, configURL: configURL, cwd: cwd, distOverride: dist)
-                return fm.fileExists(atPath: resolved.path) ? resolved : nil
-            }()
-
-            let outputURL: URL = {
-                if let o = output {
-                    return URL(fileURLWithPath: o, relativeTo: cwd)
-                }
-                return cwd.appendingPathComponent(
-                    "dist/\(info.appName)-\(info.version)-\(archEnum.rawValue)")
-            }()
-            try fm.createDirectory(at: outputURL, withIntermediateDirectories: true)
-
-            let opts = KSPackager.MacOptions(
-                executablePath: exeURL,
-                configPath: configURL,
-                frontendDist: distURL,
-                output: outputURL,
-                appName: info.appName,
-                version: info.version,
-                identifier: info.identifier,
-                architecture: archEnum,
-                iconPath: icon.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                codesignIdentity: codesignIdentity,
-                zip: zip,
-                stripSourceMaps: config.build.stripSourceMaps,
-                stripExtensions: config.build.stripExtensions,
-                distributionTarget: resolveDistributionTarget(config: config),
-                notarytoolProfile: notarytoolProfile,
-                entitlementsPath: entitlements.map { URL(fileURLWithPath: $0, relativeTo: cwd) },
-                signDryRun: dryrun,
-                installerSigningIdentity: installerIdentity,
-                provisionProfilePath: provisionProfile.map {
-                    URL(fileURLWithPath: $0, relativeTo: cwd)
-                },
-                masEntitlementsInput: resolveDistributionTarget(config: config) == .macAppStore
-                    ? makeEntitlementsInput(config: config, target: .macAppStore)
-                    : nil)
-
-            print("📦  Packaging \(info.appName).app v\(info.version) (\(archEnum.rawValue))")
-            let report = try KSPackager.runMac(opts)
-            print(report.description)
-        }
-
-        /// iOS App Store IPA 패키징 (RFC-008 P4). macOS + Xcode 필수.
-        private func runPackageIOS(
-            config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
-        ) throws {
-            guard let projectArg = iosProject else {
-                throw ValidationError(
-                    "--store ios-appstore requires --ios-project <path to .xcodeproj or .xcworkspace>.")
-            }
-            guard let scheme = iosScheme, !scheme.isEmpty else {
-                throw ValidationError(
-                    "--store ios-appstore requires --ios-scheme <Xcode scheme name>.")
-            }
-            guard let teamID = config.distribution.appleTeamID, !teamID.isEmpty else {
-                throw ValidationError(
-                    "--store ios-appstore requires distribution.appleTeamID in kalsae.json.")
-            }
-            guard let method = KSPackager.IOSExportMethod(rawValue: iosExportMethod) else {
-                throw ValidationError(
-                    "--ios-export-method must be one of: "
-                        + "app-store-connect | app-store | ad-hoc | enterprise | development.")
-            }
-
-            let projectURL = URL(fileURLWithPath: projectArg, relativeTo: cwd)
-            let kind: KSPackager.IOSProjectKind =
-                projectArg.hasSuffix(".xcworkspace")
-                ? .xcworkspace(projectURL) : .xcodeproj(projectURL)
-
-            let buildBase = cwd.appendingPathComponent(
-                "dist/ios-\(info.appName)-\(info.version)")
-            try fm.createDirectory(at: buildBase, withIntermediateDirectories: true)
-            let archivePath = buildBase.appendingPathComponent("\(info.appName).xcarchive")
-            let exportPath = buildBase.appendingPathComponent("export")
-            let exportOptionsURL = buildBase.appendingPathComponent("ExportOptions.plist")
-            let ipaURL = exportPath.appendingPathComponent("\(info.appName).ipa")
-
-            // exportOptions.plist 생성.
-            let plistXML = KSPackager.renderIOSExportOptionsPlist(
-                method: method,
-                teamID: teamID,
-                bundleIdentifier: info.identifier,
-                signingStyle: codesignIdentity == nil ? "automatic" : "manual")
-            try plistXML.write(to: exportOptionsURL, atomically: true, encoding: .utf8)
-
-            let input = KSPackager.IOSPackagingInput(
-                project: kind,
-                scheme: scheme,
-                archivePath: archivePath,
-                exportPath: exportPath,
-                exportOptionsPlist: exportOptionsURL,
-                ipaOutput: ipaURL,
-                teamID: teamID,
-                bundleIdentifier: info.identifier,
-                exportMethod: method,
-                appStoreConnectAPIKeyID: ascKey,
-                appStoreConnectAPIIssuerID: ascIssuer,
-                codeSignIdentity: codesignIdentity,
-                provisioningProfileSpecifier: provisionProfile)
-
-            let steps = KSPackager.planIOSPackagingPipeline(input)
-            print(
-                "🍎  iOS App Store pipeline (\(steps.count) step(s)) → "
-                    + ipaURL.path)
-            var warnings: [String] = []
-            try KSPackager.executeIOSSteps(steps, dryRun: dryrun, warnings: &warnings)
-            for w in warnings { print("⚠  \(w)") }
-        }
-    #endif
-
-    /// Android Gradle 프로젝트 생성 (RFC-007). 호스트 OS 무관 (순수 파일 emit).
-    /// 실제 APK 빌드는 호출자가 산출 디렉터리에서 `gradle wrapper` →
-    /// `./gradlew assembleRelease` 로 수행한다.
-    private func runPackageAndroid(
-        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
-    ) throws {
-        guard let libArg = androidNativeLib else {
-            throw ValidationError(
-                "--android requires --android-native-lib <path to libKalsaePlatformAndroid.so>. "
-                    + "Build it first with: "
-                    + "swift build --swift-sdk aarch64-unknown-linux-android\(androidMinSdk) "
-                    + "-c release --product KalsaePlatformAndroid")
-        }
-        // Android 는 현재 arm64-v8a 만 지원한다. default(x64) 는 조용히 arm64 로 치환하고,
-        // 사용자가 명시적으로 다른 값(`--arch arm64` 이외)을 지정한 경우에만 경고를 띄운다.
-        if arch != "arm64" && arch != "x64" {
-            print("⚠  --arch \(arch): Android currently supports only 'arm64' (arm64-v8a). Overriding to arm64.")
-        }
-
-        let libURL = URL(fileURLWithPath: libArg, relativeTo: cwd)
-        let outputDir =
-            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-            ?? cwd.appendingPathComponent("dist/android-\(info.appName)-\(info.version)")
-
-        let applicationId = androidApplicationId ?? info.identifier
-        let iconURL: URL? = androidIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-        let frontendDistURL: URL? = {
-            if let raw = dist, !raw.isEmpty {
-                return URL(fileURLWithPath: raw, relativeTo: cwd)
-            }
-            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
-            return fm.fileExists(atPath: fallback.path) ? fallback : nil
-        }()
-        let deepLinkSchemes = config.deepLink?.schemes ?? []
-
-        let opts = KSPackager.AndroidOptions(
-            nativeLibPath: libURL,
-            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
-            frontendDist: frontendDistURL,
-            output: outputDir,
-            appName: info.appName,
-            version: info.version,
-            identifier: applicationId,
-            versionCode: androidVersionCode,
-            minimumAPILevel: androidMinSdk,
-            targetAPILevel: androidTargetSdk,
-            architecture: .arm64,
-            iconPath: iconURL,
-            deepLinkSchemes: deepLinkSchemes)
-
-        print("📦  Packaging \(info.appName) Android Gradle project v\(info.version) → \(outputDir.path)")
-        if dryrun {
-            print("   (dry-run: skipping file emission)")
-            return
-        }
-        let report = try KSPackager.runAndroid(opts)
-        print(report.description)
-        print("ℹ  Next steps: cd '\(outputDir.path)' ; gradle wrapper ; ./gradlew assembleRelease")
-    }
-
-    /// Phase iOS-Stable §3 — `--ios` 플래그 진입점. 어느 호스트에서나 동작하는
-    /// 미니멀 .app 번들 emit. 실제 디바이스 실행/시뮬레이터 설치는 macOS 가 필요.
-    private func runPackageIOSAppBundle(
-        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
-    ) throws {
-        guard let exeArg = iosExecutable else {
-            throw ValidationError(
-                "--ios requires --ios-executable <path to iOS Mach-O binary>. "
-                    + "Build it first with: "
-                    + "swift build --triple arm64-apple-ios\(iosMinOSVersion) "
-                    + "-c release --product <YourApp>")
-        }
-        let arch: KSPackager.IOSArchitecture = {
-            switch self.arch {
-            case "arm64", "x64": return .arm64
-            case "arm64-simulator": return .arm64Simulator
-            default:
-                print(
-                    "⚠  --arch \(self.arch): iOS supports 'arm64' or 'arm64-simulator'. "
-                        + "Defaulting to arm64.")
-                return .arm64
-            }
-        }()
-
-        let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
-        let outputDir =
-            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-            ?? cwd.appendingPathComponent("dist/ios-\(info.appName)-\(info.version)")
-
-        let identifier = iosBundleIdentifier ?? info.identifier
-        let iconURL: URL? = iosIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-        let frontendDistURL: URL? = {
-            if let raw = dist, !raw.isEmpty {
-                return URL(fileURLWithPath: raw, relativeTo: cwd)
-            }
-            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
-            return fm.fileExists(atPath: fallback.path) ? fallback : nil
-        }()
-        let deepLinkSchemes = config.deepLink?.schemes ?? []
-
-        let opts = KSPackager.IOSOptions(
-            executablePath: exeURL,
-            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
-            frontendDist: frontendDistURL,
-            output: outputDir,
-            appName: info.appName,
-            version: info.version,
-            identifier: identifier,
-            bundleVersion: iosBundleVersion,
-            minimumOSVersion: iosMinOSVersion,
-            architecture: arch,
-            iconPath: iconURL,
-            deepLinkSchemes: deepLinkSchemes,
-            permissions: config.permissions)
-
-        print("📦  Packaging \(info.appName) iOS .app v\(info.version) → \(outputDir.path)")
-        if dryrun {
-            print("   (dry-run: skipping file emission)")
-            return
-        }
-        let report = try KSPackager.runIOS(opts)
-        print(report.description)
-        print(
-            "ℹ  Next steps: install on a simulator with "
-                + "`xcrun simctl install booted '\(report.outputPath)'` "
-                + "(macOS + Xcode required).")
-    }
-
-    /// RFC-009 — `--linux` 플래그 진입점. 어느 호스트에서나 동작하는 emit-only
-    /// 파이프라인. 실제 `.deb` / `.AppImage` 산출은 Linux 호스트의 외부 도구
-    /// (`dpkg-deb`, `appimagetool`) 가 마무리한다.
-    private func runPackageLinux(
-        config: KSConfig, info: AppInfo, cwd: URL, fm: FileManager
-    ) throws {
-        guard let exeArg = linuxExecutable else {
-            throw ValidationError(
-                "--linux requires --linux-executable <path to Linux ELF binary>. "
-                    + "Build it first with: swift build -c release --product <YourApp>")
-        }
-        guard let arch = KSPackager.LinuxArchitecture(rawValue: linuxArch.lowercased()) else {
-            throw ValidationError("--linux-arch must be 'x86_64' or 'aarch64' (got '\(linuxArch)').")
-        }
-
-        // 콤마 분리 형식 파싱.
-        var formats: Set<KSPackager.LinuxFormat> = []
-        for raw in linuxFormat.split(separator: ",") {
-            let token = raw.trimmingCharacters(in: .whitespaces).lowercased()
-            if token == "all" {
-                formats = Set(KSPackager.LinuxFormat.allCases)
-                break
-            }
-            guard let f = KSPackager.LinuxFormat(rawValue: token) else {
-                throw ValidationError(
-                    "--linux-format token '\(token)' is invalid. Allowed: tarball, deb, appimage, all.")
-            }
-            formats.insert(f)
-        }
-        guard !formats.isEmpty else {
-            throw ValidationError("--linux-format must contain at least one format.")
-        }
-
-        let exeURL = URL(fileURLWithPath: exeArg, relativeTo: cwd)
-        let outputDir =
-            output.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-            ?? cwd.appendingPathComponent("dist/linux-\(info.appName)-\(info.version)")
-        let iconURL: URL? = linuxIcon.map { URL(fileURLWithPath: $0, relativeTo: cwd) }
-        let frontendDistURL: URL? = {
-            if let raw = dist, !raw.isEmpty {
-                return URL(fileURLWithPath: raw, relativeTo: cwd)
-            }
-            let fallback = cwd.appendingPathComponent(config.build.frontendDist)
-            return fm.fileExists(atPath: fallback.path) ? fallback : nil
-        }()
-
-        let opts = KSPackager.LinuxOptions(
-            executablePath: exeURL,
-            configPath: try resolveConfigURL(cwd: cwd, fm: fm),
-            frontendDist: frontendDistURL,
-            output: outputDir,
-            appName: info.appName,
-            version: info.version,
-            identifier: info.identifier,
-            architecture: arch,
-            formats: formats,
-            iconPath: iconURL,
-            maintainer: linuxMaintainer)
-
-        print(
-            "📦  Packaging \(info.appName) Linux (\(formats.map { $0.rawValue }.sorted().joined(separator: "+"))) v\(info.version) → \(outputDir.path)"
-        )
-        if dryrun {
-            print("   (dry-run: skipping file emission)")
-            return
-        }
-        let report = try KSPackager.runLinux(opts)
-        print(report.description)
-        print("ℹ  Next steps: see \(outputDir.path)/README.md for the exact tar/dpkg-deb/appimagetool commands.")
-    }
-
-    private struct AppInfo {
-        let appName: String
-        let version: String
-        let identifier: String
-        let executableName: String
-    }
-
-    private func resolveConfigURL(cwd: URL, fm: FileManager) throws -> URL {
-        if let c = config {
-            let url = URL(fileURLWithPath: c, relativeTo: cwd)
-            guard fm.fileExists(atPath: url.path) else {
-                throw ValidationError("Config file not found at \(url.path).")
-            }
-            return url
-        }
-        if let found = KSConfigLocator.find(cwd: cwd, fm: fm) {
-            return found
-        }
-        throw ValidationError("Could not find kalsae.json (use --config to override).")
-    }
-
-    private func loadConfig(configURL: URL) throws -> KSConfig {
-        do {
-            return try KSConfigLoader.load(from: configURL)
-        } catch {
-            throw ValidationError(
-                "Failed to load \(configURL.lastPathComponent): \(error)")
-        }
-    }
-
-    private func runCapabilityValidation(config: KSConfig, cwd: URL) throws {
-        guard let mode = KSCapabilityValidator.Mode(rawValue: capabilityCheck) else {
-            throw ValidationError(
-                "--capability-check must be one of: strict | warn | off. Got '\(capabilityCheck)'.")
-        }
-        if mode == .off { return }
-
-        let sources = KSBindingsGenerator.discoverSwiftFiles(
-            under: cwd.appendingPathComponent("Sources"))
-        let commands = KSBindingsGenerator.scanCommands(in: sources)
-        let report = KSCapabilityValidator.validate(
-            capabilities: config.capabilities, commands: commands)
-
-        if report.findings.isEmpty {
-            return
-        }
-        print("🛡  capability validator findings:")
-        for f in report.findings {
-            print("   \(f.description)")
-        }
-        if report.shouldFail(in: mode) {
-            throw ValidationError(
-                "Capability validation failed (mode: \(mode.rawValue)). "
-                    + "Fix the errors above or rerun with --capability-check off.")
-        }
-    }
-
-    private func runFrontendBuildIfNeeded(config: KSConfig, cwd: URL) throws {
-        guard let raw = KSBuildPlan.normalizedCommand(config.build.buildCommand) else {
-            return
-        }
-        print("🧩  Running frontend build command: \(raw)")
-        try shell(commandLine: raw, in: cwd.path)
-    }
-
-    private func validateFrontendDist(
-        config: KSConfig,
-        configURL: URL,
-        cwd: URL,
-        fm: FileManager
-    ) throws {
-        let distURL = KSBuildPlan.resolveDistURL(
-            config: config,
-            configURL: configURL,
-            cwd: cwd,
-            distOverride: dist)
-        do {
-            try KSBuildPlan.validateFrontendDist(
-                at: distURL,
-                allowMissingDist: allowMissingDist,
-                fm: fm)
-        } catch let error as KSBuildPlanError {
-            throw ValidationError(error.description)
-        }
-
-        // 번들 분석 리포트 (bundleReport 옵션이 true일 때)
-        if config.build.bundleReport {
-            let report = KSBundleAnalyzer.analyze(distURL: distURL)
-            print(report.description)
-        }
-    }
-
-    private func validateWebView2Preconditions(cwd: URL, fm: FileManager) throws {
-        #if os(Windows)
-            do {
-                try KSWebView2Provisioner.ensure(
-                    cwd: cwd,
-                    autoFetch: autoFetchWebView2,
-                    sdkVersion: webview2SdkVersion)
-            } catch let error as ShellError {
-                throw ValidationError(error.description)
-            }
-        #endif
-    }
-
-    /// Returns `true` when any file was copied or removed. The parallel build
-    /// path uses this to decide whether to re-run `swift build` to refresh
-    /// the bundled `Resources/` (Phase 2 finalize pass).
-    ///
-    /// 실제 sync 로직은 `KSResourceSyncManager` 로 분리되어 있다 — 본 함수는
-    /// CLI 옵션 (`--sync-resources`, `--target`, `--dist`) 을 dist/Resources URL
-    /// 한 쌍으로 해석하고 결과를 사용자 친화적 메시지로 출력하는 책임만 진다.
-    @discardableResult
-    private func syncFrontendResourcesIfNeeded(
-        config: KSConfig,
-        configURL: URL,
-        cwd: URL,
-        fm: FileManager
-    ) throws -> Bool {
-        guard syncResources else { return false }
-
-        let distURL = KSBuildPlan.resolveDistURL(
-            config: config,
-            configURL: configURL,
-            cwd: cwd,
-            distOverride: dist)
-
-        let executableName = target ?? config.app.name
-        let resourcesURL =
-            cwd
-            .appendingPathComponent("Sources")
-            .appendingPathComponent(executableName)
-            .appendingPathComponent("Resources")
-
-        let report = try KSResourceSyncManager.sync(
-            distURL: distURL,
-            resourcesURL: resourcesURL,
-            preservedGlobs: config.build.preserveResources,
-            noPrune: noPrune,
-            fm: fm)
-
-        if let reason = report.skippedReason {
-            // 데모처럼 dist 와 Resources/ 가 겹치는 합법적 케이스 — 건너뛴 이유를 안내.
-            if reason.contains("overlaps") {
-                print(
-                    "ℹ  Skipping resource sync: \(reason). "
-                        + "Configure `build.frontendDist` to a separate directory to enable sync.")
-            }
-            return false
-        }
-
-        if report.copied == 0 && report.skipped > 0 && report.removed == 0 {
-            print("📁  Frontend dist already in sync (\(report.skipped) files unchanged)")
-        } else {
-            print(
-                "📁  Synced frontend dist to \(resourcesURL.path) "
-                    + "(\(report.copied) copied, \(report.skipped) unchanged, "
-                    + "\(report.removed) removed)")
-        }
-        if !report.removedRels.isEmpty {
-            // 최초 N 개만 보여주어 출력 길이를 제한한다 — 사용자가 의도치 않게
-            // 잃은 파일이 있는지 확인하는 디버그 보조 정보.
-            let preview = report.removedRels.prefix(10)
-            for rel in preview {
-                print("    - \(rel)")
-            }
-            let remaining = report.removedRels.count - preview.count
-            if remaining > 0 {
-                print("    … and \(remaining) more")
-            }
-        }
-        if noPrune {
-            print(
-                "ℹ  --no-prune: orphan removal skipped. "
-                    + "Re-run without --no-prune to clean stale resources.")
-        }
-        if report.failed > 0 {
-            print("⚠  Failed to copy \(report.failed) file(s) during sync.")
-        }
-        return report.didMutate
-    }
-
-    /// `kalsae.json`에서 패키징에 필요한 메타데이터만 파싱한다.
-    /// `KalsaeCore.KSConfig`를 재사용하여 스키마가 런타임 로더와
-    /// 동기화된 상태를 유지한다 — 수동 CLI 파서와
-    /// 엔진 관점 사이의 관점 차이가 없다.
-    private func parseAppInfo(config: KSConfig) -> AppInfo {
-        let exec = target ?? config.app.name
-        return AppInfo(
-            appName: config.app.name,
-            version: config.app.version,
-            identifier: config.app.identifier,
-            executableName: exec)
     }
 }

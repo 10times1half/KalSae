@@ -4,7 +4,7 @@
 /// 다중 언어: `languages`가 둘 이상이면 `light.exe`를 언어별로 호출해
 /// `<App>_<ver>_<arch>_<lang>.msi`를 여러 개 산출한다.
 public import Foundation
-public import KalsaeCore
+import KalsaeCore
 
 extension KSPackager {
     public struct WiXReport: Sendable, CustomStringConvertible {
