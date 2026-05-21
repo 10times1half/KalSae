@@ -332,7 +332,11 @@
             paths: UnsafePointer<UnsafePointer<UInt16>?>?,
             count: Int32
         ) -> Int32 {
-            guard let user else { return 1 }
+            let log = KSLog.logger("platform.windows.dragdrop")
+            guard let user else {
+                log.warning("dispatchDrop: user=nil, REJECT")
+                return 1
+            }
             let userBox = KSSendableRaw(value: user)
             var collected: [String] = []
             if let paths, count > 0 {
@@ -343,13 +347,16 @@
                 }
             }
             let pathsCopy = collected
-            return Win32App.unsafelyAssumeMainActor {
+            log.debug("dispatchDrop: kind=\(kind) x=\(x) y=\(y) count=\(count) paths=\(pathsCopy)")
+            let result: Int32 = Win32App.unsafelyAssumeMainActor {
                 let box = Unmanaged<DropTargetBox>
                     .fromOpaque(userBox.value).takeUnretainedValue()
                 let evt: WebView2Host.DropEventKind =
                     WebView2Host.DropEventKind(rawValue: kind) ?? .leave
                 return box.handler(evt, x, y, pathsCopy) ? Int32(0) : Int32(1)
             }
+            log.debug("dispatchDrop: handler returned \(result == 0 ? "ACCEPT" : "REJECT")")
+            return result
         }
 
         static func dispatchNewWindow(

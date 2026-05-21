@@ -304,6 +304,11 @@ int32_t KSWV2_RegisterDropTarget(
 /// `hwnd`의 드롭 타겟을 해제한다. 등록된 타겟이 없는 HWND에도 안전하게 호출할 수 있다.
 void KSWV2_RevokeDropTarget(void *hwnd);
 
+/// **테스트 전용** — 현재 추적 중인 드롭 타겟의 총 개수를 반환한다.
+/// `KSWV2_RegisterDropTarget` / `KSWV2_RevokeDropTarget` 의 등록 누수
+/// (Bug 3 회귀) 를 단언하기 위해 노출된다. 운영 코드에서 호출 금지.
+int32_t KSWV2_DebugGetRegisteredCount(void);
+
 /// 문서 생성 시 실행할 JavaScript를 등록한다. 이후 모든 탐색에서
 /// 해당 스크립트가 자동 실행된다.
 int32_t KSWV2_AddScriptToExecuteOnDocumentCreated(

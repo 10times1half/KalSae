@@ -3,10 +3,11 @@
     public import KalsaeCore
     public import Foundation
 
-    /// Win32 implementation of `KSShellBackend`.
+    /// Win32 셸 백엔드 구현체 (`KSShellBackend`).
     ///
-    /// Backed by `ShellExecuteW` for `openExternal`/`showItemInFolder` and
-    /// `SHFileOperationW` (FO_DELETE | FOF_ALLOWUNDO) for `moveToTrash`.
+    /// `openExternal` / `showItemInFolder`는 `ShellExecuteW`로 실행하고,
+    /// `moveToTrash`는 `SHFileOperationW(FO_DELETE | FOF_ALLOWUNDO)`로
+    /// 휴지통 이동을 구현한다.
     public struct KSWindowsShellBackend: KSShellBackend, Sendable {
         public init() {}
 

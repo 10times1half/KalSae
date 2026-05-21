@@ -241,6 +241,8 @@
                 if Win32App.autoQuitOnLastWindow,
                     KSWin32MainWindowTracker.shared.allWindowHWNDs().isEmpty
                 {
+                    KSLog.logger("platform.windows.window").info(
+                        "PostQuitMessage(0): last window destroyed (label=\(label))")
                     PostQuitMessage(0)
                 }
                 return 0

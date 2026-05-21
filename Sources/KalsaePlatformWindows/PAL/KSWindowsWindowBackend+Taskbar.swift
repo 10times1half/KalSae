@@ -4,7 +4,7 @@
     public import KalsaeCore
     import Foundation
 
-    // MARK: - KSWindowsWindowBackend + Taskbar integration
+    // MARK: - KSWindowsWindowBackend + 작업 표시줄 통합
 
     extension KSWindowsWindowBackend {
 

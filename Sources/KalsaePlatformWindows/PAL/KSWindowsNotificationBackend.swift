@@ -47,16 +47,18 @@
         // thread is not Swift's dispatch main queue. See
         // `KSWindowsDialogBackend+Files.swift` for the same pattern.
         nonisolated
-        private static func _winrtSetAUMID(_ aumid: String) -> Int32 {
+            private static func _winrtSetAUMID(_ aumid: String) -> Int32
+        {
             aumid.withCString(encodedAs: UTF16.self) { ptr in
                 KSWV2_SetAppUserModelID(ptr)
             }
         }
 
         nonisolated
-        private static func _winrtShowToast(
-            aumid: String, title: String, body: String, id: String
-        ) -> Int32 {
+            private static func _winrtShowToast(
+                aumid: String, title: String, body: String, id: String
+            ) -> Int32
+        {
             aumid.withCString(encodedAs: UTF16.self) { aumidPtr -> Int32 in
                 title.withCString(encodedAs: UTF16.self) { titlePtr in
                     body.withCString(encodedAs: UTF16.self) { bodyPtr in
@@ -69,7 +71,8 @@
         }
 
         nonisolated
-        private static func _winrtCancelToast(aumid: String, id: String) {
+            private static func _winrtCancelToast(aumid: String, id: String)
+        {
             aumid.withCString(encodedAs: UTF16.self) { aumidPtr in
                 id.withCString(encodedAs: UTF16.self) { tagPtr in
                     _ = KSWV2_CancelToast(aumidPtr, tagPtr)

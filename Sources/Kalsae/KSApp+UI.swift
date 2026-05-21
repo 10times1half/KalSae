@@ -54,8 +54,11 @@ extension KSApp {
         completion: @MainActor @Sendable @escaping ([URL]) -> Void
     ) {
         #if os(Windows)
+            KSLog.logger("kalsae.app").info("openFile: posting job to UI thread")
             postJob {
+                KSLog.logger("kalsae.app").info("openFile: UI job running")
                 let urls = KSWindowsDialogBackend.openFileOnUI(options)
+                KSLog.logger("kalsae.app").info("openFile: dialog returned \(urls.count) urls")
                 completion(urls)
             }
         #else

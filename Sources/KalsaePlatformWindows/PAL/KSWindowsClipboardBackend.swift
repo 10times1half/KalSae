@@ -3,10 +3,11 @@
     public import KalsaeCore
     public import Foundation
 
-    /// Win32 implementation of `KSClipboardBackend`.
+    /// Win32 클립보드 백엔드 구현체 (`KSClipboardBackend`).
     ///
-    /// Image read/write converts between PNG and `CF_DIB` via WIC; see
-    /// `KSWindowsClipboardBackend+Image.swift`.
+    /// 텍스트는 `CF_UNICODETEXT` 형식으로 읽고 쓰며,
+    /// 이미지(PNG)는 WIC(Windows Imaging Component)를 통해
+    /// `CF_DIB`로 변환한다(자세한 내용은 `+Image.swift` 참고).
     public struct KSWindowsClipboardBackend: KSClipboardBackend, Sendable {
         public init() {}
 

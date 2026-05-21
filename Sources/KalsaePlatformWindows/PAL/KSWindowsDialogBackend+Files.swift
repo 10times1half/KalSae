@@ -28,10 +28,11 @@
         // this file (`openFileOnUI` etc.) remain `@MainActor` for API clarity.
 
         nonisolated
-        static func _openFileOnMain(
-            options: KSOpenFileOptions,
-            parentHWND: UnsafeMutableRawPointer?
-        ) -> [URL] {
+            static func _openFileOnMain(
+                options: KSOpenFileOptions,
+                parentHWND: UnsafeMutableRawPointer?
+            ) -> [URL]
+        {
             ensureCOMInitialized()
             let title = options.title ?? "Open"
             let dir = options.defaultDirectory?.path ?? ""
@@ -57,10 +58,11 @@
         }
 
         nonisolated
-        static func _saveFileOnMain(
-            options: KSSaveFileOptions,
-            parentHWND: UnsafeMutableRawPointer?
-        ) -> URL? {
+            static func _saveFileOnMain(
+                options: KSSaveFileOptions,
+                parentHWND: UnsafeMutableRawPointer?
+            ) -> URL?
+        {
             ensureCOMInitialized()
             let title = options.title ?? "Save"
             let dir = options.defaultDirectory?.path ?? ""
@@ -91,10 +93,11 @@
         }
 
         nonisolated
-        static func _selectFolderOnMain(
-            options: KSSelectFolderOptions,
-            parentHWND: UnsafeMutableRawPointer?
-        ) -> URL? {
+            static func _selectFolderOnMain(
+                options: KSSelectFolderOptions,
+                parentHWND: UnsafeMutableRawPointer?
+            ) -> URL?
+        {
             ensureCOMInitialized()
             let title = options.title ?? "Select folder"
             let dir = options.defaultDirectory?.path ?? ""
@@ -122,17 +125,19 @@
         /// COM은 STA로 초기화되어 있어야 IFileOpenDialog가 동작한다.
         /// `KSWV2_OleInitializeOnce`는 호출 스레드별 idempotent.
         nonisolated
-        private static func ensureCOMInitialized() {
+            private static func ensureCOMInitialized()
+        {
             _ = KSWV2_OleInitializeOnce()
         }
 
         /// 필터 입력을 `KSWV2DialogFilter` 배열로 변환해 작업을 실행한다.
         /// UTF-16 버퍼는 호출 동안 메모리에 고정된다.
         nonisolated
-        private static func withFilterSpecs<R>(
-            _ filters: [KSFileFilter],
-            _ body: (UnsafePointer<KSWV2DialogFilter>?, Int32) -> R
-        ) -> R {
+            private static func withFilterSpecs<R>(
+                _ filters: [KSFileFilter],
+                _ body: (UnsafePointer<KSWV2DialogFilter>?, Int32) -> R
+            ) -> R
+        {
             let entries: [KSFileFilter] =
                 filters.isEmpty
                 ? [KSFileFilter(name: "All Files", extensions: ["*"])]
@@ -167,9 +172,10 @@
         }
 
         nonisolated
-        private static func allocateUTF16NullTerminated(
-            _ s: String
-        ) -> UnsafeMutablePointer<UInt16> {
+            private static func allocateUTF16NullTerminated(
+                _ s: String
+            ) -> UnsafeMutablePointer<UInt16>
+        {
             let units = Array(s.utf16)
             let p = UnsafeMutablePointer<UInt16>.allocate(capacity: units.count + 1)
             for (i, u) in units.enumerated() {
@@ -182,10 +188,11 @@
         /// `KSWV2_DialogOpenFile`이 반환한 wchar_t** 배열을 URL로 변환하고
         /// 메모리를 해제한다.
         nonisolated
-        private static func drainPathArray(
-            _ array: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>,
-            count: Int
-        ) -> [URL] {
+            private static func drainPathArray(
+                _ array: UnsafeMutablePointer<UnsafeMutablePointer<wchar_t>?>,
+                count: Int
+            ) -> [URL]
+        {
             var urls: [URL] = []
             urls.reserveCapacity(count)
             for i in 0..<count {

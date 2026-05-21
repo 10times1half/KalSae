@@ -146,7 +146,12 @@
             }
             if !config.security.allowExternalDrop {
                 host.setAllowExternalDrop(false)
-                try? host.installFileDropEmitter()
+                do {
+                    try host.installFileDropEmitter()
+                } catch {
+                    KSLog.logger("platform.windows.dragdrop").warning(
+                        "installFileDropEmitter failed: \(error)")
+                }
             }
 
             // 보안 핸들러: 팝업 차단, 권한 거부-기본값, 다운로드 알림.

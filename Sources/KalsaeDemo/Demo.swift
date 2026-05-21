@@ -25,6 +25,17 @@ import Kalsae
         PingOut(pong: true, at: Date().timeIntervalSince1970)
     }
 
+    // MARK: - Phase 1-5 IPC arg types
+
+    struct CtxMenuArgs: Codable, Sendable {
+        let x: Double
+        let y: Double
+    }
+
+    struct EnabledArg: Codable, Sendable {
+        let enabled: Bool
+    }
+
     // MARK: - Entry point
 
     @main
@@ -60,6 +71,11 @@ import Kalsae
 
             print("Booted \(app.config.app.name) v\(app.config.app.version)")
             print("Platform: \(app.platform.name)")
+            print("PAL capabilities:")
+            print("  tray:         \(app.platform.tray != nil)")
+            print("  accelerators: \(app.platform.accelerators != nil)")
+            print("  autostart:    \(app.platform.autostart != nil)")
+            print("  deepLink:     \(app.platform.deepLink != nil)")
 
             // 메뉴 / 트레이에서 구동되는 액션. 부팅 이후에 등록해서 클로저가
             // `app`을 직접 캡처할 수 있도록 한다. 핸들러 내부에서 다른 `@MainActor`
@@ -103,6 +119,106 @@ import Kalsae
             await app.registry.register("app.quit") { [app] _ in
                 app.quit()
                 return .success(Data("{}".utf8))
+            }
+
+            // Show/hide the main window via the existing `__ks.window.*` builtins;
+            // exposed as plain commands so tray menu entries can target them.
+            await app.registry.register("app.showWindow") { [app] _ in
+                _ = await app.registry.dispatch(
+                    name: "__ks.window.show", args: Data("{}".utf8))
+                return .success(Data("{}".utf8))
+            }
+            await app.registry.register("app.hideWindow") { [app] _ in
+                _ = await app.registry.dispatch(
+                    name: "__ks.window.hide", args: Data("{}".utf8))
+                return .success(Data("{}".utf8))
+            }
+
+            // Native context menu. JS calls this from `oncontextmenu` with the
+            // click coordinates; the menu items reuse the existing app.* commands.
+            await app.registry.register("app.contextMenu") { [app] data in
+                let args: CtxMenuArgs
+                do {
+                    args = try JSONDecoder().decode(CtxMenuArgs.self, from: data)
+                } catch {
+                    return .failure(
+                        KSError(
+                            code: .commandDecodeFailed,
+                            message: "app.contextMenu expects {x, y}"))
+                }
+                let items: [KSMenuItem] = [
+                    .action(
+                        id: "ctx.notify", label: "Show Notification",
+                        command: "app.notify"),
+                    .action(
+                        id: "ctx.info", label: "About", command: "app.showInfo"),
+                    .separator(),
+                    .action(
+                        id: "ctx.hide", label: "Hide Window",
+                        command: "app.hideWindow"),
+                    .action(
+                        id: "ctx.quit", label: "Quit", command: "app.quit"),
+                ]
+                do {
+                    try await app.platform.menus.showContextMenu(
+                        items,
+                        at: KSPoint(x: args.x, y: args.y),
+                        in: nil)
+                    return .success(Data("{}".utf8))
+                } catch {
+                    return .failure(
+                        error as? KSError
+                            ?? KSError(
+                                code: .commandExecutionFailed,
+                                message: "app.contextMenu: \(error)"))
+                }
+            }
+
+            // Toggle a global hot-key (Ctrl+Shift+K) that fires a notification.
+            // Demonstrates `app.platform.accelerators` (Windows-only today).
+            await app.registry.register("app.toggleAccelerator") { [app] data in
+                guard let accels = app.platform.accelerators else {
+                    return .failure(
+                        KSError(
+                            code: .unsupportedPlatform,
+                            message:
+                                "accelerators not available on \(app.platform.name)"
+                        ))
+                }
+                let args: EnabledArg
+                do {
+                    args = try JSONDecoder().decode(EnabledArg.self, from: data)
+                } catch {
+                    return .failure(
+                        KSError(
+                            code: .commandDecodeFailed,
+                            message: "app.toggleAccelerator expects {enabled}"))
+                }
+                do {
+                    if args.enabled {
+                        try await accels.register(
+                            id: "demo.hotkey",
+                            accelerator: "Ctrl+Shift+K"
+                        ) { [weak app] in
+                            guard let app else { return }
+                            let n = KSNotification(
+                                id:
+                                    "demo.hotkey.\(Int(Date().timeIntervalSince1970))",
+                                title: "Kalsae",
+                                body: "Ctrl+Shift+K fired")
+                            app.postNotification(n)
+                        }
+                    } else {
+                        try await accels.unregister(id: "demo.hotkey")
+                    }
+                    return .success(Data("{}".utf8))
+                } catch {
+                    return .failure(
+                        error as? KSError
+                            ?? KSError(
+                                code: .commandExecutionFailed,
+                                message: "app.toggleAccelerator: \(error)"))
+                }
             }
 
             try await installMenus(app: app)
@@ -163,12 +279,19 @@ import Kalsae
                 icon: "",  // empty → falls back to stock icon on Windows
                 tooltip: "Kalsae Demo",
                 menu: [
+                    .action(
+                        id: "tray.show", label: "Show Window",
+                        command: "app.showWindow"),
+                    .action(
+                        id: "tray.hide", label: "Hide Window",
+                        command: "app.hideWindow"),
+                    .separator(),
                     .action(id: "tray.notify", label: "Show Notification", command: "app.notify"),
                     .action(id: "tray.info", label: "About", command: "app.showInfo"),
                     .separator(),
                     .action(id: "tray.quit", label: "Quit", command: "app.quit"),
                 ],
-                onLeftClick: "app.showInfo")
+                onLeftClick: "app.showWindow")
             if (try? await tray.install(cfg)) == nil {
                 print("Tray not supported on \(app.platform.name) yet; continuing without tray.")
             }

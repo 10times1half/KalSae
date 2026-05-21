@@ -25,9 +25,18 @@
       "alwaysOnTop": false
     }
   ],
+  "deepLink": {
+    "schemes": ["kalsae-demo"],
+    "autoRegisterOnLaunch": false
+  },
   "security": {
     "csp": "default-src 'self' https://app.kalsae ks://app; script-src 'self' https://app.kalsae ks://app 'unsafe-inline'; style-src 'self' https://app.kalsae ks://app 'unsafe-inline'; img-src 'self' https://app.kalsae ks://app data:; connect-src 'self' https://app.kalsae ks://app",
-    "commandAllowlist": ["greet", "ping", "app.showInfo", "app.openFile", "app.notify", "app.quit"],
+    "commandAllowlist": [
+      "greet", "ping",
+      "app.showInfo", "app.openFile", "app.notify", "app.quit",
+      "app.showWindow", "app.hideWindow",
+      "app.contextMenu", "app.toggleAccelerator"
+    ],
     "devtools": true
   }
 }

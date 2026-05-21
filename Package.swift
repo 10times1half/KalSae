@@ -376,6 +376,7 @@ let package = Package(
             dependencies: [
                 "KalsaePlatformWindows",
                 "KalsaeCore",
+                .target(name: "CKalsaeWV2", condition: .when(platforms: [.windows])),
             ],
             path: "Tests/KalsaePlatformWindowsTests",
             swiftSettings: commonSwiftSettings,

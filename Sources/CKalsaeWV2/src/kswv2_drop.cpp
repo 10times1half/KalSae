@@ -148,45 +148,97 @@ extern "C" int32_t KSWV2_OleInitializeOnce(void) {
     return static_cast<int32_t>(hr);
 }
 
-/// HWND에 IDropTarget을 설치한다.
-/// 이전에 등록된 드롭 타겟이 있으면 RevokeDragDrop 후 새로 등록한다.
+/// 단일 HWND 에 IDropTarget 을 (재)등록하는 헬퍼.
+/// 기존 타겟이 있으면 Revoke 후 재등록한다. 등록에 성공하면 g_dropTargets
+/// 에 owning reference 를 보관해 추후 Revoke 시 Release 한다.
+static HRESULT RegisterOnOne(HWND h, void *user, KSWV2DropCB cb) {
+    auto it = g_dropTargets.find(h);
+    if (it != g_dropTargets.end()) {
+        RevokeDragDrop(h);
+        it->second->Release();
+        g_dropTargets.erase(it);
+    }
+    // WebView2 등 다른 컴포넌트가 이미 등록한 IDropTarget 이 있을 수 있으므로
+    // 무조건 한 번 더 Revoke 해 둔다. (실패 무시)
+    RevokeDragDrop(h);
+
+    auto target = Make<DropTargetImpl>(user, cb);
+    if (!target) return E_OUTOFMEMORY;
+
+    HRESULT hr = RegisterDragDrop(h, target.Get());
+    if (FAILED(hr)) return hr;
+
+    target->AddRef();
+    g_dropTargets[h] = target.Get();
+    return S_OK;
+}
+
+namespace {
+struct EnumCtx {
+    void *user;
+    KSWV2DropCB cb;
+};
+
+BOOL CALLBACK EnumChildRegisterProc(HWND child, LPARAM lp) {
+    auto *ctx = reinterpret_cast<EnumCtx *>(lp);
+    // 자식의 등록 실패는 무시 — 일부 child class 는 OleInitialize 되지 않은
+    // 스레드에 속할 수 있다.
+    (void)RegisterOnOne(child, ctx->user, ctx->cb);
+    return TRUE;
+}
+}  // namespace
+
+/// HWND 및 그 모든 자손 HWND 에 IDropTarget 을 설치한다.
+///
+/// WebView2 는 자체 child HWND 를 생성해 그 HWND 의 IDropTarget 으로 OS
+/// 파일 드롭을 가로챈다. AllowExternalDrop=false 만으로는 WebView2 가
+/// DROPEFFECT_NONE 을 반환해 X 커서가 유지되므로, 부모뿐 아니라 모든
+/// 자식 HWND 에도 우리 IDropTarget 을 (재)등록한다.
 extern "C" int32_t KSWV2_RegisterDropTarget(
     void *hwnd, void *user, KSWV2DropCB cb)
 {
     if (!hwnd || !cb) return E_POINTER;
     HWND h = reinterpret_cast<HWND>(hwnd);
 
-    // 기존 타겟 해제
-    auto it = g_dropTargets.find(h);
-    if (it != g_dropTargets.end()) {
-        RevokeDragDrop(h);
-        it->second->Release();
-        g_dropTargets.erase(it);
-    }
+    HRESULT hr = RegisterOnOne(h, user, cb);
+    if (FAILED(hr)) return static_cast<int32_t>(hr);
 
-    // 새 IDropTarget 생성 (WRL Make로 생성, refcount 1에서 시작)
-    auto target = Make<DropTargetImpl>(user, cb);
-    if (!target) return E_OUTOFMEMORY;
-
-    HRESULT hr = RegisterDragDrop(h, target.Get());
-    if (FAILED(hr)) {
-        return static_cast<int32_t>(hr);
-    }
-
-    // 맵에 소유권 저장을 위해 AddRef (g_dropTargets 해제 시 Release)
-    target->AddRef();
-    g_dropTargets[h] = target.Get();
+    // 모든 자식(및 그 자손)에 동일 핸들러 등록.
+    // EnumChildWindows 는 재귀적으로 모든 자손을 방문한다.
+    EnumCtx ctx{user, cb};
+    EnumChildWindows(h, EnumChildRegisterProc, reinterpret_cast<LPARAM>(&ctx));
     return 0;
 }
 
-/// HWND의 드롭 타겟을 해제한다.
-extern "C" void KSWV2_RevokeDropTarget(void *hwnd) {
-    if (!hwnd) return;
-    HWND h = reinterpret_cast<HWND>(hwnd);
+/// 단일 HWND 의 IDropTarget 등록 해제. g_dropTargets 에 보관된
+/// owning reference 가 있으면 함께 Release 한다.
+static void RevokeOnOne(HWND h) {
     auto it = g_dropTargets.find(h);
     if (it != g_dropTargets.end()) {
         RevokeDragDrop(h);
         it->second->Release();
         g_dropTargets.erase(it);
     }
+}
+
+namespace {
+BOOL CALLBACK EnumChildRevokeProc(HWND child, LPARAM /*lp*/) {
+    RevokeOnOne(child);
+    return TRUE;
+}
+}  // namespace
+
+/// HWND 및 그 모든 자손 HWND의 드롭 타겟을 해제한다.
+/// `KSWV2_RegisterDropTarget`과 대칭 — 등록 시 자손 HWND에 추가한
+/// owning reference 를 누수 없이 모두 회수한다.
+extern "C" void KSWV2_RevokeDropTarget(void *hwnd) {
+    if (!hwnd) return;
+    HWND h = reinterpret_cast<HWND>(hwnd);
+    RevokeOnOne(h);
+    EnumChildWindows(h, EnumChildRevokeProc, 0);
+}
+
+/// 테스트 전용 — 등록 카운트 누수 회귀 단언용.
+extern "C" int32_t KSWV2_DebugGetRegisteredCount(void) {
+    return static_cast<int32_t>(g_dropTargets.size());
 }

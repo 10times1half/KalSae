@@ -77,6 +77,7 @@
     <div class="card">
       <h3>invoke("greet")</h3>
       <div class="row">
+        <label for="name">Name:</label>
         <input id="name" value="Kalsae" />
         <button class="act" id="greet">Greet</button>
       </div>
@@ -126,7 +127,105 @@
 
     <div class="card">
       <h3>Events</h3>
+      <p style="margin:0 0 6px;color:#94a3b8">Right-click anywhere outside the title bar to see a native context menu.</p>
       <pre id="eventLog">(menu / tray / tick events show up here)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Window (advanced)</h3>
+      <div class="row">
+        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"flag":true}'>Always-on-top ON</button>
+        <button class="act" data-invoke="__ks.window.setAlwaysOnTop" data-args='{"flag":false}'>Always-on-top OFF</button>
+        <button class="act" id="setTitleBtn">Set title → random</button>
+        <button class="act" data-win="hide">Hide</button>
+        <button class="act" data-win="show">Show</button>
+        <button class="act" data-win="reload">Reload</button>
+        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"level":1.25}'>Zoom 125%</button>
+        <button class="act" data-invoke="__ks.window.setZoom" data-args='{"level":1.0}'>Zoom 100%</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Window state (live, polled 2s)</h3>
+      <pre id="winState">(waiting…)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Dialog (full)</h3>
+      <div class="row">
+        <button class="act" id="dlgSave">Save file…</button>
+        <button class="act" id="dlgFolder">Pick folder…</button>
+        <button class="act" id="dlgInfo">Info</button>
+        <button class="act" id="dlgWarn">Warning</button>
+        <button class="act" id="dlgErr">Error</button>
+        <button class="act" id="dlgAsk">Question</button>
+      </div>
+      <pre id="dlgOut">(no result yet)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Shell (full)</h3>
+      <div class="row">
+        <input id="shellPath" placeholder="path — use Open File… first, then click below" style="min-width:280px" />
+        <button class="act" id="shellReveal">Show in folder</button>
+        <button class="act" id="shellTrash">Move to trash</button>
+      </div>
+      <pre id="shellOut">(no result yet)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Capture preview</h3>
+      <div class="row">
+        <button class="act" id="capBtn">Capture window</button>
+      </div>
+      <img id="capImg" alt="capture preview" style="max-width:100%;margin-top:8px;border:1px solid #2a2e3a;border-radius:6px;display:none" />
+    </div>
+
+    <div class="card">
+      <h3>Global hot-key (Ctrl+Shift+K)</h3>
+      <div class="row">
+        <button class="act" data-invoke="app.toggleAccelerator" data-args='{"enabled":true}'>Register</button>
+        <button class="act" data-invoke="app.toggleAccelerator" data-args='{"enabled":false}'>Unregister</button>
+        <span style="color:#94a3b8">When registered, pressing Ctrl+Shift+K posts a notification.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Displays</h3>
+      <div class="row">
+        <button class="act" id="displaysBtn">List displays</button>
+      </div>
+      <pre id="displaysOut">(no result yet)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Autostart</h3>
+      <div class="row">
+        <button class="act" data-invoke="__ks.autostart.enable" data-out="autoOut">Enable</button>
+        <button class="act" data-invoke="__ks.autostart.disable" data-out="autoOut">Disable</button>
+        <button class="act" data-invoke="__ks.autostart.isEnabled" data-out="autoOut">Status</button>
+      </div>
+      <pre id="autoOut">(no result yet)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Deep link (scheme as declared in config)</h3>
+      <div class="row">
+        <input id="dlScheme" placeholder="scheme" value="kalsae-demo" />
+        <button class="act" id="dlReg">Register</button>
+        <button class="act" id="dlUnreg">Unregister</button>
+        <button class="act" id="dlIs">Is registered?</button>
+      </div>
+      <pre id="dlOut">(no result yet — also watching __ks.deepLink.openURL events)</pre>
+    </div>
+
+    <div class="card">
+      <h3>Close interceptor (close → hide to tray)</h3>
+      <div class="row">
+        <button class="act" data-invoke="__ks.window.setCloseInterceptor" data-args='{"enabled":true}'>Enable</button>
+        <button class="act" data-invoke="__ks.window.setCloseInterceptor" data-args='{"enabled":false}'>Disable</button>
+        <span style="color:#94a3b8">When enabled, X button hides the window; use the tray to restore.</span>
+      </div>
     </div>
   </main>
 
@@ -216,10 +315,144 @@
     // event log
     KS.events.on("menu", (p) =>
       prepend($("eventLog"), new Date().toLocaleTimeString() + "  menu " + fmt(p)));
-    KS.events.on("openFile.result", (p) =>
-      prepend($("eventLog"), new Date().toLocaleTimeString() + "  openFile " + fmt(p)));
+    KS.events.on("openFile.result", (p) => {
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  openFile " + fmt(p));
+      // Cache the most recent path so the Shell card can target it.
+      if (p && Array.isArray(p.paths) && p.paths.length) {
+        $("shellPath").value = p.paths[0];
+      }
+    });
     KS.events.on("tick", (p) =>
       prepend($("eventLog"), new Date().toLocaleTimeString() + "  tick " + fmt(p)));
+
+    // ---- Phase 1-5: extended PAL demos -----------------------------------
+
+    // Generic data-invoke runner: data-args (JSON), data-out (target pre id).
+    document.querySelectorAll("button[data-invoke]").forEach(b => {
+      b.addEventListener("click", async () => {
+        let args = {};
+        try { if (b.dataset.args) args = JSON.parse(b.dataset.args); } catch {}
+        try {
+          const r = await KS.invoke(b.dataset.invoke, args);
+          if (b.dataset.out) set($(b.dataset.out), r ?? "ok");
+        } catch (e) {
+          if (b.dataset.out) set($(b.dataset.out), "ERR: " + fmt(e));
+          else console.error(b.dataset.invoke, e);
+        }
+      });
+    });
+
+    // Window (advanced)
+    $("setTitleBtn").addEventListener("click", async () => {
+      try { await KS.window.setTitle("Kalsae Demo — " + Math.random().toString(36).slice(2, 8)); }
+      catch (e) { console.error(e); }
+    });
+
+    // Window state polling
+    async function pollState() {
+      try {
+        const [pos, size, zoom] = await Promise.all([
+          KS.window.getPosition(),
+          KS.window.getSize(),
+          KS.window.getZoom(),
+        ]);
+        set($("winState"), { position: pos, size, zoom });
+      } catch (e) {
+        set($("winState"), "ERR: " + fmt(e));
+      }
+    }
+    pollState();
+    setInterval(pollState, 2000);
+
+    // Dialog (full)
+    $("dlgSave").addEventListener("click", async () => {
+      try {
+        const r = await KS.dialog.saveFile({
+          title: "Save as\u2026",
+          defaultName: "hello.txt",
+          filters: [{ name: "Text", extensions: ["txt"] }],
+        });
+        set($("dlgOut"), r);
+      } catch (e) { set($("dlgOut"), "ERR: " + fmt(e)); }
+    });
+    $("dlgFolder").addEventListener("click", async () => {
+      try { set($("dlgOut"), await KS.dialog.selectFolder({ title: "Pick a folder" })); }
+      catch (e) { set($("dlgOut"), "ERR: " + fmt(e)); }
+    });
+    async function msg(kind) {
+      try {
+        const r = await KS.dialog.message({
+          kind,
+          title: "Kalsae",
+          message: kind.toUpperCase() + " dialog",
+          detail: "Posted from JS via KS.dialog.message().",
+          buttons: kind === "question" ? "yesNo" : "ok",
+        });
+        set($("dlgOut"), { kind, result: r });
+      } catch (e) { set($("dlgOut"), "ERR: " + fmt(e)); }
+    }
+    $("dlgInfo").addEventListener("click", () => msg("info"));
+    $("dlgWarn").addEventListener("click", () => msg("warning"));
+    $("dlgErr").addEventListener("click", () => msg("error"));
+    $("dlgAsk").addEventListener("click", () => msg("question"));
+
+    // Shell (full)
+    $("shellReveal").addEventListener("click", async () => {
+      const p = $("shellPath").value.trim();
+      if (!p) { set($("shellOut"), "pick a file with Open File\u2026 first"); return; }
+      try { await KS.shell.showItemInFolder(p); set($("shellOut"), "revealed " + p); }
+      catch (e) { set($("shellOut"), "ERR: " + fmt(e)); }
+    });
+    $("shellTrash").addEventListener("click", async () => {
+      const p = $("shellPath").value.trim();
+      if (!p) { set($("shellOut"), "pick a file with Open File\u2026 first"); return; }
+      try { await KS.shell.moveToTrash(p); set($("shellOut"), "trashed " + p); }
+      catch (e) { set($("shellOut"), "ERR: " + fmt(e)); }
+    });
+
+    // Capture preview → base64 PNG
+    $("capBtn").addEventListener("click", async () => {
+      try {
+        const b64 = await KS.invoke("__ks.window.capturePreview", { format: "png" });
+        const img = $("capImg");
+        img.src = "data:image/png;base64," + b64;
+        img.style.display = "block";
+      } catch (e) { console.error(e); }
+    });
+
+    // Displays
+    $("displaysBtn").addEventListener("click", async () => {
+      try { set($("displaysOut"), await KS.invoke("__ks.window.displays", {})); }
+      catch (e) { set($("displaysOut"), "ERR: " + fmt(e)); }
+    });
+
+    // Deep link
+    async function dl(name) {
+      const scheme = $("dlScheme").value.trim();
+      try { set($("dlOut"), await KS.invoke("__ks.deepLink." + name, { scheme })); }
+      catch (e) { set($("dlOut"), "ERR: " + fmt(e)); }
+    }
+    $("dlReg").addEventListener("click", () => dl("register"));
+    $("dlUnreg").addEventListener("click", () => dl("unregister"));
+    $("dlIs").addEventListener("click", () => dl("isRegistered"));
+    KS.events.on("__ks.deepLink.openURL", (p) =>
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  deepLink " + fmt(p)));
+
+    // Close interceptor → hide instead of close.
+    KS.events.on("__ks.window.beforeClose", () => {
+      prepend($("eventLog"), new Date().toLocaleTimeString() + "  beforeClose → hide");
+      try { KS.window.hide(); } catch (e) { console.error(e); }
+    });
+
+    // Native context menu via Swift command.
+    document.addEventListener("contextmenu", (e) => {
+      // Allow the WebView default menu inside <input>/<textarea>.
+      const tag = (e.target && e.target.tagName) || "";
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      e.preventDefault();
+      KS.invoke("app.contextMenu", { x: e.clientX, y: e.clientY })
+        .catch(err => console.error("contextMenu", err));
+    });
   }
 </script>
 </body>

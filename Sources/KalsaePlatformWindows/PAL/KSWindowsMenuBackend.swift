@@ -210,20 +210,34 @@
     /// Records every top-level window the platform creates so the menu
     /// backend can apply an app-wide menubar without reaching into private
     /// state on `Win32App`.
-    @MainActor
-    internal final class KSWin32MainWindowTracker {
+    ///
+    /// `track` 은 Swift main(@MainActor)에서, `untrack` / `allWindowHWNDs`
+    /// 는 UI 스레드(WND_PROC, unsafeBitCast로 격리 우회)에서 호출되므로
+    /// `@MainActor` 격리는 명목상이었고 실제로는 두 OS 스레드가 같은 Set
+    /// 을 동기화 없이 만진다. NSLock 으로 보호된 nonisolated 클래스로
+    /// 전환해 race / 부분 공개 상태 관찰을 차단한다.
+    /// (`Win32App.windowsMirror` / `windowsMirrorLock` 패턴과 동일.)
+    internal final class KSWin32MainWindowTracker: @unchecked Sendable {
         static let shared = KSWin32MainWindowTracker()
         private var hwnds: Set<UInt> = []
+        private let lock = NSLock()
         private init() {}
 
         func track(hwnd: HWND) {
+            lock.lock()
+            defer { lock.unlock() }
             hwnds.insert(UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd))))
         }
         func untrack(hwnd: HWND) {
+            lock.lock()
+            defer { lock.unlock() }
             hwnds.remove(UInt(bitPattern: Int(bitPattern: UnsafeRawPointer(hwnd))))
         }
         func allWindowHWNDs() -> [HWND] {
-            hwnds.compactMap { HWND(bitPattern: $0) }
+            lock.lock()
+            let snapshot = hwnds
+            lock.unlock()
+            return snapshot.compactMap { HWND(bitPattern: $0) }
         }
     }
 #endif

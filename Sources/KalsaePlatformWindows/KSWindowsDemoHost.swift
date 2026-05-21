@@ -211,9 +211,11 @@
                     }
                     let payload = Payload(kind: kindStr, x: x, y: y, paths: paths)
                     try? bridge.emit(event: "__ks.file.drop", payload: payload)
-                    // 아키텍처에서는 경로가 하나라도 있을 때만 enter/drop을 수락해
-                    // OS가 금지 아이콘 대신 복사 커서를 표시하도록 한다.
-                    return !paths.isEmpty || kind == .leave
+                    // 아키텍처에서는 `.drop` 시에만 paths 를 검증하고,
+                    // `.enter` / `.leave` 는 조건 없이 수락해 OS 가 금지 아이콘
+                    // 대신 복사 커서를 표시하도록 한다. 일부 드래그 소스는
+                    // DragEnter 시점에는 CF_HDROP 을 제공하지 않을 수 있다.
+                    return kind != .drop || !paths.isEmpty
                 }
             }
         }
@@ -330,7 +332,15 @@
         public func runMessageLoop() -> Int32 {
             // 프로세스 수명 동안 UI 스레드를 돌린다 — 마지막 창이 닫히면
             // WM_DESTROY 핸들러가 PostQuitMessage 를 실행한다.
-            Win32App.autoQuitOnLastWindow = true
+            //
+            // 플래그 set 을 UI 스레드로 시리얼라이즈한다: (1) 부트 중
+            // 큐에 쌓인 모든 메시지(특히 잔여 WM_DESTROY) 가 먼저 처리되어
+            // 조기 PostQuitMessage 발사를 방지하고, (2) SendMessageW
+            // 라운드트립이 메모리 배리어 역할을 해 UI 스레드가 플래그
+            // 변경을 확실히 관찰한다.
+            Win32App.runOnUIThread {
+                Win32App.autoQuitOnLastWindow = true
+            }
             return Win32App.shared.runMessageLoop()
         }
 

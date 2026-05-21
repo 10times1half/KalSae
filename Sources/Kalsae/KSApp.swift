@@ -410,6 +410,8 @@ public final class KSApp {
                 // 스레드) 로그만 남기고 부팅을 계속한다.
                 do {
                     try concrete.installFileDropEmitter()
+                    KSLog.logger("kalsae.app").info(
+                        "installFileDropEmitter: success")
                 } catch {
                     KSLog.logger("kalsae.app").warning(
                         "installFileDropEmitter failed: \(error)")

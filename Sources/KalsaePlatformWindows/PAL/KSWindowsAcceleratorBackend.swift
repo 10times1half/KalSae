@@ -2,13 +2,11 @@
     internal import WinSDK
     public import KalsaeCore
 
-    /// Win32 implementation of `KSAcceleratorBackend` using `RegisterHotKey` /
-    /// `WM_HOTKEY`. Hot-keys registered here are global (system-wide) — they
-    /// fire regardless of which application currently has focus.
+    /// Win32 `RegisterHotKey` / `WM_HOTKEY` 기반의 `KSAcceleratorBackend` 구현체.
+    /// 여기에 등록된 단축키는 시스템 전역(foreground 앱과 무관하게)에서 동작한다.
     ///
-    /// Registration must happen on the UI thread (the same thread that runs
-    /// the message pump in `Win32App.runMessageLoop`). The actor enforces
-    /// this by being `@MainActor`-isolated.
+    /// 등록은 반드시 UI 스레드(`Win32App.runMessageLoop`이 실행 중인 스레드)에서
+    /// 이루어져야 한다. `@MainActor` 격리로 이를 강제한다.
     @MainActor
     public final class KSWindowsAcceleratorBackend: KSAcceleratorBackend {
         private struct Entry {
@@ -87,8 +85,8 @@
 
     // MARK: - Accelerator parser
 
-    /// Parses cross-platform accelerator strings (e.g. `"CmdOrCtrl+Shift+N"`)
-    /// into Win32 modifier flags and a virtual-key code.
+    /// 크로스 플랫폼 단축키 문자열(예: `"CmdOrCtrl+Shift+N"`)을
+    /// Win32 수식자 플래그와 가상 키 코드로 파싱한다.
     internal enum AcceleratorParser {
         struct Parsed {
             let modifiers: UInt32  // MOD_CONTROL | MOD_ALT | ...

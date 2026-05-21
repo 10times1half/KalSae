@@ -174,6 +174,26 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
 - Full PAL: windows, menus, tray, dialogs, notifications (WinRT), clipboard,
   shell, accelerators, autostart (Registry), deep link (Registry), single
   instance (WM_COPYDATA), window state persistence.
+- **UI thread model (중요)**: Kalsae는 전용 Win32 UI 스레드를 소유하고 Swift
+  main thread는 `WaitForSingleObject(uiThreadHandle)`로 영구 blocked 상태에
+  있다. 따라서 Windows PAL 코드에서는:
+  - ❌ `await MainActor.run { ... }` 금지 — main thread가 blocked이므로
+    영원히 resume되지 않아 모든 JS-bridge 호출이 IPC 30s 타임아웃까지
+    데드락된다.
+  - ✅ [Win32App.runOnUIThread](Sources/KalsaePlatformWindows/Win32/Win32App+UIThread.swift) (nonisolated, SendMessageW 라운드트립) 또는
+    `Win32App.runOnUIThreadIsolated` (@MainActor 상태 접근 시) 사용.
+  - ⚠️ `runOnUIThreadIsolated` body 안에서 `Array.map/compactMap/flatMap`,
+    `Optional.flatMap/map`, `withUnsafeMutableBytes`, `withCString(encodedAs:)`
+    같은 stdlib 제네릭 호출을 하면 `dispatch_assert_queue` 트랩
+    (`STATUS_ILLEGAL_INSTRUCTION` 0xC000001D)이 발생한다. 그런 경우는
+    nonisolated 헬퍼를 분리하거나 명시적 for-loop / if-let으로 풀어야 한다.
+  - 자세한 패턴은 `/memories/repo/windows-mainactor-closure-trap.md` 및
+    `KSWindowsDialogBackend+Files.swift` 상단 주석 참고.
+- **다이얼로그 부모 자동 보정**: `KS.dialog.openFile/saveFile/selectFolder`는
+  `parent` 인자가 nil이거나 registry에 없는 핸들이면 `GetActiveWindow()` →
+  `GetForegroundWindow()` 폴백 후 `SetForegroundWindow(hwnd)`로 z-order를
+  끌어올린다. WebView2 surface 뒤에 숨는 현상 방지용 — 명시 부모가 없는
+  호출도 모달처럼 동작한다는 점을 사용자에게 알릴 것.
 
 ### macOS
 
@@ -263,7 +283,7 @@ _`public import` 필수. 리소스는 `Bundle.module.url(..., subdirectory:)`._
   Source: [PackagerAndroid.swift](Sources/KalsaeCLI/Support/PackagerAndroid.swift).
 - Sample project: `Samples/KalsaeAndroidSample/` (Gradle build).
 
-_🇰🇷 Windows = 풍 PAL. macOS = 풍 PAL (보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = 풍 PAL (라우터/컨텍스트 메뉴 포함; `run()`은 영구 미지원 — JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._
+_🇰🇷 Windows = 풍 PAL. **Swift main thread가 blocked되어 있으므로 `await MainActor.run` 금지 → `Win32App.runOnUIThread` 사용**. macOS = 풍 PAL (보안 핸들러 적용; 파일 드롭 emitter는 stub). Linux = 풍 PAL (보안/라우터/메뉴 적용; 파일 드롭 emitter stub). iOS = PAL + 보안 핸들러 적용. Android = 풍 PAL (라우터/컨텍스트 메뉴 포함; `run()`은 영구 미지원 — JVM Activity 모델). 세부 보안 동작은 [Docs/SECURITY.md](Docs/SECURITY.md) 참고._
 
 ---
 
