@@ -145,6 +145,7 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `-t, --target <target>` | Executable target to build. |
 | `--package` / `--no-package` | Produce a redistributable package after building. **Default: ON** (Wails-compatible). Use `--no-package` to skip. |
 | `--webview2 <policy>` | WebView2 runtime distribution policy: `evergreen` (default), `fixed`, or `auto`. |
+| `--webview2-install-mode <mode>` | Standalone runtime install mode (see [WebView2 install modes](#webview2-install-modes)): `download` \| `embedBootstrapper` \| `offlineInstaller` \| `fixedVersion` \| `skip`. |
 | `--arch <arch>` | Target architecture. Windows: `x64` (default) \| `arm64` \| `x86`. macOS: `arm64` \| `x86_64` \| `universal`. |
 | `--bootstrapper <path>` | Path to `MicrosoftEdgeWebview2Setup.exe` (Evergreen bootstrapper). |
 | `--config <path>` | Override path to `Kalsae.json`. |
@@ -162,6 +163,14 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--nsis-publisher <name>` | Hint passed to the NSIS template Publisher field (default: `app.identifier`). |
 | `--signtool-cmd "<template>"` | Windows: codesign the packaged executable. The template runs through the host shell. Use `{file}` as a placeholder for the absolute exe path; if omitted, the path is appended automatically. Honors `--dryrun` (printed only). |
 | `--nsis-signtool-cmd "<template>"` | Windows: codesign the NSIS installer after `makensis`. Same template syntax as `--signtool-cmd`. Requires `--nsis`. |
+| `--msi` | Windows: generate an MSI installer (`.wxs` + `.msi` via WiX Toolset v3) after packaging. Requires `heat.exe` / `candle.exe` / `light.exe` on PATH (or `--auto-fetch-wix`). |
+| `--msi-upgrade-code <uuid>` | Override the MSI UpgradeCode. Default: deterministic UUIDv5 of `<productName>.exe.app.<arch>` in DNS namespace (Tauri-compatible). |
+| `--msi-language <tags>` | Comma-separated MSI language tags (e.g. `en-US,ko-KR`). Default: `en-US`, or `kalsae.json` `windows.wix.language`. |
+| `--msi-banner <path>` | Path to MSI installer top banner BMP (493×58). Overrides `kalsae.json` `windows.wix.bannerPath`. |
+| `--msi-dialog-image <path>` | Path to MSI installer dialog background BMP (493×312). Overrides `kalsae.json` `windows.wix.dialogImagePath`. |
+| `--msi-signtool-cmd "<template>"` | Windows: codesign the MSI installer after `light.exe`. Same template syntax as `--signtool-cmd` (also accepts Tauri-style `%1`). Requires `--msi`. |
+| `--auto-fetch-wix` / `--no-auto-fetch-wix` | Automatically download WiX Toolset v3.14 when `--msi` is on and tools are missing. **Default ON.** |
+| `--use-local-tools-dir` | Cache WiX binaries under `<project>/.kalsae/tools/` instead of `%LOCALAPPDATA%`. Useful for CI/Docker. |
 | `--standalone` | Windows: produce a single-file standalone bundle that embeds `WebView2Loader.dll`, manifest, icon, version metadata, and frontend assets directly into the EXE (PE resources). Output is auto-suffixed: `dist/<name>-<ver>-<arch>-standalone/`. Requires `ResourceHacker` and/or `rcedit` on PATH — without either, the build fails (see `--standalone-allow-fallback`). |
 | `--standalone-allow-fallback` | When `--standalone` is on but no PE editor is on PATH, fall back to the compatibility layout (external `WebView2Loader.dll` + `.manifest`) instead of failing. Off by default — without this flag, missing PE editors hard-error so a "standalone" build is never silently identical to a regular build. |
 | `--no-auto-fetch-web-view2` | Disable automatic fetching of the WebView2 SDK on Windows. |
@@ -176,6 +185,21 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--timings` / `--no-timings` | Print stage-by-stage wall-clock timings after the build. **Default: ON**. The summary distinguishes `WALL` (real elapsed time) from the stage sum when parallel stages overlap. |
 | `--timings-json <path>` | Also write machine-readable timings to JSON (`{ totalMs, stageSumMs, stages: [...] }`). Path is resolved relative to cwd. |
 | `--parallel-build` / `--no-parallel-build` | Run the frontend build in parallel with `swift build`. **Default: ON** when `build.buildCommand` is set; ignored under `--dryrun` or `--skip-frontend`. The first `swift build` runs against the *current* `Resources/`; if `sync-resources` then changes any file, an incremental finalize pass re-bundles them. |
+
+#### WebView2 install modes
+
+`--webview2-install-mode` selects how the packaged Windows app provisions the
+WebView2 runtime on the user's machine. Only `download` / `embedBootstrapper` /
+`skip` are fully implemented today; the other two are accepted but emit a
+warning.
+
+| Mode | Status | Behavior | Payload size |
+|---|---|---|---|
+| `download` | ✅ Stable | App fetches the Evergreen bootstrapper from Microsoft on first run. | ~0 MB extra |
+| `embedBootstrapper` (default) | ✅ Stable | The ~2 MB Evergreen bootstrapper EXE is bundled next to the app. | ~2 MB |
+| `offlineInstaller` | ⚠️ Experimental | **Currently equivalent to `embedBootstrapper`** — emits the same payload and a warning. Standalone offline installer auto-fetch (~150 MB) is a planned RFC. | ~2 MB (today) |
+| `fixedVersion` | ⚠️ Experimental | Bundles a Fixed Version runtime tree from `Vendor/WebView2/runtimes/win-<arch>/`. Auto-fetch is **not** implemented — you must populate the folder manually and pass `--webview2 fixed`. Missing/empty folder produces a warning. | ~150 MB |
+| `skip` | ✅ Stable | No runtime check or payload. The app assumes Edge WebView2 is already installed. | 0 MB |
 
 #### Build pipeline stages
 
@@ -405,6 +429,34 @@ Current checks include:
 2. Frontend dist existence and non-empty state.
 3. WebView2 static loader availability on Windows.
 4. swift-syntax cache shape under `.build/repositories`.
+5. Windows packaging tools (WiX `heat`/`candle`/`light`, `signtool.exe`) — info-level on missing.
+
+#### `--json` output
+
+The `--json` payload is a flat object whose keys mirror `KSDoctorReport`:
+
+| Key | Type | Description |
+|---|---|---|
+| `project` | string | Absolute project root. |
+| `infos` | string[] | Info-level messages. |
+| `warnings` | string[] | Warning messages (drives `--strict` exit code). |
+| `hasWarnings` | bool | `warnings.length > 0`. |
+| `nodeVersion` / `npmVersion` | string? | Detected versions, or `null`. |
+| `osName` / `osVersion` / `architecture` / `swiftVersion` | string? | Host metadata. |
+| `windows` | object? | **Windows hosts only.** Structured tooling status (see below). |
+
+On Windows hosts the `windows` sub-object reports tooling presence as booleans:
+
+```json
+"windows": {
+  "webview2": true,    // Vendor/WebView2/build/native/include/WebView2.h exists
+  "wix":      false,   // heat.exe + candle.exe + light.exe all on PATH
+  "signtool": true     // signtool.exe on PATH (Windows 10/11 SDK)
+}
+```
+
+`webview2: false` is also surfaced as a warning (it blocks `swift build`); the
+other two are info-level since they only matter for `--msi` / signing flows.
 
 When swift-syntax cache looks unhealthy, doctor prints these recovery commands:
 

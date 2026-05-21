@@ -40,7 +40,7 @@ struct BuildCommand: ParsableCommand {
     @Option(
         name: .long,
         help:
-            "Standalone runtime install mode: download | embedBootstrapper | offlineInstaller | fixedVersion | skip."
+            "Standalone runtime install mode: download (fetch bootstrapper at runtime) | embedBootstrapper (bundle ~2 MB Evergreen bootstrapper) | offlineInstaller (experimental — currently equivalent to embedBootstrapper; standalone offline installer fetch is a planned RFC) | fixedVersion (experimental — requires manually populated `Vendor/WebView2/runtimes/win-<arch>/`; auto-fetch unimplemented) | skip (no runtime check)."
     )
     var webview2InstallMode: String? = nil
 
@@ -348,7 +348,6 @@ struct BuildCommand: ParsableCommand {
     var msixSigntoolCmd: String? = nil
 
     // MARK: - Android (RFC-007)
-
 
     @Flag(
         name: .long,

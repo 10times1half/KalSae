@@ -2,7 +2,7 @@
 
 > A Swift-native, cross-platform desktop framework for shipping web UIs as small, secure native apps.
 
-![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.3.4-blue.svg)
+![Swift](https://img.shields.io/badge/swift-6.0-orange.svg) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20iOS%20%7C%20Android-lightgrey.svg) ![Status](https://img.shields.io/badge/status-experimental-yellow.svg) ![Version](https://img.shields.io/badge/version-0.4.1-blue.svg)
 
 Kalsae lets you build desktop (and mobile) applications by combining a **native OS shell written in Swift** with a **web frontend** of your choice (Vite, Next.js, plain HTML — anything that produces static assets). It is in the same family as Tauri and Electron, but the host process is pure Swift 6 and the runtime stays small by reusing the OS web engine: **WebView2** on Windows, **WKWebView** on macOS/iOS, **WebKitGTK 6.0** on Linux, and **Android WebView** on Android.
 
@@ -72,9 +72,9 @@ Kalsae lets you build desktop (and mobile) applications by combining a **native 
 - **Swift 6.0+** (typed throws, macros)
 - **Windows 10 1809+** with Visual Studio Build Tools (MSVC for the C++ shim). `kalsae build` fetches the WebView2 SDK automatically on first use. For `swift build` directly, run [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1) once to populate `Vendor/WebView2/`.
 - **macOS** 14+ (no extra deps)
-- **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
+- **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libsecret-1-dev` (`libsecret-1-dev` is required to build the credential store / `__ks.secret.*` backend)
 - **iOS**: Xcode 15+ (Swift 6 toolchain)
-- **Android**: Android Studio, Android NDK 26+, Gradle 8+
+- **Android**: Android Studio, Android NDK r27+, Gradle 8+
 
 On Windows PowerShell, chain commands with `;` (not `&&`).
 
@@ -108,7 +108,42 @@ swift build
 swift run kalsae-demo
 ```
 
+> **Windows users:** bare `swift build` does not stage `WebView2Loader.dll`,
+> the Swift runtime DLLs (`swift_Concurrency.dll`, `swiftCore.dll`,
+> `Foundation.dll`, …) or the MSVC redistributable next to the produced
+> `.exe`, so `swift run kalsae-demo` will exit immediately with
+> `HRESULT 0x8007007E` or `swift_Concurrency.dll not found`. Run these once
+> after the build:
+>
+> ```powershell
+> .\Scripts\fetch-webview2.ps1                          # one-time, populates Vendor/WebView2/
+> .\Scripts\stage-webview2-loader.ps1 -Configuration debug
+> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+> ```
+>
+> For your **own** projects scaffolded with `kalsae new`, `kalsae build` and
+> `kalsae dev` perform this staging automatically (see below). The bundled
+> demo is built directly with SwiftPM, which is why it needs the manual
+> staging step.
+
 ### Scaffold a new app
+
+After cloning, the `kalsae` CLI is built by `swift build` but is not on your
+`PATH`. Either invoke it through SwiftPM or build a release binary once and
+call it directly:
+
+```bash
+# Option A — invoke via SwiftPM (slower, recompiles when needed)
+swift run kalsae <subcommand>
+
+# Option B — one-time release build, then call the binary directly
+swift build -c release --product kalsae
+# Windows : .\.build\release\kalsae.exe <subcommand>
+# macOS/Linux: ./.build/release/kalsae <subcommand>
+```
+
+The examples below assume one of these is in effect; substitute `kalsae` with
+the form you picked.
 
 ```bash
 # Vanilla (default) — no frontend build tooling
@@ -127,8 +162,18 @@ kalsae build                   # release build + WebView2 bundling (packaging is
 kalsae build --nsis            # Windows: also produce NSIS installer
 ```
 
-On Windows, `kalsae build` automatically runs `Scripts/fetch-webview2.ps1` when
-the WebView2 SDK is missing (`--no-auto-fetch-web-view2` disables this).
+On Windows, `kalsae build` and `kalsae dev` automatically:
+
+- Run `Scripts/fetch-webview2.ps1` when the WebView2 SDK is missing
+  (opt out: `--no-auto-fetch-web-view2`).
+- Stage `WebView2Loader.dll`, the Swift runtime DLLs
+  (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`, …) and the
+  MSVC redistributable next to the produced `.exe` via a pure-Swift PE
+  Import Table walker (opt out: `--no-stage-runtime`).
+
+This is what makes `kalsae new` projects runnable out of the box on Windows.
+The bundled demo in this repo is built with bare `swift build` and therefore
+still needs the manual staging shown earlier under "Try the bundled demo".
 
 ### Add Kalsae as a SwiftPM dependency
 
@@ -152,9 +197,9 @@ When semver tags are published, prefer a version requirement:
 - **Swift 6.0 이상** (typed throws, 매크로)
 - **Windows 10 1809 이상** + Visual Studio Build Tools (C++ shim용 MSVC). `kalsae build` 사용 시 WebView2 SDK를 자동으로 fetch합니다. `swift build`를 직접 사용하는 경우에는 [Scripts/fetch-webview2.ps1](Scripts/fetch-webview2.ps1)을 1회 실행해 `Vendor/WebView2/`를 준비하세요.
 - **macOS** 14 이상 (추가 의존성 없음)
-- **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev`
+- **Linux**: `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libsecret-1-dev` (`libsecret-1-dev` 는 자격증명 저장소 / `__ks.secret.*` 백엔드 빌드에 필요)
 - **iOS**: Xcode 15+ (Swift 6 툴체인)
-- **Android**: Android Studio, Android NDK 26+, Gradle 8+
+- **Android**: Android Studio, Android NDK r27+, Gradle 8+
 
 Windows PowerShell에서는 명령 체이닝 시 `&&` 대신 `;`를 사용하세요.
 
@@ -188,7 +233,42 @@ swift build
 swift run kalsae-demo
 ```
 
+> **Windows 사용자:** 순수 `swift build` 는 `WebView2Loader.dll`, Swift
+> 런타임 DLL (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`
+> 등), MSVC 재배포를 산출물 옆에 복사하지 않습니다. 따라서
+> `swift run kalsae-demo` 는 `HRESULT 0x8007007E` 또는
+> `swift_Concurrency.dll not found` 로 즉시 종료됩니다. 빌드 후
+> 다음 스크립트를 1회 실행하세요:
+>
+> ```powershell
+> .\Scripts\fetch-webview2.ps1                          # 상시 1회、Vendor/WebView2/ 준비
+> .\Scripts\stage-webview2-loader.ps1 -Configuration debug
+> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+> ```
+>
+> `kalsae new` 로 생성한 본인 프로젝트에서는 `kalsae build` /
+> `kalsae dev` 가 이 staging 을 자동으로 수행합니다(아래 참고).
+> 데모는 SwiftPM으로 직접 빌드하기 때문에 수동 staging 이
+> 필요합니다.
+
 ### 새 프로젝트 만들기
+
+저장소를 클론한 직후 `kalsae` CLI는 `swift build`로 빌드되지만 PATH에
+등록되지 않습니다. SwiftPM으로 호출하거나, 릴리스 바이너리를 한 번
+먼 만들어 직접 실행하세요:
+
+```bash
+# A 안 — SwiftPM 경유 호출 (느림, 필요 시 재컴파일)
+swift run kalsae <서브커맨드>
+
+# B 안 — 릴리스 바이너리를 1회 만들고 직접 호출
+swift build -c release --product kalsae
+# Windows : .\.build\release\kalsae.exe <서브커맨드>
+# macOS/Linux: ./.build/release/kalsae <서브커맨드>
+```
+
+아래 예시는 둘 중 하나가 적용되어 있다고 가정합니다. `kalsae`를
+선택한 호출 형태로 치환하세요.
 
 ```bash
 # Vanilla (기본) — 별도 프론트엔드 빌드 도구 없음
@@ -207,6 +287,19 @@ kalsae build                   # 릴리스 빌드 + WebView2 번들링 (패키�
 kalsae build --nsis            # Windows: NSIS 인스톨러까지 생성
 ```
 
+Windows에서는 `kalsae build` / `kalsae dev` 가 다음을 자동으로 수행합니다:
+
+- WebView2 SDK가 없으면 `Scripts/fetch-webview2.ps1` 실행
+  (끄려면 `--no-auto-fetch-web-view2`).
+- `WebView2Loader.dll`, Swift 런타임 DLL (`swift_Concurrency.dll`,
+  `swiftCore.dll`, `Foundation.dll` 등), MSVC 재배포를 상소한
+  `.exe` 옆으로 자동 staging
+  (끄려면 `--no-stage-runtime`).
+
+이 덕분에 `kalsae new` 로 생성한 프로젝트는 Windows에서 별도 설정
+없이 바로 실행됩니다. 이 저장소의 데모는 순수 `swift build`로
+빌드되므로 앞의 "데모 실행" 세션의 수동 staging 이 여전히 필요합니다.
+
 </details>
 
 ---
@@ -220,6 +313,32 @@ kalsae build --nsis            # Windows: NSIS 인스톨러까지 생성
 - [Sample Config](Examples/kalsae.sample.json)
 
 ## Troubleshooting
+
+### Windows: `kalsae-demo.exe` exits immediately / `HRESULT 0x8007007E` / `swift_Concurrency.dll not found`
+
+Symptom: after `swift build ; swift run kalsae-demo` the process exits
+without opening a window. Logs may show
+`CreateCoreWebView2EnvironmentWithOptions failed (HRESULT=0x8007007E)` or a
+DLL-loader error such as `swift_Concurrency.dll not found`.
+
+Cause: bare `swift build` does not stage `WebView2Loader.dll`, the Swift
+runtime DLLs, or the MSVC redistributable next to the produced `.exe`. The
+linker resolves `WebView2LoaderStatic` statically, but the COM activation
+path (`LoadLibraryW`) and the Swift runtime are still loaded dynamically at
+run time.
+
+Fix — stage them once after the build:
+
+```powershell
+.\Scripts\fetch-webview2.ps1                          # one-time, populates Vendor/WebView2/
+.\Scripts\stage-webview2-loader.ps1 -Configuration debug
+.\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+```
+
+For `release` builds substitute `-Configuration release` and the
+`.build\release\` path. For your own `kalsae new` projects this is handled
+automatically by `kalsae build` / `kalsae dev` (opt out via
+`--no-stage-runtime` or `--no-auto-fetch-web-view2`).
 
 ### Windows: WebView2 loader not found during link
 
@@ -409,7 +528,7 @@ struct MyApp {
         ) { registry in
             await _ksRegister_greet(into: registry)
         }
-        try await app.run()
+        _ = app.run()
     }
 }
 ```
@@ -568,11 +687,27 @@ try await app.install([KSProcessPlugin(config: cfg)])
 |---|---|
 | `kalsae new <name>` | Scaffold a new project (Package.swift, App.swift, sample `index.html`) |
 | `kalsae dev [--target NAME] [--config FILE] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval SECONDS]` | Run with `swift run`; optionally start `build.devCommand`, wait for `build.devServerURL`, and auto-restart on source changes |
-| `kalsae build [--debug] [--no-package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86\|x86_64\|universal] [--clean] [--skip-frontend] [--dryrun] [-o NAME] [--nsis] [--nsis-publisher NAME] [--signtool-cmd "..."] [--nsis-signtool-cmd "..."] [--config FILE] [--dist PATH] [--allow-missing-dist] [--no-sync-resources] [--icon PATH] [--output DIR] [--zip] [--no-parallel-build] [--no-timings] [--timings-json PATH]` | Integrated frontend+Swift build with dist validation/sync. Packaging is **ON by default** (Wails-compatible); `--no-package` skips it. Frontend runs in **parallel with `swift build`** by default when `build.buildCommand` is set; `--timings` (default ON) prints stage-by-stage wall-clock + a `WALL` line that accounts for parallel overlap. Windows: optional NSIS installer + signtool hooks. macOS: `.app` bundle. |
+| `kalsae build [options]` | Integrated frontend + Swift build with dist validation/sync. Packaging is **ON by default** (Wails-compatible); `--no-package` skips it. Frontend runs in **parallel with `swift build`** by default when `build.buildCommand` is set; `--timings` (default ON) prints stage-by-stage wall-clock + a `WALL` line that accounts for parallel overlap. See option groups below. |
 | `kalsae doctor [--config FILE] [--strict] [--json]` | Diagnose common local issues (config/dist/WebView2/swift-syntax cache) |
 | `kalsae generate bindings [--out FILE] [--module NAME] [inputs...]` | Emit TypeScript types for `@KSCommand` functions |
 
 Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
+
+#### `kalsae build` option groups
+
+| Group | Options |
+|---|---|
+| General | `--debug`, `-t/--target NAME`, `-j/--jobs N`, `--clean`, `--skip-frontend`, `--no-prune`, `--no-sync-resources`, `--no-parallel-build`, `--no-timings`, `--timings-json PATH`, `--config FILE`, `--dist PATH`, `--allow-missing-dist`, `--icon PATH`, `--output DIR`, `-o NAME`, `--zip`, `--dryrun`, `--capability-check warn\|error\|skip` |
+| Packaging | `--no-package` (packaging is on by default) |
+| WebView2 | `--webview2 evergreen\|fixed\|auto`, `--webview2-install-mode MODE`, `--webview2-sdk-version VERSION`, `--no-auto-fetch-web-view2` |
+| Windows runtime staging | `--no-stage-runtime` (skip auto-staging Swift runtime + WebView2Loader DLLs) |
+| Windows standalone | `--standalone`, `--standalone-allow-fallback` |
+| Architecture / bootstrapper | `--arch x64\|arm64\|x86\|x86_64\|universal`, `--bootstrapper PATH` |
+| Windows NSIS | `--nsis`, `--nsis-publisher NAME`, `--signtool-cmd "..."`, `--nsis-signtool-cmd "..."`, `--no-auto-fetch-resource-hacker` |
+| Windows MSI | `--msi`, `--msi-upgrade-code GUID`, `--msi-language LCID`, `--msi-banner PATH`, `--msi-dialog-image PATH`, `--msi-signtool-cmd "..."`, `--no-auto-fetch-wix`, `--use-local-tools-dir` |
+| Mobile | `--ios --ios-executable PATH`, `--android --android-native-lib PATH` |
+
+See [Docs/CLI.md](Docs/CLI.md) for detailed semantics of each option, and `swift run kalsae build --help` for the canonical option list.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
@@ -581,11 +716,27 @@ Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
 |---|---|
 | `kalsae new <name>` | 새 프로젝트 생성 (Package.swift, App.swift, 샘플 `index.html`) |
 | `kalsae dev [--target 이름] [--config 파일] [--skip-dev-command] [--no-wait-dev-server] [--watch] [--watch-interval 초]` | `swift run` 래핑; `build.devCommand` 자동 실행, `build.devServerURL` 대기, 소스 변경 시 자동 재시작 옵션 제공 |
-| `kalsae build [--debug] [--no-package] [--webview2 evergreen\|fixed\|auto] [--arch x64\|arm64\|x86\|x86_64\|universal] [--clean] [--skip-frontend] [--dryrun] [-o 이름] [--nsis] [--nsis-publisher 이름] [--signtool-cmd "..."] [--nsis-signtool-cmd "..."] [--config 파일] [--dist 경로] [--allow-missing-dist] [--no-sync-resources] [--icon 경로] [--output 디렉터리] [--zip] [--no-parallel-build] [--no-timings] [--timings-json 경로]` | 프론트엔드+Swift 통합 빌드(검증/리소스 동기화 포함). 패키징은 **기본 ON** (Wails 호환), `--no-package`로 끔. `build.buildCommand`가 설정되면 프론트엔드 빌드가 **`swift build`와 병렬**로 실행되며(기본 ON), `--timings`(기본 ON)은 단계별 wall-clock과 병렬 중첩을 반영한 `WALL` 시간을 함께 출력합니다. Windows에서 NSIS 인스톨러/signtool 훅 옵션, macOS에서 `.app` 번들 산출. |
+| `kalsae build [옵션]` | 프론트엔드 + Swift 통합 빌드(검증/리소스 동기화 포함). 패키징은 **기본 ON** (Wails 호환), `--no-package`로 끔. `build.buildCommand`가 설정되면 프론트엔드 빌드가 **`swift build`와 병렬**로 실행되며(기본 ON), `--timings`(기본 ON)은 단계별 wall-clock과 병렬 중첩을 반영한 `WALL` 시간을 함께 출력합니다. 세부 옵션은 아래 그룹 표 참고. |
 | `kalsae doctor [--config 파일] [--strict] [--json]` | 로컬 환경 이슈 진단 (config/dist/WebView2/swift-syntax 캐시) |
 | `kalsae generate bindings [--out 파일] [--module 이름] [입력...]` | `@KSCommand` 함수의 TypeScript 타입 생성 |
 
 소스: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/)
+
+#### `kalsae build` 옵션 그룹
+
+| 그룹 | 옵션 |
+|---|---|
+| 일반 | `--debug`, `-t/--target 이름`, `-j/--jobs N`, `--clean`, `--skip-frontend`, `--no-prune`, `--no-sync-resources`, `--no-parallel-build`, `--no-timings`, `--timings-json 경로`, `--config 파일`, `--dist 경로`, `--allow-missing-dist`, `--icon 경로`, `--output 디렉터리`, `-o 이름`, `--zip`, `--dryrun`, `--capability-check warn\|error\|skip` |
+| 패키징 | `--no-package` (패키징은 기본 ON) |
+| WebView2 | `--webview2 evergreen\|fixed\|auto`, `--webview2-install-mode 모드`, `--webview2-sdk-version 버전`, `--no-auto-fetch-web-view2` |
+| Windows 런타임 staging | `--no-stage-runtime` (Swift 런타임 + WebView2Loader DLL 자동 staging 끄기) |
+| Windows 단독 실행 | `--standalone`, `--standalone-allow-fallback` |
+| 아키텍처 / 부트스트래퍼 | `--arch x64\|arm64\|x86\|x86_64\|universal`, `--bootstrapper 경로` |
+| Windows NSIS | `--nsis`, `--nsis-publisher 이름`, `--signtool-cmd "..."`, `--nsis-signtool-cmd "..."`, `--no-auto-fetch-resource-hacker` |
+| Windows MSI | `--msi`, `--msi-upgrade-code GUID`, `--msi-language LCID`, `--msi-banner 경로`, `--msi-dialog-image 경로`, `--msi-signtool-cmd "..."`, `--no-auto-fetch-wix`, `--use-local-tools-dir` |
+| 모바일 | `--ios --ios-executable 경로`, `--android --android-native-lib 경로` |
+
+각 옵션의 세부 의미는 [Docs/CLI.md](Docs/CLI.md), 정규 옵션 목록은 `swift run kalsae build --help` 참고.
 
 </details>
 

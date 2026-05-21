@@ -200,18 +200,36 @@
                 return
             }
             let payload = encodeArgs(args)
+            // 기본 인스턴스의 UI 스레드가 모달 다이얼로그/장기 작업으로
+            // 점유 중일 수 있다. `SendMessageW`는 무한 대기하므로 두 번째
+            // 인스턴스가 영구히 블록될 위험이 있다. `SendMessageTimeoutW`
+            // (`SMTO_ABORTIFHUNG | SMTO_NORMAL`, 5000ms)로 안전하게 회피한다.
+            // 결과와 무관하게 secondary는 종료 흐름을 따른다.
+            var delivered = false
             payload.withUnsafeBufferPointer { buf in
                 var cds = COPYDATASTRUCT(
                     dwData: 0,
                     cbData: DWORD(buf.count * MemoryLayout<UInt16>.size),
                     lpData: UnsafeMutableRawPointer(mutating: buf.baseAddress))
                 withUnsafeMutablePointer(to: &cds) { ptr in
-                    _ = SendMessageW(
+                    var result: DWORD_PTR = 0
+                    let rc = SendMessageTimeoutW(
                         target, UINT(WM_COPYDATA), 0,
-                        LPARAM(Int(bitPattern: UnsafeRawPointer(ptr))))
+                        LPARAM(Int(bitPattern: UnsafeRawPointer(ptr))),
+                        UINT(SMTO_ABORTIFHUNG | SMTO_NORMAL),
+                        5000,
+                        &result)
+                    delivered = rc != 0
                 }
             }
-            log.info("Forwarded \(args.count) argument(s) to primary instance")
+            if delivered {
+                log.info("Forwarded \(args.count) argument(s) to primary instance")
+            } else {
+                let err = GetLastError()
+                log.warning(
+                    "WM_COPYDATA forward to primary instance timed out or failed (GetLastError=\(err)); secondary will exit anyway"
+                )
+            }
         }
 
         // MARK: - Wire format

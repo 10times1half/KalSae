@@ -344,11 +344,25 @@ public enum KSPackager {
                 installMode == .offlineInstaller
                 ? "embedded-offline-installer"
                 : "embedded-bootstrapper"
+            if installMode == .offlineInstaller {
+                // 현재 .offlineInstaller는 .embedBootstrapper와 동일한 페이로드를
+                // 산출한다 (둘 다 `bootstrapperPath`를 그대로 복사). 별도의
+                // standalone offline installer (~150MB) 자동 페치는 미구현.
+                // RFC backlog 참고.
+                warnings.append(
+                    "WebView2 install mode 'offlineInstaller' currently produces the same payload as 'embedBootstrapper'. Standalone offline installer auto-fetch is not yet implemented (planned RFC)."
+                )
+            }
             try copyBootstrapper(
                 opts: opts,
                 warnings: &warnings)
         case .fixedVersion:
             runtime["installBehavior"] = "fixed-runtime-folder"
+            if opts.vendorRuntimeRoot == nil {
+                warnings.append(
+                    "WebView2 install mode 'fixedVersion' requires a vendor runtime folder; auto-fetch is not yet implemented. Populate `Vendor/WebView2/runtimes/win-<arch>/` manually and pass it via `--webview2 fixed`."
+                )
+            }
             try copyFixedRuntime(
                 opts: opts, runtime: &runtime,
                 warnings: &warnings)

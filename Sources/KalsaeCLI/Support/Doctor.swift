@@ -40,6 +40,8 @@ public struct KSDoctorReport: Sendable {
     public var architecture: String?
     /// `swift --version` 의 첫 줄. 캡처 실패 시 `nil`.
     public var swiftVersion: String?
+    /// Windows 호스트 전용 진단 결과. 비-Windows 에서는 `nil`.
+    public var windows: KSDoctorWindowsStatus?
 
     public init(
         infos: [String] = [],
@@ -49,7 +51,8 @@ public struct KSDoctorReport: Sendable {
         osName: String? = nil,
         osVersion: String? = nil,
         architecture: String? = nil,
-        swiftVersion: String? = nil
+        swiftVersion: String? = nil,
+        windows: KSDoctorWindowsStatus? = nil
     ) {
         self.infos = infos
         self.warnings = warnings
@@ -59,9 +62,29 @@ public struct KSDoctorReport: Sendable {
         self.osVersion = osVersion
         self.architecture = architecture
         self.swiftVersion = swiftVersion
+        self.windows = windows
     }
 
     public var hasWarnings: Bool { !warnings.isEmpty }
+}
+
+/// Windows 호스트에서 패키지/배포에 필요한 도구·SDK 가용 여부.
+/// `--json` 출력의 `windows.*` 키와 1:1 대응한다.
+public struct KSDoctorWindowsStatus: Sendable, Codable {
+    /// `Vendor/WebView2/build/native/include/WebView2.h` 존재 여부.
+    /// `false`이면 `Scripts/fetch-webview2.ps1` 미실행 상태.
+    public var webview2: Bool
+    /// WiX Toolset(heat/candle/light) 모두 PATH 또는 알려진 위치에서 발견되는지.
+    /// `--msi` 빌드 시 필요.
+    public var wix: Bool
+    /// `signtool.exe` 가용 여부. `--msi` / `--store win-store` / 코드 서명 시 필요.
+    public var signtool: Bool
+
+    public init(webview2: Bool, wix: Bool, signtool: Bool) {
+        self.webview2 = webview2
+        self.wix = wix
+        self.signtool = signtool
+    }
 }
 public enum KSDoctor {
     public static func run(_ options: KSDoctorOptions) -> KSDoctorReport {
@@ -89,6 +112,9 @@ public enum KSDoctor {
             projectRoot: options.projectRoot,
             report: &report,
             fm: fm)
+        if !options.skipExternalChecks {
+            checkWindowsPackaging(report: &report, fm: fm)
+        }
         checkPackagedManifests(
             projectRoot: options.projectRoot,
             report: &report,
@@ -301,16 +327,72 @@ public enum KSDoctor {
                 .appendingPathComponent("native")
                 .appendingPathComponent("include")
                 .appendingPathComponent("WebView2.h")
-            if fm.fileExists(atPath: headerFile.path) {
+            let found = fm.fileExists(atPath: headerFile.path)
+            if found {
                 report.infos.append("WebView2 SDK headers found: \(headerFile.path)")
             } else {
                 report.warnings.append("WebView2 SDK headers missing: \(headerFile.path)")
                 report.warnings.append(
                     "Run .\\Scripts\\fetch-webview2.ps1 from project root, or pass -ProjectRoot to script.")
             }
+            mutateWindowsStatus(report: &report) { $0.webview2 = found }
         #else
             report.infos.append("WebView2 check skipped on non-Windows platform.")
         #endif
+    }
+
+    /// Windows 호스트에서 `--msi` / `--store win-store` 등 패키지 빌드에 필요한
+    /// 외부 도구 존재 여부를 확인하고 `report.windows.{wix,signtool}` 에 기록한다.
+    /// 누락은 info 수준 — `--store` 가 명시될 때만 `checkStoreTooling` 이
+    /// 따로 warning 으로 승격한다.
+    private static func checkWindowsPackaging(
+        report: inout KSDoctorReport,
+        fm _: FileManager
+    ) {
+        #if os(Windows)
+            // Pass bare names — `findExecutable` already appends `.exe`/`.cmd`/...
+            // suffixes on Windows; passing "heat.exe" would search for
+            // "heat.exe.exe" and always miss.
+            let wixTools = ["heat", "candle", "light"]
+            var wixOK = true
+            for tool in wixTools {
+                if findExecutable(named: tool) == nil {
+                    wixOK = false
+                    break
+                }
+            }
+            if wixOK {
+                report.infos.append("WiX Toolset (heat/candle/light) detected on PATH.")
+            } else {
+                report.infos.append(
+                    "WiX Toolset (heat/candle/light) not on PATH — required for `kalsae build --msi`.")
+            }
+
+            let signtool = findExecutable(named: "signtool") != nil
+            if signtool {
+                report.infos.append("signtool detected on PATH.")
+            } else {
+                report.infos.append(
+                    "signtool not on PATH — required for code signing and `--msi`/`--store win-store`. Ships with Windows 10/11 SDK."
+                )
+            }
+
+            mutateWindowsStatus(report: &report) {
+                $0.wix = wixOK
+                $0.signtool = signtool
+            }
+        #endif
+    }
+
+    /// `report.windows` 가 nil 이면 기본값으로 초기화한 뒤 mutator 를 적용한다.
+    private static func mutateWindowsStatus(
+        report: inout KSDoctorReport,
+        _ mutate: (inout KSDoctorWindowsStatus) -> Void
+    ) {
+        var status =
+            report.windows ?? KSDoctorWindowsStatus(webview2: false, wix: false, signtool: false)
+        mutate(&status)
+        report.windows = status
     }
 
     /// `<projectRoot>/dist/*/` 아래의 패키지 EXE manifest 를 스캔해
@@ -458,10 +540,10 @@ public enum KSDoctor {
                     + "the embedded.provisionprofile downloaded from developer.apple.com.")
         case .microsoftStore:
             requireTool(
-                "MakeAppx.exe", target: target, report: &report,
+                "MakeAppx", target: target, report: &report,
                 hint: "MakeAppx.exe ships with the Windows 10/11 SDK.")
             requireTool(
-                "signtool.exe", target: target, report: &report,
+                "signtool", target: target, report: &report,
                 hint: "signtool.exe ships with the Windows 10/11 SDK.")
             report.infos.append(
                 "Microsoft Store: set --publisher to match the Publisher CN "

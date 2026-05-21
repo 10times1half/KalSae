@@ -199,4 +199,69 @@ struct DoctorTests {
         #expect(!report.warnings.contains { $0.contains("processorArchitecture") })
         #expect(!report.infos.contains { $0.contains("processorArchitecture") })
     }
+
+    // MARK: - Windows 호스트 진단 (windows.webview2 / wix / signtool)
+
+    @Test("windows status populated on Windows host with WebView2 SDK present")
+    func windowsStatusWithWebView2() throws {
+        #if os(Windows)
+            let root = try makeTempProject()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let webView2Include =
+                root
+                .appendingPathComponent("Vendor")
+                .appendingPathComponent("WebView2")
+                .appendingPathComponent("build")
+                .appendingPathComponent("native")
+                .appendingPathComponent("include")
+            try FileManager.default.createDirectory(
+                at: webView2Include, withIntermediateDirectories: true)
+            try write("stub", to: webView2Include.appendingPathComponent("WebView2.h"))
+
+            // skipExternalChecks=true 라도 checkWebView2 는 파일 존재 검사라 실행된다.
+            // wix/signtool 은 PATH 조회를 동반하므로 skipExternalChecks=false 로 호출.
+            let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: false))
+
+            let status = try #require(
+                report.windows,
+                "report.windows should be populated on Windows hosts.")
+            #expect(status.webview2 == true)
+            // wix/signtool 은 호스트 환경에 따라 다르므로 Bool 값 자체는 검증하지 않고,
+            // 필드가 채워졌다는 사실 (Codable 직렬화 가능성) 만 확인한다.
+            let encoded = try JSONEncoder().encode(status)
+            #expect(!encoded.isEmpty)
+        #endif
+    }
+
+    @Test("windows status is nil on non-Windows hosts")
+    func windowsStatusNilOffWindows() throws {
+        #if !os(Windows)
+            let root = try makeTempProject()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))
+            #expect(report.windows == nil)
+        #endif
+    }
+
+    @Test("--store win-store passes bare tool names to findExecutable (no doubled .exe.exe)")
+    func storeWinStoreUsesBareNames() throws {
+        let root = try makeTempProject()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let report = KSDoctor.run(
+            .init(
+                projectRoot: root,
+                skipExternalChecks: false,
+                distributionTarget: .microsoftStore))
+        // 회귀 방지: 과거에는 `requireTool("MakeAppx.exe", ...)`이 PATH 에서
+        // "MakeAppx.exe.exe" 를 찾으며 항상 실패해 spurious warning 을 냈다.
+        // 어떤 메시지든 doubled-extension 패턴이 등장해선 안 된다.
+        for msg in report.warnings + report.infos {
+            #expect(
+                !msg.contains(".exe.exe") && !msg.contains(".exe.cmd"),
+                "doubled-extension leaked into doctor message: \(msg)")
+        }
+    }
 }

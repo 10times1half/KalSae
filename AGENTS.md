@@ -209,6 +209,13 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   ...)`로는 HWND_MESSAGE 자식이 검색되지 않는다 — parent로 반드시
   `HWND_MESSAGE`(-3)를 전달해야 한다. 자세한 함정과 수정 예시는
   `/memories/repo/windows-single-instance-pumping.md` 참고.
+- **두 번째 인스턴스의 WM_COPYDATA 전달은 반드시 타임아웃 사용**:
+  `SendMessageW`는 무한 대기하므로 기본 인스턴스 UI 스레드가 모달
+  다이얼로그/장기 작업으로 점유 중이면 두 번째 인스턴스가 영구 블록된다.
+  `SendMessageTimeoutW(..., SMTO_ABORTIFHUNG | SMTO_NORMAL, 5000, &result)`
+  로 호출하고 0 반환 시 warning 로그만 남기고 종료할 것
+  ([KSWindowsSingleInstance.swift](Sources/KalsaePlatformWindows/PAL/KSWindowsSingleInstance.swift)
+  `relayArguments` 참고).
 - **다이얼로그 부모 자동 보정**: `KS.dialog.openFile/saveFile/selectFolder`는
   `parent` 인자가 nil이거나 registry에 없는 핸들이면 `GetActiveWindow()` →
   `GetForegroundWindow()` 폴백 후 `SetForegroundWindow(hwnd)`로 z-order를

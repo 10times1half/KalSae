@@ -60,7 +60,8 @@ struct DoctorCommand: ParsableCommand {
                 osName: report.osName,
                 osVersion: report.osVersion,
                 architecture: report.architecture,
-                swiftVersion: report.swiftVersion)
+                swiftVersion: report.swiftVersion,
+                windows: report.windows)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let data = try encoder.encode(payload)
@@ -131,5 +132,7 @@ struct DoctorCommand: ParsableCommand {
         let architecture: String?
         /// Swift 버전 문자열 (예: "6.0.3").
         let swiftVersion: String?
+        /// Windows 호스트 진단(WebView2 SDK / WiX / signtool). 비-Windows 에서는 nil.
+        let windows: KSDoctorWindowsStatus?
     }
 }
