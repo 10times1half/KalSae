@@ -1,6 +1,7 @@
 #if os(Windows)
     import Testing
     import Foundation
+    import WinSDK
     @testable import KalsaePlatformWindows
     import KalsaeCore
 
@@ -15,11 +16,25 @@
 
         private static let envVar = "KALSAE_MSIX_CONTEXT"
 
+        /// Win32 환경 블록을 직접 갱신한다. `ProcessInfo.environment` 는 Windows
+        /// 에서 `GetEnvironmentStringsW` 를 읽으므로 이 API 와 동기화된다.
+        /// `value == nil` 이면 변수를 완전히 삭제하고, 빈 문자열이면 빈 값으로
+        /// 남긴다 (`envEmptyStringIgnored` 케이스가 이 구분에 의존).
+        ///
+        /// 과거에는 `putenv("KEY=v")` 를 사용했으나 ucrt 가 POSIX 이름인
+        /// `putenv` 를 deprecated 로 마킹하여 Swift 6.3.1 Windows 빌드에서
+        /// `#DeprecatedDeclaration` 진단이 error 로 격상돼 CI 가 깨졌다.
+        /// `SetEnvironmentVariableW` 는 deprecation 이 없고 unset 의미도
+        /// 명확하다 (`lpValue=nil` → 완전 삭제).
         private func setMSIXEnv(_ value: String?) {
-            if let v = value {
-                _ = putenv("\(Self.envVar)=\(v)")
-            } else {
-                _ = putenv("\(Self.envVar)=")
+            Self.envVar.withCString(encodedAs: UTF16.self) { name in
+                if let v = value {
+                    v.withCString(encodedAs: UTF16.self) { val in
+                        _ = SetEnvironmentVariableW(name, val)
+                    }
+                } else {
+                    _ = SetEnvironmentVariableW(name, nil)
+                }
             }
         }
 
