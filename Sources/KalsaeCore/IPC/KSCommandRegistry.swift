@@ -10,7 +10,10 @@ public actor KSCommandRegistry {
     public typealias Handler = @Sendable (Data) async -> Result<Data, KSError>
 
     private var handlers: [String: Handler] = [:]
-    private var allowlist: Set<String>? = nil
+    /// 허용 패턴 목록. 각 항목은 `KSPermission.matches` 문법을 따른다:
+    /// 정확 일치(`"foo"`), 접두 글롭(`"fs.*"`, `"prefix*"`), 전체(`"*"`).
+    /// `nil` 이면 모든 등록된 명령이 호출 가능, `[]` 이면 default-deny.
+    private var allowlist: [String]? = nil
     private var policyEvaluator: KSPolicyEvaluator? = nil
     private var metadata: [String: KSCommandMetadata] = [:]
     /// 내장 (`__ks.*`) 명령처럼 `commandAllowlist` 검사를 우회해야 하는 핸들러
@@ -55,10 +58,15 @@ public actor KSCommandRegistry {
     }
 
     /// 명령 허용 목록을 설정한다. `nil`이면 모든 등록된 명령을 호출할 수 있다.
-    /// 설정되면 이 집합의 이름만 호출 가능하다 — 다른 호출은
+    /// 설정되면 이 패턴 집합과 일치하는 이름만 호출 가능하다 — 다른 호출은
     /// `KSError.commandNotAllowed`를 반환한다.
+    ///
+    /// 패턴 문법은 `KSPermission.matches` 와 동일하다:
+    /// - 정확 일치: `"system.info"`
+    /// - 접두 글롭: `"system.*"`, `"prefix*"` — 와일드카드는 끝에 한 번만.
+    /// - 전체: `"*"`.
     public func setAllowlist(_ names: [String]?) {
-        allowlist = names.map(Set.init)
+        allowlist = names
     }
 
     /// Tauri 스타일 capability/permission 정책 평가기를 설정한다.
@@ -128,7 +136,11 @@ public actor KSCommandRegistry {
         }
         // 내장 명령(`registerInternal` 로 등록)은 사용자 정의 allowlist 검사를 우회한다.
         // 보안 scope / policy evaluator 는 아래에서 그대로 평가된다.
-        if !internalNames.contains(name), let allowlist, !allowlist.contains(name) {
+        // 패턴 매칭은 `KSPermission.matches` 를 재사용 — capabilities 시스템과
+        // 동일한 글롭 문법(`"system.*"`, `"prefix*"`, `"*"`)을 지원한다.
+        if !internalNames.contains(name), let allowlist,
+            !allowlist.contains(where: { KSPermission.matches(name, pattern: $0) })
+        {
             return .failure(.commandNotAllowed(name))
         }
         if let evaluator = policyEvaluator {

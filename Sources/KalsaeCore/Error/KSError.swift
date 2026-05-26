@@ -191,7 +191,11 @@ extension KSError {
     public static func commandNotAllowed(_ name: String) -> KSError {
         KSError(
             code: .commandNotAllowed,
-            message: "Command '\(name)' is not in the allowlist.",
+            message:
+                "Command '\(name)' was denied by commandAllowlist. "
+                + "Add '\(name)' (or a matching glob like 'domain.*') to "
+                + "security.commandAllowlist in kalsae.json, or define a "
+                + "capability granting it.",
             data: .string(name))
     }
 

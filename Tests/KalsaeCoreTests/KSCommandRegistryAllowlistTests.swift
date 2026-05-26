@@ -99,3 +99,100 @@ struct KSCommandRegistryAllowlistTests {
         #expect(e.code == .commandNotAllowed)
     }
 }
+
+// MARK: - 0.4.3 glob pattern support (axis feedback Proposal #1)
+//
+// `commandAllowlist` 는 `KSPermission.matches` 와 동일한 글롭 문법을 지원한다:
+//   - `"system.*"` -> "system.info" 매칭, "other" 불일치
+//   - `"*"` -> 모두 매칭
+//   - 리터럴 이름은 backward-compat (정확 일치만)
+
+@Suite("KSCommandRegistry — allowlist glob")
+struct KSCommandRegistryAllowlistGlobTests {
+
+    private func makeRegistry() async -> KSCommandRegistry {
+        let registry = KSCommandRegistry()
+        await registry.register("system.info") { _ in .success(Data("info".utf8)) }
+        await registry.register("system.shutdown") { _ in .success(Data("shutdown".utf8)) }
+        await registry.register("llama.run") { _ in .success(Data("run".utf8)) }
+        await registry.register("plain") { _ in .success(Data("plain".utf8)) }
+        return registry
+    }
+
+    @Test("prefix glob 'system.*' matches all system commands")
+    func prefixGlobMatches() async throws {
+        let registry = await makeRegistry()
+        await registry.setAllowlist(["system.*"])
+
+        switch await registry.dispatch(name: "system.info", args: Data()) {
+        case .success: break
+        case .failure(let e):
+            Issue.record("expected system.info to pass, got \(e)")
+        }
+        switch await registry.dispatch(name: "system.shutdown", args: Data()) {
+        case .success: break
+        case .failure(let e):
+            Issue.record("expected system.shutdown to pass, got \(e)")
+        }
+    }
+
+    @Test("prefix glob does not match other domains")
+    func prefixGlobIsolation() async throws {
+        let registry = await makeRegistry()
+        await registry.setAllowlist(["system.*"])
+        guard case .failure(let e) = await registry.dispatch(name: "llama.run", args: Data())
+        else {
+            Issue.record("expected llama.run to be denied by 'system.*'")
+            return
+        }
+        #expect(e.code == .commandNotAllowed)
+    }
+
+    @Test("wildcard '*' matches everything")
+    func wildcardMatchesAll() async throws {
+        let registry = await makeRegistry()
+        await registry.setAllowlist(["*"])
+        for name in ["system.info", "llama.run", "plain"] {
+            switch await registry.dispatch(name: name, args: Data()) {
+            case .success: break
+            case .failure(let e):
+                Issue.record("expected '\(name)' to pass under '*', got \(e)")
+            }
+        }
+    }
+
+    @Test("literal names still match exactly (backward-compat)")
+    func literalBackwardCompat() async throws {
+        let registry = await makeRegistry()
+        await registry.setAllowlist(["plain", "system.info"])
+        switch await registry.dispatch(name: "plain", args: Data()) {
+        case .success: break
+        case .failure(let e):
+            Issue.record("expected literal 'plain' to pass, got \(e)")
+        }
+        guard case .failure(let e) = await registry.dispatch(
+            name: "system.shutdown", args: Data())
+        else {
+            Issue.record("expected non-listed literal to be denied")
+            return
+        }
+        #expect(e.code == .commandNotAllowed)
+    }
+
+    @Test("mixed literal + glob")
+    func mixedPatterns() async throws {
+        let registry = await makeRegistry()
+        await registry.setAllowlist(["plain", "system.*"])
+        for name in ["plain", "system.info", "system.shutdown"] {
+            switch await registry.dispatch(name: name, args: Data()) {
+            case .success: break
+            case .failure(let e):
+                Issue.record("expected '\(name)' to pass, got \(e)")
+            }
+        }
+        guard case .failure = await registry.dispatch(name: "llama.run", args: Data()) else {
+            Issue.record("expected llama.run to be denied")
+            return
+        }
+    }
+}

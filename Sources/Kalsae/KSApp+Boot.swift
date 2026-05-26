@@ -155,10 +155,41 @@ extension KSApp {
     /// 앱 코드에서도 테스트나 제어된 정리 중에 명시적으로 호출할 수 있다.
     ///
     /// 작업 순서:
+    /// 0. `onShutdown(_:)` 으로 등록된 사용자 hook 호출 (등록 역순, 각 5초 타임아웃).
     /// 1. 트레이 아이콘 제거 (고립된 쉘 알림 아이콘 방지).
-    /// 2. 모든 내장 명령의 레지스트리 등록 해제.
-    /// 3. 라이프사이클 로그 항목.
+    /// 2. dev 라이브 리로드 watcher 작업 취소.
+    /// 3. 플러그인 `teardown` 호출 (등록 역순).
+    /// 4. 모든 내장 명령의 레지스트리 등록 해제.
+    /// 5. 라이프사이클 로그 항목.
+    ///
+    /// 무거운 리소스(모델 mmap, SQLite WAL, 백그라운드 Task)를 가진 앱은
+    /// `onShutdown(_:)` 으로 cleanup hook 을 등록하거나, 더 구조화된 정리가
+    /// 필요하면 `KSPlugin` 을 구현해 `teardown(_:)` 을 사용하면 된다.
     public func shutdown() async {
+        // 0. 사용자 등록 shutdown hooks — 트레이/플러그인 teardown 보다 먼저
+        //    호출해 앱 정리가 PAL 정리에 의존할 수 있도록 한다.
+        let handlers = _shutdownHandlers.reversed()
+        _shutdownHandlers.removeAll()
+        let log = KSLog.logger("kalsae.app")
+        for (idx, handler) in handlers.enumerated() {
+            await withTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    await handler()
+                    return true
+                }
+                group.addTask {
+                    try? await Task.sleep(for: .seconds(5))
+                    return false
+                }
+                if let completed = await group.next() {
+                    group.cancelAll()
+                    if !completed {
+                        log.warning(
+                            "onShutdown handler #\(idx) timed out after 5s; skipping")
+                    }
+                }
+            }
+        }
         // 1. 고립된 쉘 상태 항목을 피하기 위해 트레이 아이콘 제거.
         if let tray = platform.tray {
             await tray.remove()
@@ -180,5 +211,19 @@ extension KSApp {
         }
         // 4. 로깅.
         KSLog.logger("kalsae.app").info("KSApp shutdown complete")
+    }
+
+    /// 프로세스 종료 직전에 호출될 cleanup 클로저를 등록한다.
+    ///
+    /// 호출 시점: 마지막 윈도우 close → `shutdown()` 진입 → **트레이/플러그인
+    /// teardown 보다 먼저**. 등록된 핸들러는 등록 역순(가장 늦게 추가된 것이
+    /// 가장 먼저)으로 호출된다. 각 핸들러는 5초 타임아웃으로 보호되며 한
+    /// 핸들러가 행이어도 다른 핸들러나 종료 흐름을 차단하지 않는다.
+    ///
+    /// 무거운 리소스(LLM 모델 mmap, SQLite WAL, 백그라운드 Task) 정리에 적합.
+    /// 더 구조화된 라이프사이클이 필요하면 `KSPlugin` 을 구현해 `teardown(_:)`
+    /// 을 사용한다.
+    public func onShutdown(_ handler: @escaping @Sendable () async -> Void) {
+        _shutdownHandlers.append(handler)
     }
 }

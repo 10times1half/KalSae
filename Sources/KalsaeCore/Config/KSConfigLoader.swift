@@ -96,6 +96,38 @@ public enum KSConfigLoader {
             }
         }
         try validateUserScripts(config.security.userScripts)
+        validateCommandAllowlistPatterns(config.security.commandAllowlist)
+    }
+
+    /// `security.commandAllowlist` 의 각 패턴이 `KSPermission.matches` 문법에
+    /// 부합하는지 검사한다. 잘못된 패턴은 부팅을 막지 않고(backward-compat)
+    /// 경고 로그만 남긴다 — dispatch 시점에 `commandNotAllowed` 가 발생하기
+    /// 전에 운영자가 인지할 수 있도록 한다.
+    ///
+    /// 지원 문법: `*`, `prefix.*`, `prefix*`, 정확 일치.
+    /// 경고 대상: 빈 문자열, `*` 가 끝이 아닌 위치, `*` 두 번 이상.
+    private static func validateCommandAllowlistPatterns(_ patterns: [String]?) {
+        guard let patterns, !patterns.isEmpty else { return }
+        let log = KSLog.logger("kalsae.config")
+        for pattern in patterns {
+            if pattern.isEmpty {
+                log.warning(
+                    "security.commandAllowlist contains empty pattern; it will never match")
+                continue
+            }
+            let starCount = pattern.reduce(0) { $1 == "*" ? $0 + 1 : $0 }
+            if starCount > 1 {
+                log.warning(
+                    "security.commandAllowlist pattern '\(pattern)' contains multiple '*'; only a trailing '*' is supported (e.g. 'fs.*')"
+                )
+                continue
+            }
+            if starCount == 1, pattern != "*", !pattern.hasSuffix("*") {
+                log.warning(
+                    "security.commandAllowlist pattern '\(pattern)' has '*' in the middle; only a trailing '*' is supported (e.g. 'fs.*')"
+                )
+            }
+        }
     }
 
     /// `security.userScripts`의 의미론적 검증.

@@ -25,9 +25,21 @@ The `security.commandAllowlist` field in `Kalsae.json` restricts which user `@KS
 
 - `nil` (omitted) or `[]` (empty): **deny-all for user commands.** The app may still call `__ks.*` built-ins per their scopes. This is the default since 0.4.0.
 - `["cmd1", "cmd2"]`: Only `cmd1` and `cmd2` are dispatchable.
+- **Glob patterns supported** (since 0.4.3): each entry follows the same `KSPermission.matches` syntax as capabilities — exact name (`"system.info"`), prefix glob (`"system.*"`, `"prefix*"`), or wildcard (`"*"`). The trailing-`*` form is the only supported wildcard position; mid-pattern `*` or multiple `*` are flagged by the config validator with a warning.
 - `commandAllowlistAll: true` (separate field): legacy escape hatch — allow every registered user command. **Not recommended for production**; prefer enumerating commands explicitly.
 
 The allowlist is applied **before** user command registration in the boot sequence, ensuring no race condition where a command could be invoked before the allowlist is set.
+
+#### Allowlist vs Capabilities — which to use?
+
+| Situation | Recommended |
+|---|---|
+| Fewer than ~5 commands, single window | `commandAllowlist` with literal names |
+| Several domains (`system.*`, `fs.*`), single trust level | `commandAllowlist: ["system.*", "fs.*"]` |
+| Per-window or per-origin differentiation needed | `capabilities` (required) |
+| Programmatic test setup with selective commands | `boot(config:)` + `capabilities` |
+
+`commandAllowlist` and `capabilities` are **both applied** when both are set: the allowlist is evaluated first, then the capability policy evaluator. A command must pass both gates.
 
 ### 3. Filesystem Access (`security.fs`)
 

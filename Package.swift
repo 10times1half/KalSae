@@ -355,6 +355,16 @@ let package = Package(
             swiftSettings: commonSwiftSettings
         ),
 
+        // Public facade 테스트: KSApp 헬퍼 (autoResolveResourceRoot 등) 검증.
+        // 실제 boot() / shutdown() 은 플랫폼 PAL 을 띄우므로 유닛 테스트
+        // 대상이 아니며, 내부 헬퍼만 `@testable import` 로 확인한다.
+        .testTarget(
+            name: "KalsaeTests",
+            dependencies: ["Kalsae"],
+            path: "Tests/KalsaeTests",
+            swiftSettings: commonSwiftSettings
+        ),
+
         // 매크로 테스트: @KSCommand 확장 결과 + 진단 메시지 검증
         // SwiftSyntaxMacrosGenericTestSupport를 사용해 AST 출력 확인
         .testTarget(

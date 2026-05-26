@@ -70,6 +70,12 @@ public final class KSApp {
     /// `install(_:)`로 등록된 플러그인 목록. `shutdown()` 시 역순 teardown에 사용된다.
     var _pluginsStorage: [any KSPlugin] = []
 
+    /// `onShutdown(_:)` 으로 등록된 클로저 hook 목록. `shutdown()` 진입 시
+    /// 트레이 제거 / 플러그인 teardown **전에** 등록 역순으로 호출된다.
+    /// 각 핸들러는 5초 타임아웃으로 보호되어 한 핸들러의 무한 행이 다른
+    /// 핸들러나 종료 자체를 차단하지 않는다. axis feedback Proposal #5.
+    var _shutdownHandlers: [@Sendable () async -> Void] = []
+
     /// 런타임 또는 `Kalsae.json`을 통해 등록된 사용자 스크립트 ID. 중복 등록을
     /// 방지하기 위해 `addUserScript` 시 즉시 검사한다. `KSApp+UserScripts.swift` 참조.
     var _registeredUserScriptIDs: Set<String> = []
@@ -219,6 +225,27 @@ public final class KSApp {
         return (exeCandidate, nil)
     }
 
+    /// `boot(config:)` 가 `resourceRoot` 인자를 받지 못했을 때 사용하는 자동
+    /// 탐색 헬퍼. `boot(configURL:)` 가 `configURL.parent + frontendDist` 로
+    /// 합성하는 것과 짝이 되며, 실행 파일과 같은 디렉터리에서 `frontendDist`
+    /// 를 찾는다. 디렉터리가 실제로 존재할 때만 URL 을 반환한다 — 존재하지
+    /// 않으면 `nil` 을 반환해 호출자가 `.fallback` 으로 떨어지도록 한다.
+    ///
+    /// axis feedback Proposal #2 의 옵션 A 구현.
+    static func autoResolveResourceRoot(frontendDist: String) -> URL? {
+        guard !frontendDist.isEmpty else { return nil }
+        let exeDir = URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+            .deletingLastPathComponent()
+        let candidate = exeDir.appendingPathComponent(frontendDist)
+        var isDir: ObjCBool = false
+        let exists = FileManager.default.fileExists(
+            atPath: candidate.path, isDirectory: &isDir)
+        guard exists, isDir.boolValue else { return nil }
+        KSLog.logger("kalsae.app").debug(
+            "boot(config:) auto-resolved resourceRoot: \(candidate.path)")
+        return candidate
+    }
+
     /// - 부팅 인자로 전달된 `configURL`과 같은 디렉터리에
     ///   `kalsae.json`이 존재하면 그 파일을 우선 사용한다.
     /// - 패키징 모드에서 임베디드/생성된 설정보다 사용자가 배치한 외부 설정이
@@ -249,6 +276,16 @@ public final class KSApp {
 
     /// 메모리 내 `KSConfig`에서 애플리케이션을 부팅한다. 테스트와
     /// 설정을 프로그래밍 방식으로 조합하는 앱에 유용하다.
+    ///
+    /// `resourceRoot` 동작:
+    /// - 명시적으로 전달하면 그 위치에서 자산을 제공한다.
+    /// - `nil` 이면 `boot(configURL:)` 와 동일하게 실행 파일과 같은 디렉터리에서
+    ///   `<config.build.frontendDist>/` 디렉터리를 자동 탐색한다. 자산이 다른
+    ///   위치에 있는 앱은 반드시 명시적으로 전달해야 한다 — 탐색 실패 시
+    ///   가상 호스트가 비활성화되어 진단(`.fallback`) 페이지가 표시된다.
+    ///
+    /// 동일한 우선순위 해석이 필요한 자체 부팅 코드는 `resolveBundledConfigURL`
+    /// 을 직접 호출할 수 있다.
     public static func boot(
         config: KSConfig,
         windowLabel: String? = nil,
@@ -347,11 +384,22 @@ public final class KSApp {
         #endif
 
         // 5. 프론트엔드 제공 방식 결정.
+        //
+        // `resourceRoot` 가 명시되지 않으면 `boot(configURL:)` 와 동일한 자동
+        // 탐색을 수행한다 — 실행 파일과 같은 디렉터리에서 `<frontendDist>/`
+        // 를 찾는다. 자산이 다른 위치에 있는 앱은 반드시 `resourceRoot` 를
+        // 명시적으로 전달해야 한다. 탐색 실패 시 `nil` 을 유지하여
+        // `decideServingMode` 가 `.fallback` 진단 페이지로 떨어지도록 한다.
+        //
+        // axis feedback Proposal #2 — `boot(configURL:)` 과의 비대칭(이전
+        // 동작: nil 전달 시 무조건 `.fallback`) 해소.
+        let resolvedResourceRoot: URL? = resourceRoot ?? autoResolveResourceRoot(
+            frontendDist: config.build.frontendDist)
         let servingMode = decideServingMode(
             urlOverride: urlOverride,
             windowURL: window.url,
             devServerURL: config.build.devServerURL,
-            resourceRoot: resourceRoot)
+            resourceRoot: resolvedResourceRoot)
 
         if case .virtualHost(let servedRoot) = servingMode {
             #if os(Windows)
