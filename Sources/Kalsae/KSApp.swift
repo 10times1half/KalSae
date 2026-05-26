@@ -393,8 +393,10 @@ public final class KSApp {
         //
         // axis feedback Proposal #2 — `boot(configURL:)` 과의 비대칭(이전
         // 동작: nil 전달 시 무조건 `.fallback`) 해소.
-        let resolvedResourceRoot: URL? = resourceRoot ?? autoResolveResourceRoot(
-            frontendDist: config.build.frontendDist)
+        let resolvedResourceRoot: URL? =
+            resourceRoot
+            ?? autoResolveResourceRoot(
+                frontendDist: config.build.frontendDist)
         let servingMode = decideServingMode(
             urlOverride: urlOverride,
             windowURL: window.url,

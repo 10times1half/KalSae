@@ -170,8 +170,9 @@ struct KSCommandRegistryAllowlistGlobTests {
         case .failure(let e):
             Issue.record("expected literal 'plain' to pass, got \(e)")
         }
-        guard case .failure(let e) = await registry.dispatch(
-            name: "system.shutdown", args: Data())
+        guard
+            case .failure(let e) = await registry.dispatch(
+                name: "system.shutdown", args: Data())
         else {
             Issue.record("expected non-listed literal to be denied")
             return
