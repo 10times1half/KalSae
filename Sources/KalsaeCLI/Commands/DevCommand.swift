@@ -108,6 +108,19 @@ struct DevCommand: ParsableCommand {
             throw ValidationError(e.description)
         }
 
+        // SwiftPM upstream 이슈: 프로젝트 cwd 에 `.git` 이 없으면
+        // `swift build` 가 의존성마다 `'<pkg>': skipping cache due to an error:
+        // … fatal: not a git repository` 경고를 띄운다. 캐시 업데이트만
+        // 스킵될 뿐 빌드는 정상 진행되므로 무해하지만, 처음 보는 사용자에게는
+        // 혼란을 줄 수 있어 한 줄 안내만 남긴다. `git init` 하면 사라진다.
+        let gitDir = cwd.appendingPathComponent(".git")
+        if !fm.fileExists(atPath: gitDir.path) {
+            print(
+                "ℹ  No `.git` in \(cwd.lastPathComponent)/ — SwiftPM may print harmless "
+                + "`'<pkg>': skipping cache … not a git repository` warnings. "
+                + "Run `git init` here to silence them.")
+        }
+
         // Windows: `swift run` 이 CKalsaeWV2 를 컴파일하기 전에
         // Kalsae 체크아웃의 Vendor/WebView2 를 채워둔다.
         do {
