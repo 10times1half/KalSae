@@ -179,9 +179,11 @@ _🇰🇷 Apple SDK는 OS/개발자 계약에 종속, 추가 고지 불필요._
 
 Android WebView, the Android Framework, and androidx libraries used by the
 sample project ([Samples/KalsaeAndroidSample/](../Samples/KalsaeAndroidSample/))
-are licensed under **Apache-2.0**. Distributions on Play Store / sideloaded
-APKs must include the Apache-2.0 LICENSE and any NOTICE files shipped with
-the androidx artifacts used.
+are licensed under **Apache-2.0**. This includes `androidx.webkit` and
+`androidx.security:security-crypto` used for encrypted credential storage in
+the sample host integration. Distributions on Play Store / sideloaded APKs
+must include the Apache-2.0 LICENSE and any NOTICE files shipped with the
+androidx artifacts used.
 
 _🇰🇷 Android 측은 Apache-2.0 — LICENSE/NOTICE 동봉._
 
