@@ -1,6 +1,30 @@
 import Foundation
 
 extension KSBuiltinCommands {
+    private static func validatedNavigationURL(
+        _ raw: String,
+        commandName: String
+    ) throws(KSError) -> URL {
+        guard let url = URL(string: raw), let scheme = url.scheme, !scheme.isEmpty else {
+            throw KSError(
+                code: .invalidArgument,
+                message: "\(commandName): invalid URL",
+                data: .string(raw))
+        }
+        switch scheme.lowercased() {
+        case "http", "https", "ws", "wss":
+            guard let host = url.host, !host.isEmpty else {
+                throw KSError(
+                    code: .invalidArgument,
+                    message: "\(commandName): invalid URL",
+                    data: .string(raw))
+            }
+        default:
+            break
+        }
+        return url
+    }
+
     /// `__ks.window.*` 핸들러를 등록한다 — minimize, maximize, restore,
     /// fullscreen, 위치/크기 조회 및 변경, 테마 등.
     ///
@@ -209,6 +233,33 @@ extension KSBuiltinCommands {
             return data.base64EncodedString()
         }
 
+        // `security.navigation.allow` 를 통과한 경우에만 현재 WebView를 지정 URL로 전환한다.
+        // 외부 origin용 페이지 전환도 기존 `__ks.window.create` 와 같은 보안 게이트를 공유한다.
+        //
+        // **JS shim 동기화 의무**: 이 핸들러를 추가/제거하면 5개 PAL의 runtime
+        // bootstrap JS에 정의된 `window.__KS_.window.navigate(url, window?)` 헬퍼도
+        // **함께 수정**해야 한다. 한쪽만 변경하면 그 플랫폼에서만 typed 헬퍼가
+        // undefined 가 되거나, 반대로 핸들러 없는 상태에서 호출되어
+        // `commandNotFound` 가 발생한다. 동기화 대상:
+        //   - Sources/KalsaePlatformWindows/WebView2/KSRuntimeJS.swift
+        //   - Sources/KalsaePlatformMac/WebKit/KSRuntimeJS.swift
+        //   - Sources/KalsaePlatformLinux/Gtk/GtkWebViewHost.swift (KSRuntimeJS)
+        //   - Sources/KalsaePlatformIOS/WebKit/KSiOSWebViewHost.swift
+        //   - Sources/KalsaePlatformAndroid/WebView/KSAndroidWebViewHost.swift
+        await register(registry, "__ks.window.navigate") { (args: NavigateArg) throws(KSError) -> Empty in
+            guard navigationScope.permits(urlString: args.url) else {
+                throw KSError(
+                    code: .commandNotAllowed,
+                    message: "window.navigate: URL is not allowed by security.navigation.allow",
+                    data: .string(args.url))
+            }
+            let url = try Self.validatedNavigationURL(args.url, commandName: "window.navigate")
+            let h = try await resolver.resolve(window: args.window)
+            let webview = try await windows.webView(for: h)
+            try await webview.load(url: url)
+            return Empty()
+        }
+
         // Multi-window: 새 창 생성. JS -> `__KS_.invoke("__ks.window.create", config)`.
         // `url` 필드를 지정하면 생성 즉시 해당 URL로 탐색한다.
         await register(registry, "__ks.window.create") { (args: KSWindowConfig) throws(KSError) -> LabelResult in
@@ -221,15 +272,10 @@ extension KSBuiltinCommands {
                         message: "security.navigation denies URL",
                         data: .string(urlStr))
                 }
-                guard URL(string: urlStr) != nil else {
-                    throw KSError(
-                        code: .invalidArgument,
-                        message: "window.create: invalid URL",
-                        data: .string(urlStr))
-                }
+                _ = try Self.validatedNavigationURL(urlStr, commandName: "window.create")
             }
             let handle = try await windows.create(args)
-            if let urlStr = args.url, let url = URL(string: urlStr) {
+            if let urlStr = args.url, let url = try? Self.validatedNavigationURL(urlStr, commandName: "window.create") {
                 let webview = try await windows.webView(for: handle)
                 try await webview.load(url: url)
             }
