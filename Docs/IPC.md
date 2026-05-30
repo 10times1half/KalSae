@@ -123,6 +123,7 @@ State / lifecycle:
 | `__ks.window.focus` | Bring the window to front and focus it |
 | `__ks.window.close` | Close the current window |
 | `__ks.window.reload` | Reload the WebView contents |
+| `__ks.window.navigate` | Navigate the window's WebView to a URL (gated by `security.navigation.allow`) |
 | `__ks.window.center` | Center the window on screen |
 | `__ks.window.startDrag` | Start a native window drag (desktop only; mobile no-op) |
 | `__ks.window.setCloseInterceptor` | When enabled, close requests fire the `__ks.window.beforeClose` event instead of closing immediately |

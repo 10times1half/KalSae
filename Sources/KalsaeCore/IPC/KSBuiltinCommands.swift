@@ -225,6 +225,10 @@ public enum KSBuiltinCommands {
         let format: String?
         let window: String?
     }
+    struct NavigateArg: Codable, Sendable {
+        let url: String
+        let window: String?
+    }
     struct TaskbarProgressArg: Codable, Sendable {
         let progress: KSTaskbarProgress
         let window: String?
