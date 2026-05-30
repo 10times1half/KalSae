@@ -151,10 +151,22 @@
             // WebView의 `onCreateContextMenu` 기본 동작을 JS가 preventDefault
             // 하는 방식으로 처리합니다.
 
-            // 외부 드래그-드롭(External drop)은 데스크톱 전용 개념입니다.
-            // Android에는 창 간 드래그-드롭이 없으므로 이 설정은 항상 무시됩니다.
+            // 외부 드래그-드롭(External drop)은 Android WebView에서 기본적으로
+            // 호스트가 파일 드롭을 브리지 이벤트로 가로채지 않으므로, 본 설정은
+            // 사실상 암묵적으로 비활성화된 상태와 동일합니다.
             if !config.security.allowExternalDrop {
-                log.info("security.allowExternalDrop=false is a no-op on Android (no drag-drop)")
+                log.info(
+                    "security.allowExternalDrop=false is effectively implicit on Android "
+                        + "(external file-drop bridge is not active by default)")
+            }
+
+            // PR #1 기준 Android credentials backend는 아직 제공되지 않는다.
+            // `__ks.secret.*` 또는 KSApp.credential* 호출은 unsupportedPlatform으로
+            // 실패하므로, 설정 단계에서 선제 경고를 남긴다.
+            if config.security.secret.enabled {
+                log.warning(
+                    "security.secret.enabled=true but Android credentials backend is not "
+                        + "available yet; secret APIs will return unsupportedPlatform")
             }
 
             // 시스템 트레이는 데스크톱 전용 UI 요소입니다.

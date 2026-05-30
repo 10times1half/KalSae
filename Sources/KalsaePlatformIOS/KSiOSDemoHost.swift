@@ -56,6 +56,11 @@
             try webViewHost.setAssetRoot(root)
         }
 
+        /// `ks://` 응답 헤더의 CSP 값을 설정한다.
+        public func setContentSecurityPolicy(_ csp: String) async throws(KSError) {
+            try await webViewHost.setContentSecurityPolicy(csp)
+        }
+
         /// 자산 응답에 Cross-Origin Isolation 헤더(COOP/COEP/CORP) 자동 추가 여부를
         /// 토글한다. `KSSecurityConfig.crossOriginIsolation`에 대응한다.
         public func setCrossOriginIsolation(_ enabled: Bool) {

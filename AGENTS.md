@@ -183,7 +183,8 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   CRT matches on both sides — see [kswv2_resource.cpp](Sources/CKalsaeWV2/src/kswv2_resource.cpp).
 - Full PAL: windows, menus, tray, dialogs, notifications (WinRT), clipboard,
   shell, accelerators, autostart (Registry), deep link (Registry), single
-  instance (WM_COPYDATA), window state persistence.
+  instance (WM_COPYDATA), window state persistence, credentials (Windows
+  Credential Manager).
 - **UI thread model (중요)**: Kalsae는 전용 Win32 UI 스레드를 소유하고 Swift
   main thread는 `WaitForSingleObject(uiThreadHandle)`로 영구 blocked 상태에
   있다. 따라서 Windows PAL 코드에서는:
@@ -227,7 +228,8 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
 - Deployment target is `macOS 14`.
 - Full PAL: windows, menus, tray, dialogs, notifications (UserNotifications),
   clipboard, shell, accelerators, autostart (SMAppService), deep link (Launch
-  Services), single instance (NSRunningApp), window state persistence.
+  Services), single instance (NSRunningApp), window state persistence,
+  credentials (Keychain Services).
 - Security: `setDefaultContextMenusEnabled` / `setAllowExternalDrop` apply via
   WKUserScript (preventDefault on `contextmenu` / `dragover` / `drop`).
   `installSecurityHandlers(allowPopups:openExternal:)` installs a WKUIDelegate
@@ -251,7 +253,8 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   only — Wayland compositors control placement), system tray (D-Bus
   StatusNotifierItem + DBusMenu, no AppIndicator3/libayatana dependency — works
   on KDE/Cinnamon/XFCE/Pantheon and GNOME with AppIndicator extension; vanilla
-  GNOME falls back to no-op with a warning).
+  GNOME falls back to no-op with a warning), credentials (libsecret / Secret
+  Service).
 - Virtual host serves `ks://app/` only (`https://app.kalsae/` is Windows-only —
   WebKitGTK cannot intercept `http(s)`); responses include CSP +
   `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer`.
@@ -270,7 +273,8 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   installed by the backend itself), menus (context-only via UIAlertController
   actionSheet — `installAppMenu` / `installWindowMenu` are intentional no-ops
   with a once-only warning, mirroring Android's single-Activity model),
-  notifications (UNNotification), shell, clipboard, deep link. Menu selections
+  notifications (UNNotification), shell, clipboard, deep link, credentials
+  (Keychain Services). Menu selections
   route through `KSiOSCommandRouter.shared` (mirrors
   `KSMacCommandRouter` / `KSWindowsCommandRouter` / `KSLinuxCommandRouter` /
   `KSAndroidCommandRouter`).
@@ -303,6 +307,9 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   `KSMacCommandRouter` / `KSWindowsCommandRouter` / `KSLinuxCommandRouter`).
   `installAppMenu` / `installWindowMenu` are intentional no-ops — Android's
   single-Activity model has no persistent menubar.
+- Credentials backend: currently unavailable on Android (`platform.credentials`
+  is `nil`), so `__ks.secret.*` / `KSApp.credential*` APIs return
+  `unsupportedPlatform` until Android credential backend support lands.
 - **Permanently unsupported:** `KSAndroidPlatform.run()` always throws `unsupportedPlatform`
   by design — Android lifecycle is JVM/Activity-controlled. Use `KSApp.boot()` +
   `KSAndroidDemoHost` with Kotlin host instead.

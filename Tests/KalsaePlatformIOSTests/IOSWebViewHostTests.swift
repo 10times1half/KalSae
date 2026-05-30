@@ -37,6 +37,16 @@
             }
         }
 
+        @Test("setContentSecurityPolicy does not throw")
+        func setContentSecurityPolicyNoThrow() async {
+            let host = KSiOSWebViewHost(label: "ks-test-ios-wvh-csp")
+            do {
+                try await host.setContentSecurityPolicy("default-src 'self'")
+            } catch let e {
+                Issue.record("setContentSecurityPolicy threw: \(e)")
+            }
+        }
+
         @Test("navigate with invalid URL throws webviewInitFailed")
         func navigateInvalidURLThrows() {
             let host = KSiOSWebViewHost(label: "ks-test-ios-wvh-nav")

@@ -10,7 +10,7 @@ public import KalsaeCore
 
 extension KSApp {
 
-    /// 현재 플랫폼의 자격증명 백엔드. 미지원 플랫폼(현 시점: Linux/Android)
+    /// 현재 플랫폼의 자격증명 백엔드. 미지원 플랫폼(현 시점: Android)
     /// 이거나 `KSPlatform.credentials` 가 nil이면 `false`.
     nonisolated public var isCredentialStoreAvailable: Bool {
         platform.credentials != nil

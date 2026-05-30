@@ -424,6 +424,11 @@ public final class KSApp {
             #elseif os(macOS) || os(Linux) || os(iOS) || os(Android)
                 try concrete.setAssetRoot(servedRoot)
             #endif
+            #if os(macOS) || os(iOS)
+                // WKURLSchemeHandler 응답에 포함되는 CSP 헤더를 설정값으로 동기화한다.
+                // (기본값 KSSecurityConfig.defaultCSP에 머무르는 silent drift 방지)
+                try await concrete.setContentSecurityPolicy(config.security.csp)
+            #endif
             #if os(Linux)
                 try concrete.setResponseCSP(config.security.csp)
             #endif
