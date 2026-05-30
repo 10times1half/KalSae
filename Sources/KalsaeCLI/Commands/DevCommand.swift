@@ -117,8 +117,8 @@ struct DevCommand: ParsableCommand {
         if !fm.fileExists(atPath: gitDir.path) {
             print(
                 "ℹ  No `.git` in \(cwd.lastPathComponent)/ — SwiftPM may print harmless "
-                + "`'<pkg>': skipping cache … not a git repository` warnings. "
-                + "Run `git init` here to silence them.")
+                    + "`'<pkg>': skipping cache … not a git repository` warnings. "
+                    + "Run `git init` here to silence them.")
         }
 
         // Windows: `swift run` 이 CKalsaeWV2 를 컴파일하기 전에

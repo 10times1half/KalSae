@@ -378,6 +378,17 @@ struct KSWindowHandlerValidationTests {
         #expect(err?.code != .commandNotAllowed)
     }
 
+    @Test("window.create rejects malformed network URLs before backend.create")
+    func createRejectsMalformedURL() async throws {
+        let (registry, _) = await makeRegistry(navigationScope: KSNavigationScope())
+        let err = await dispatchExpectError(
+            registry, "__ks.window.create",
+            args:
+                #"{"label":"bad","title":"x","url":"http://","width":100,"height":100,"resizable":true,"decorations":true,"transparent":false,"fullscreen":false,"visible":true,"center":true,"alwaysOnTop":false,"hideOnClose":false,"disableWindowIcon":false,"contentProtection":false,"persistState":false}"#
+        )
+        #expect(err?.code == .invalidArgument)
+    }
+
     @Test("window.create with empty navigation allow list permits any URL (legacy)")
     func createAllowsAnyURLByDefault() async throws {
         let (registry, _) = await makeRegistry(navigationScope: KSNavigationScope())
