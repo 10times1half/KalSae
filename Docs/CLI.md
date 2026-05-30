@@ -171,8 +171,9 @@ kalsae build --signtool-cmd "signtool sign /a /fd SHA256 {file}" \
 | `--msi-signtool-cmd "<template>"` | Windows: codesign the MSI installer after `light.exe`. Same template syntax as `--signtool-cmd` (also accepts Tauri-style `%1`). Requires `--msi`. |
 | `--auto-fetch-wix` / `--no-auto-fetch-wix` | Automatically download WiX Toolset v3.14 when `--msi` is on and tools are missing. **Default ON.** |
 | `--use-local-tools-dir` | Cache WiX binaries under `<project>/.kalsae/tools/` instead of `%LOCALAPPDATA%`. Useful for CI/Docker. |
-| `--standalone` | Windows: produce a single-file standalone bundle that embeds `WebView2Loader.dll`, manifest, icon, version metadata, and frontend assets directly into the EXE (PE resources). Output is auto-suffixed: `dist/<name>-<ver>-<arch>-standalone/`. Requires `ResourceHacker` and/or `rcedit` on PATH — without either, the build fails (see `--standalone-allow-fallback`). |
+| `--standalone` | Windows: produce a single-file standalone bundle that embeds `WebView2Loader.dll`, manifest, icon, version metadata, and frontend assets directly into the EXE (PE resources). Output is auto-suffixed: `dist/<name>-<ver>-<arch>-standalone/`. Kalsae auto-fetches `ResourceHacker` and `rcedit` by default when missing; use `--no-auto-fetch-resource-hacker` / `--no-auto-fetch-rcedit` to disable. Without any embed mechanism, the build fails (see `--standalone-allow-fallback`). |
 | `--standalone-allow-fallback` | When `--standalone` is on but no PE editor is on PATH, fall back to the compatibility layout (external `WebView2Loader.dll` + `.manifest`) instead of failing. Off by default — without this flag, missing PE editors hard-error so a "standalone" build is never silently identical to a regular build. |
+| `--auto-fetch-rcedit` / `--no-auto-fetch-rcedit` | Automatically download `rcedit` when `--standalone` is on and it is missing. **Default ON.** |
 | `--no-auto-fetch-web-view2` | Disable automatic fetching of the WebView2 SDK on Windows. |
 | `--webview2-sdk-version <ver>` | WebView2 SDK version when auto-fetching. |
 | `--android` | Generate an Android Gradle project instead of a desktop package. Requires `--android-native-lib`. Host-OS agnostic (pure file emission). |
@@ -341,6 +342,9 @@ officially supported on native Windows toolchains.
   winget install AngusJohnson.ResourceHacker        # or: choco install AngusJohnson.ResourceHacker
   winget install ElectronCommunity.rcedit
   ```
+- By default, `kalsae build --standalone` auto-fetches both tools when they are
+  missing. Use `--no-auto-fetch-resource-hacker` or `--no-auto-fetch-rcedit`
+  when you want to manage them yourself.
 - Without either tool on PATH, the build **hard-errors** with installation
   guidance. Pass `--standalone-allow-fallback` to opt into the
   compatibility layout (external files kept) when you understand the

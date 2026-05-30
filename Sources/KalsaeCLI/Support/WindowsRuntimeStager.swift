@@ -136,6 +136,27 @@ public enum KSWindowsRuntimeStager {
         return deps.contains { isWhitelisted($0.lowercased()) }
     }
 
+    /// `executable` 이 직접 import 하는 화이트리스트 DLL 중 `dest` 폴더에
+    /// 실제 파일이 없는 이름을 반환한다. 증분 빌드에서는 `stage()` 가 0 을
+    /// 반환해도 기존 DLL 이 이미 최신 상태일 수 있으므로, Packager 는 이
+    /// 결과 상태를 기준으로 경고 여부를 판단한다.
+    public static func missingWhitelistedDeps(executable: URL, in dest: URL) -> [String] {
+        #if os(Windows)
+            guard let deps = try? KSPEImportReader.importedDLLs(at: executable) else {
+                return []
+            }
+            let fm = FileManager.default
+            return
+                deps
+                .filter { isWhitelisted($0.lowercased()) }
+                .filter { !fm.fileExists(atPath: dest.appendingPathComponent($0).path) }
+        #else
+            _ = executable
+            _ = dest
+            return []
+        #endif
+    }
+
     /// `hasPrefix` 검사용 (모두 소문자). 끝은 `.dll` 로 끝난다는 전제.
     private static let whitelistPrefixes: [String] = [
         "swift",  // swiftCore.dll, swift_Concurrency.dll, swiftFoundation.dll, ...

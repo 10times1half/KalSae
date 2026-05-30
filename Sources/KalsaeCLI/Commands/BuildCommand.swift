@@ -126,6 +126,13 @@ struct BuildCommand: ParsableCommand {
     )
     var autoFetchResourceHacker: Bool = true
 
+    @Flag(
+        name: .long, inversion: .prefixedNo,
+        help:
+            "Automatically download rcedit when --standalone is on and it is missing (Windows only)."
+    )
+    var autoFetchRcedit: Bool = true
+
     // MARK: - 빌드 제어 옵션
 
     @Flag(name: .long, help: "Remove .build/ and the package output directory before building.")

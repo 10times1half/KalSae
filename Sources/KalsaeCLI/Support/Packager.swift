@@ -79,6 +79,9 @@ public enum KSPackager {
         /// `--standalone` 일 때 PE embed 에 사용할 ResourceHacker.exe 경로
         /// (KSResourceHackerProvisioner 결과). nil 이면 PATH 만 사용.
         public var resourceHackerPath: URL?
+        /// `--standalone` 일 때 icon/version metadata 주입에 사용할 rcedit 경로.
+        /// nil 이면 PATH 만 사용.
+        public var rceditPath: URL?
 
         public init(
             projectRoot: URL,
@@ -100,7 +103,8 @@ public enum KSPackager {
             zip: Bool = false,
             stripSourceMaps: Bool = true,
             stripExtensions: [String] = [],
-            resourceHackerPath: URL? = nil
+            resourceHackerPath: URL? = nil,
+            rceditPath: URL? = nil
         ) {
             self.projectRoot = projectRoot
             self.executablePath = executablePath
@@ -122,6 +126,7 @@ public enum KSPackager {
             self.stripSourceMaps = stripSourceMaps
             self.stripExtensions = stripExtensions
             self.resourceHackerPath = resourceHackerPath
+            self.rceditPath = rceditPath
         }
     }
 
@@ -216,16 +221,17 @@ public enum KSPackager {
         do {
             let staged = try KSWindowsRuntimeStager.stage(
                 executable: dstExe, destination: opts.output)
-            // staged == 0 이고 EXE 가 화이트리스트 DLL 에 의존하는 상태로
-            // 패키지가 완성되면 다른 PC 에서 `swiftCore.dll not found` 다이얼로그로
-            // 끝난다. 사용자가 빌드 로그를 놓치더라도 Report.description 에 한 줄
-            // 남도록 warnings 에 명시한다.
-            if staged == 0, KSWindowsRuntimeStager.hasWhitelistedImports(executable: dstExe) {
+            _ = staged
+            // staged 는 "이번 호출에서 새로 복사한 개수" 이므로 증분 빌드에서는 0
+            // 이어도 dist 에 DLL 이 이미 존재할 수 있다. 실제 실패 여부는 최종
+            // 패키지 폴더에 필요한 화이트리스트 DLL 이 남아 있는지로 판정한다.
+            let missing = KSWindowsRuntimeStager.missingWhitelistedDeps(
+                executable: dstExe,
+                in: opts.output)
+            if !missing.isEmpty {
+                let names = missing.sorted().joined(separator: ", ")
                 warnings.append(
-                    "Windows runtime DLL staging produced 0 files but the executable "
-                        + "imports Swift/Foundation/VC runtime DLLs. "
-                        + "The packaged app will fail with `swiftCore.dll not found` "
-                        + "on machines without a Swift toolchain. "
+                    "Missing Swift/Foundation/VC runtime DLLs: \(names). "
                         + "Ensure the toolchain's `Runtimes\\<ver>\\usr\\bin` is on PATH.")
             }
         } catch {
@@ -442,7 +448,8 @@ public enum KSPackager {
                     assetsZipPath: embeddedAssetsZipURL,
                     configPath: dstConfig,
                     runtimePath: embeddedRuntimeJSONURL,
-                    resourceHackerOverride: opts.resourceHackerPath))
+                    resourceHackerOverride: opts.resourceHackerPath,
+                    rceditOverride: opts.rceditPath))
             warnings.append(contentsOf: standaloneReport.warnings)
 
             // 임베드 메커니즘이 아예 동작하지 않고 fallback 도 허용되지 않으면 즉시 실패.

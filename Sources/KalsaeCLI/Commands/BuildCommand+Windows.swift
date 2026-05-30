@@ -83,6 +83,17 @@
                 }
             }()
 
+            let rceditPath: URL? = {
+                guard standalone else { return nil }
+                do {
+                    return try KSRceditProvisioner.ensure(
+                        cwd: cwd, autoFetch: autoFetchRcedit)
+                } catch {
+                    print("⚠️   rcedit auto-fetch failed: \(error)")
+                    return KSRceditProvisioner.locate()
+                }
+            }()
+
             // KSPackager 옵션 구성 — 이후 `KSPackager.run(opts)` 가 실제 파일 작업을 수행한다.
             let opts = KSPackager.Options(
                 projectRoot: cwd,
@@ -104,7 +115,8 @@
                 zip: zip,
                 stripSourceMaps: config.build.stripSourceMaps,
                 stripExtensions: config.build.stripExtensions,
-                resourceHackerPath: resourceHackerPath)
+                resourceHackerPath: resourceHackerPath,
+                rceditPath: rceditPath)
 
             let modeLabel = installMode?.rawValue ?? "(legacy policy: \(policy.rawValue))"
             print(

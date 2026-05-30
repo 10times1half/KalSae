@@ -701,7 +701,7 @@ Source: [Sources/KalsaeCLI/Commands/](Sources/KalsaeCLI/Commands/).
 | Packaging | `--no-package` (packaging is on by default) |
 | WebView2 | `--webview2 evergreen\|fixed\|auto`, `--webview2-install-mode MODE`, `--webview2-sdk-version VERSION`, `--no-auto-fetch-web-view2` |
 | Windows runtime staging | `--no-stage-runtime` (skip auto-staging Swift runtime + WebView2Loader DLLs) |
-| Windows standalone | `--standalone`, `--standalone-allow-fallback` |
+| Windows standalone | `--standalone`, `--standalone-allow-fallback`, `--no-auto-fetch-resource-hacker`, `--no-auto-fetch-rcedit` |
 | Architecture / bootstrapper | `--arch x64\|arm64\|x86\|x86_64\|universal`, `--bootstrapper PATH` |
 | Windows NSIS | `--nsis`, `--nsis-publisher NAME`, `--signtool-cmd "..."`, `--nsis-signtool-cmd "..."`, `--no-auto-fetch-resource-hacker` |
 | Windows MSI | `--msi`, `--msi-upgrade-code GUID`, `--msi-language LCID`, `--msi-banner PATH`, `--msi-dialog-image PATH`, `--msi-signtool-cmd "..."`, `--no-auto-fetch-wix`, `--use-local-tools-dir` |
@@ -730,7 +730,7 @@ See [Docs/CLI.md](Docs/CLI.md) for detailed semantics of each option, and `swift
 | 패키징 | `--no-package` (패키징은 기본 ON) |
 | WebView2 | `--webview2 evergreen\|fixed\|auto`, `--webview2-install-mode 모드`, `--webview2-sdk-version 버전`, `--no-auto-fetch-web-view2` |
 | Windows 런타임 staging | `--no-stage-runtime` (Swift 런타임 + WebView2Loader DLL 자동 staging 끄기) |
-| Windows 단독 실행 | `--standalone`, `--standalone-allow-fallback` |
+| Windows 단독 실행 | `--standalone`, `--standalone-allow-fallback`, `--no-auto-fetch-resource-hacker`, `--no-auto-fetch-rcedit` |
 | 아키텍처 / 부트스트래퍼 | `--arch x64\|arm64\|x86\|x86_64\|universal`, `--bootstrapper 경로` |
 | Windows NSIS | `--nsis`, `--nsis-publisher 이름`, `--signtool-cmd "..."`, `--nsis-signtool-cmd "..."`, `--no-auto-fetch-resource-hacker` |
 | Windows MSI | `--msi`, `--msi-upgrade-code GUID`, `--msi-language LCID`, `--msi-banner 경로`, `--msi-dialog-image 경로`, `--msi-signtool-cmd "..."`, `--no-auto-fetch-wix`, `--use-local-tools-dir` |

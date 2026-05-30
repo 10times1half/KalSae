@@ -38,6 +38,8 @@ internal enum KSStandalonePostProcessor {
         /// PATH 에 ResourceHacker 가 없더라도 명시적 경로를 주면 그 경로를
         /// 우선 사용한다 (KSResourceHackerProvisioner 결과).
         let resourceHackerOverride: URL?
+        /// PATH 에 rcedit 가 없더라도 명시적 경로를 주면 그 경로를 우선 사용한다.
+        let rceditOverride: URL?
     }
 
     /// Standalone PE 후처리 단계를 실행한다.
@@ -82,7 +84,7 @@ internal enum KSStandalonePostProcessor {
             let resourceHacker =
                 options.resourceHackerOverride
                 ?? findExecutable(named: "ResourceHacker")
-            let rcedit = findExecutable(named: "rcedit")
+            let rcedit = options.rceditOverride ?? findExecutable(named: "rcedit")
 
             // 1차: in-process Win32 BeginUpdateResource API 로 RCDATA + RT_MANIFEST
             //     를 한 번에 주입한다. 외부 도구가 없어도 standalone embed 가
