@@ -160,13 +160,20 @@
                         + "(external file-drop bridge is not active by default)")
             }
 
-            // PR #1 기준 Android credentials backend는 아직 제공되지 않는다.
-            // `__ks.secret.*` 또는 KSApp.credential* 호출은 unsupportedPlatform으로
-            // 실패하므로, 설정 단계에서 선제 경고를 남긴다.
+            // Android credential backend는 Kotlin 호스트의 JNI 훅 등록이 있어야
+            // 실제 저장소(예: AndroidKeyStore + EncryptedSharedPreferences)와
+            // 연결된다. 훅이 없으면 credential API는 unsupportedPlatform을 반환한다.
             if config.security.secret.enabled {
-                log.warning(
-                    "security.secret.enabled=true but Android credentials backend is not "
-                        + "available yet; secret APIs will return unsupportedPlatform")
+                let bridge = KSAndroidJNIBridge.shared
+                if bridge.credentialSet == nil
+                    || bridge.credentialGet == nil
+                    || bridge.credentialDelete == nil
+                    || bridge.credentialList == nil
+                {
+                    log.warning(
+                        "security.secret.enabled=true but Android credential JNI hooks are "
+                            + "not fully registered; secret APIs may return unsupportedPlatform")
+                }
             }
 
             // 시스템 트레이는 데스크톱 전용 UI 요소입니다.

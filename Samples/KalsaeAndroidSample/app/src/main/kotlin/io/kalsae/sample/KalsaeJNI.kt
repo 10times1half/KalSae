@@ -29,6 +29,18 @@ object KalsaeJNI {
     /** Register a C function pointer that Swift calls to load a URL. */
     external fun registerLoadUrl(fn: Long)
 
+    /** Register credential set hook (request-id based callback model). */
+    external fun registerCredentialSet(fn: Long)
+
+    /** Register credential get hook (request-id based callback model). */
+    external fun registerCredentialGet(fn: Long)
+
+    /** Register credential delete hook (request-id based callback model). */
+    external fun registerCredentialDelete(fn: Long)
+
+    /** Register credential list hook (request-id based callback model). */
+    external fun registerCredentialList(fn: Long)
+
     // -------------------------------------------------------------------------
     // Lifecycle
     // -------------------------------------------------------------------------
@@ -60,6 +72,12 @@ object KalsaeJNI {
      * Call from your @JavascriptInterface `postMessage` method.
      */
     external fun onInboundMessage(json: String)
+
+    /**
+     * Complete a credential request from Kotlin host storage.
+     * Result envelope is JSON: {"ok":true,...} or {"ok":false,"error":"..."}.
+     */
+    external fun onCredentialResult(requestId: Int, resultJson: String)
 
     /**
      * Returns the composite document-start JavaScript string.

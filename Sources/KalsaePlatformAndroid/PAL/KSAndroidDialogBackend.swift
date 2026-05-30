@@ -220,7 +220,11 @@
                     pickFile: _jniPickFile,
                     saveFile: _jniSaveFile,
                     selectFolder: _jniSelectFolder,
-                    showContextMenu: _jniShowContextMenu)
+                    showContextMenu: _jniShowContextMenu,
+                    credentialSet: _jniCredentialSet,
+                    credentialGet: _jniCredentialGet,
+                    credentialDelete: _jniCredentialDelete,
+                    credentialList: _jniCredentialList)
             }
         }
 
@@ -229,5 +233,9 @@
         let saveFile: KSJNISaveFile?
         let selectFolder: KSJNISelectFolder?
         let showContextMenu: KSJNIShowContextMenu?
+        let credentialSet: KSJNICredentialSet?
+        let credentialGet: KSJNICredentialGet?
+        let credentialDelete: KSJNICredentialDelete?
+        let credentialList: KSJNICredentialList?
     }
 #endif

@@ -86,6 +86,38 @@
         _hooksLock.withLock { _jniShowContextMenu = fn }
     }
 
+    /// Registers Kotlin-side secure credential `set` handler.
+    @_cdecl("KS_android_register_credential_set")
+    public func KS_android_register_credential_set(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniCredentialSet = fn }
+    }
+
+    /// Registers Kotlin-side secure credential `get` handler.
+    @_cdecl("KS_android_register_credential_get")
+    public func KS_android_register_credential_get(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniCredentialGet = fn }
+    }
+
+    /// Registers Kotlin-side secure credential `delete` handler.
+    @_cdecl("KS_android_register_credential_delete")
+    public func KS_android_register_credential_delete(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniCredentialDelete = fn }
+    }
+
+    /// Registers Kotlin-side secure credential `list` handler.
+    @_cdecl("KS_android_register_credential_list")
+    public func KS_android_register_credential_list(
+        _ fn: @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+    ) {
+        _hooksLock.withLock { _jniCredentialList = fn }
+    }
+
     // MARK: - 다이얼로그 결과 콜백
 
     /// Kotlin 호스트가 비동기 UI 응답을 Swift 로 되돌릴 때 호출한다.
@@ -129,6 +161,22 @@
         _ selectedIndex: Int32
     ) {
         let json = "{\"selectedIndex\":\(selectedIndex)}"
+        KSAndroidJNIRegistry.shared.deliver(requestId, json: json)
+    }
+
+    /// Kotlin host calls this to complete a credential request.
+    ///
+    /// Result JSON envelope (recommended):
+    /// - set/delete: `{"ok":true}` or `{"ok":false,"error":"..."}`
+    /// - get:        `{"ok":true,"payload":{"secretBase64":"..."}}` or
+    ///               `{"ok":true,"payload":{"secretBase64":null}}`
+    /// - list:       `{"ok":true,"payload":{"accounts":["a","b"]}}`
+    @_cdecl("KS_android_on_credential_result")
+    public func KS_android_on_credential_result(
+        _ requestId: Int32,
+        _ resultJSON: UnsafePointer<CChar>
+    ) {
+        let json = String(cString: resultJSON)
         KSAndroidJNIRegistry.shared.deliver(requestId, json: json)
     }
 

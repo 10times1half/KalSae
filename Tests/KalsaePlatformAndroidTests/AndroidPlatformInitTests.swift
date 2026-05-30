@@ -22,6 +22,7 @@
             #expect(platform.accelerators == nil)
             #expect((platform.autostart as? KSAndroidAutostartBackend) != nil)
             #expect((platform.deepLink as? KSAndroidDeepLinkBackend) != nil)
+            #expect((platform.credentials as? KSAndroidCredentialBackend) != nil)
         }
 
         @Test("commandRegistry wiring — register and dispatch round-trip")

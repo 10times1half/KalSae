@@ -38,6 +38,22 @@
     /// Signature: `(requestId, menuJsonCStr, x, y) -> Void`.
     typealias KSJNIShowContextMenu = @convention(c) (Int32, UnsafePointer<CChar>, Int32, Int32) -> Void
 
+    /// Stores/updates a credential entry from Kotlin-side secure storage.
+    /// Signature: `(requestId, payloadJsonCStr) -> Void`.
+    typealias KSJNICredentialSet = @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+
+    /// Reads a credential entry from Kotlin-side secure storage.
+    /// Signature: `(requestId, payloadJsonCStr) -> Void`.
+    typealias KSJNICredentialGet = @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+
+    /// Deletes a credential entry from Kotlin-side secure storage.
+    /// Signature: `(requestId, payloadJsonCStr) -> Void`.
+    typealias KSJNICredentialDelete = @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+
+    /// Lists accounts for a given service from Kotlin-side secure storage.
+    /// Signature: `(requestId, payloadJsonCStr) -> Void`.
+    typealias KSJNICredentialList = @convention(c) (Int32, UnsafePointer<CChar>) -> Void
+
     // MARK: - Global C callback storage
 
     // nonisolated(unsafe): every read/write is guarded by _hooksLock.
@@ -49,6 +65,10 @@
     nonisolated(unsafe) var _jniSaveFile: KSJNISaveFile? = nil
     nonisolated(unsafe) var _jniSelectFolder: KSJNISelectFolder? = nil
     nonisolated(unsafe) var _jniShowContextMenu: KSJNIShowContextMenu? = nil
+    nonisolated(unsafe) var _jniCredentialSet: KSJNICredentialSet? = nil
+    nonisolated(unsafe) var _jniCredentialGet: KSJNICredentialGet? = nil
+    nonisolated(unsafe) var _jniCredentialDelete: KSJNICredentialDelete? = nil
+    nonisolated(unsafe) var _jniCredentialList: KSJNICredentialList? = nil
 
     // MARK: - Hook wiring
 

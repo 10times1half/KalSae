@@ -307,9 +307,10 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   `KSMacCommandRouter` / `KSWindowsCommandRouter` / `KSLinuxCommandRouter`).
   `installAppMenu` / `installWindowMenu` are intentional no-ops — Android's
   single-Activity model has no persistent menubar.
-- Credentials backend: currently unavailable on Android (`platform.credentials`
-  is `nil`), so `__ks.secret.*` / `KSApp.credential*` APIs return
-  `unsupportedPlatform` until Android credential backend support lands.
+- Credentials backend: available via `KSAndroidCredentialBackend` (bridged to
+  Kotlin host storage through JNI hooks). If the host does not register the
+  four credential hooks (`set/get/delete/list`), `__ks.secret.*` /
+  `KSApp.credential*` may return `unsupportedPlatform` at runtime.
 - **Permanently unsupported:** `KSAndroidPlatform.run()` always throws `unsupportedPlatform`
   by design — Android lifecycle is JVM/Activity-controlled. Use `KSApp.boot()` +
   `KSAndroidDemoHost` with Kotlin host instead.
