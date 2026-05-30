@@ -13,6 +13,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += listOf("-std=c++17")
+            }
+        }
     }
 
     buildTypes {
@@ -36,10 +42,17 @@ android {
     // copy the resulting .so here:
     //   src/main/jniLibs/arm64-v8a/libKalsaePlatformAndroid.so
     sourceSets["main"].jniLibs.srcDirs("src/main/jniLibs")
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+        }
+    }
 }
 
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.webkit)
+    implementation(libs.androidx.security.crypto)
 }

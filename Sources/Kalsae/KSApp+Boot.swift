@@ -9,6 +9,8 @@ internal import KalsaeCore
     internal import KalsaePlatformLinux
 #elseif os(iOS)
     internal import KalsaePlatformIOS
+#elseif os(Android)
+    internal import KalsaePlatformAndroid
 #endif
 
 // MARK: - 종료

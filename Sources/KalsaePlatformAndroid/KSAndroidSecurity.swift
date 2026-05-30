@@ -151,10 +151,29 @@
             // WebView의 `onCreateContextMenu` 기본 동작을 JS가 preventDefault
             // 하는 방식으로 처리합니다.
 
-            // 외부 드래그-드롭(External drop)은 데스크톱 전용 개념입니다.
-            // Android에는 창 간 드래그-드롭이 없으므로 이 설정은 항상 무시됩니다.
+            // 외부 드래그-드롭(External drop)은 Android WebView에서 기본적으로
+            // 호스트가 파일 드롭을 브리지 이벤트로 가로채지 않으므로, 본 설정은
+            // 사실상 암묵적으로 비활성화된 상태와 동일합니다.
             if !config.security.allowExternalDrop {
-                log.info("security.allowExternalDrop=false is a no-op on Android (no drag-drop)")
+                log.info(
+                    "security.allowExternalDrop=false is effectively implicit on Android "
+                        + "(external file-drop bridge is not active by default)")
+            }
+
+            // Android credential backend는 Kotlin 호스트의 JNI 훅 등록이 있어야
+            // 실제 저장소(예: AndroidKeyStore + EncryptedSharedPreferences)와
+            // 연결된다. 훅이 없으면 credential API는 unsupportedPlatform을 반환한다.
+            if config.security.secret.enabled {
+                let bridge = KSAndroidJNIBridge.shared
+                if bridge.credentialSet == nil
+                    || bridge.credentialGet == nil
+                    || bridge.credentialDelete == nil
+                    || bridge.credentialList == nil
+                {
+                    log.warning(
+                        "security.secret.enabled=true but Android credential JNI hooks are "
+                            + "not fully registered; secret APIs may return unsupportedPlatform")
+                }
             }
 
             // 시스템 트레이는 데스크톱 전용 UI 요소입니다.

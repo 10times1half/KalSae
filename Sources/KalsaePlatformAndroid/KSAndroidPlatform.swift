@@ -31,7 +31,8 @@
                 clipboard: _clipboard,
                 accelerators: nil,
                 autostart: _autostart,
-                deepLink: _deepLink)
+                deepLink: _deepLink,
+                credentials: KSAndroidCredentialBackend())
         }
 
         @MainActor public var menuCommandRouter: (any KSMenuCommandRouting)? {
