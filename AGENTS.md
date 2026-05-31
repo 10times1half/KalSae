@@ -30,7 +30,7 @@ _🇰🇷 Swift 6.0 + SPM + swift-testing. Windows/macOS가 가장 완성도 높
 swift build
 
 # Build the demo executable only
-swift build --product kalsae-demo
+swift build --package-path Samples/KalsaeDemo --product kalsae-demo
 
 # Run the full test suite
 swift test
@@ -46,7 +46,7 @@ swift test --no-parallel
 
 | OS | Required setup |
 |---|---|
-| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); `kalsae build` fetches the WebView2 SDK automatically and **also auto-stages Swift runtime DLLs** (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`, MSVC redist, …) next to the produced `.exe` via a pure-Swift PE Import Table walker (`KSWindowsRuntimeStager`). Opt out with `--no-stage-runtime`. `kalsae dev` does the same on every rebuild. For bare `swift build`, run `./Scripts/fetch-webview2.ps1` once to populate `Vendor/WebView2/`, then `./Scripts/stage-webview2-loader.ps1` + `./Scripts/stage-windows-cli-runtime.ps1` after every build (otherwise `LoadLibraryW` fails with `0x8007007E` or `swift_Concurrency.dll not found`) |
+| Windows 10 1809+ | Visual Studio Build Tools (MSVC 14+); `kalsae build` fetches the WebView2 SDK automatically and **also auto-stages Swift runtime DLLs** (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`, MSVC redist, …) next to the produced `.exe` via a pure-Swift PE Import Table walker (`KSWindowsRuntimeStager`). Opt out with `--no-stage-runtime`. `kalsae dev` does the same on every rebuild. For bare `swift build` in this repo or in a consumer project that uses this checkout via `.package(path:)`, run `./Scripts/fetch-webview2.ps1` once in the KalSae checkout to populate `Vendor/WebView2/`, then `./Scripts/stage-webview2-loader.ps1` + `./Scripts/stage-windows-cli-runtime.ps1` after every build (otherwise `LoadLibraryW` fails with `0x8007007E` or `swift_Concurrency.dll not found`) |
 | macOS 14+ | none |
 | Linux | `apt install libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libsecret-1-dev` |
 | iOS | Xcode 15+ (Swift 6 toolchain) |
@@ -74,8 +74,6 @@ Sources/
   KalsaeCLI/               `kalsae` executable (new/dev/build/generate)
   KalsaeCLI/Support/       BindingsGenerator, Packager, ProjectTemplate, Shell
                            (compiled as an internal `KalsaeCLICore` target)
-  KalsaeDemo/              Runnable demo app (kalsae-demo executable)
-
   KalsaePlatformWindows/   Win32 + WebView2 PAL
   KalsaePlatformMac/       AppKit + WKWebView PAL (stable)
   KalsaePlatformLinux/     GTK4 + WebKitGTK PAL (stable)
@@ -98,6 +96,7 @@ Tests/
   KalsaePlatformAndroidTests/  Android PAL integration tests
 
 Samples/
+  KalsaeDemo/              Runnable demo app (SwiftPM sample package)
   KalsaeAndroidSample/     Android sample project (Gradle build)
 
 Scripts/
@@ -388,7 +387,7 @@ _🇰🇷 무관한 리팩토링/문서 자동 생성/XCTest/`&&`/force unwrap �
 
 ## 8. Useful Entrypoints
 
-- Demo app:                [Sources/KalsaeDemo/Demo.swift](Sources/KalsaeDemo/Demo.swift)
+- Demo app:                [Samples/KalsaeDemo/Sources/KalsaeDemo/Demo.swift](Samples/KalsaeDemo/Sources/KalsaeDemo/Demo.swift)
 - App lifecycle / boot:    [Sources/Kalsae/KSApp+Boot.swift](Sources/Kalsae/KSApp+Boot.swift)
 - App public API:          [Sources/Kalsae/KSApp.swift](Sources/Kalsae/KSApp.swift)
 - Single instance:         [Sources/Kalsae/KSApp+SingleInstance.swift](Sources/Kalsae/KSApp+SingleInstance.swift)

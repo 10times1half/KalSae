@@ -90,6 +90,80 @@ extension BuildCommand {
         }
     }
 
+    // MARK: - Build output resolution
+
+    /// `swift build` 산출물에서 실행 파일 경로 후보를 생성한다.
+    ///
+    /// SwiftPM은 환경에 따라 다음 두 형태 중 하나로 실행 파일을 배치한다.
+    /// - `.build/<configuration>/<exe>`
+    /// - `.build/<triple>/<configuration>/<exe>`
+    ///
+    /// 따라서 패키저는 두 경로 패턴을 모두 확인해야 한다.
+    func builtExecutableCandidates(
+        cwd: URL,
+        configuration: String,
+        executableName: String,
+        executableExtension: String?,
+        fm: FileManager
+    ) -> [URL] {
+        let filename: String = {
+            guard let ext = executableExtension, !ext.isEmpty else { return executableName }
+            return "\(executableName).\(ext)"
+        }()
+
+        var candidates: [URL] = [
+            cwd
+                .appendingPathComponent(".build")
+                .appendingPathComponent(configuration)
+                .appendingPathComponent(filename)
+        ]
+
+        let buildRoot = cwd.appendingPathComponent(".build")
+        if let children = try? fm.contentsOfDirectory(
+            at: buildRoot,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])
+        {
+            for child in children {
+                var isDir: ObjCBool = false
+                guard fm.fileExists(atPath: child.path, isDirectory: &isDir), isDir.boolValue else {
+                    continue
+                }
+                candidates.append(
+                    child
+                        .appendingPathComponent(configuration)
+                        .appendingPathComponent(filename))
+            }
+        }
+
+        var seen = Set<String>()
+        var deduped: [URL] = []
+        for candidate in candidates {
+            let key = candidate.standardizedFileURL.path.lowercased()
+            if seen.insert(key).inserted {
+                deduped.append(candidate.standardizedFileURL)
+            }
+        }
+        return deduped
+    }
+
+    /// 빌드 산출물에서 첫 번째로 존재하는 실행 파일 경로를 반환한다.
+    func resolveBuiltExecutableURL(
+        cwd: URL,
+        configuration: String,
+        executableName: String,
+        executableExtension: String?,
+        fm: FileManager
+    ) -> URL? {
+        builtExecutableCandidates(
+            cwd: cwd,
+            configuration: configuration,
+            executableName: executableName,
+            executableExtension: executableExtension,
+            fm: fm
+        ).first(where: { fm.fileExists(atPath: $0.path) })
+    }
+
     // MARK: - Capability 검증
 
     /// `--capability-check` 모드에 따라 capability 대 선언된 `@KSCommand` 의

@@ -20,14 +20,10 @@ let package = Package(
     products: [
         // 앱 개발자가 import Kalsae로 사용하는 최상위 퍼블릭 파사드 라이브러리
         .library(name: "Kalsae", targets: ["Kalsae"]),
-        // IPC/Config/Asset/오류 처리 등 모든 플랫폼이 공유하는 코어 라이브러리
-        .library(name: "KalsaeCore", targets: ["KalsaeCore"]),
         // @KSCommand 등 Consumer-facing 매크로를 내보내는 라이브러리
         .library(name: "KalsaeMacros", targets: ["KalsaeMacros"]),
         // 격리된 프로세스에서 실행되는 플러그인 호스트 라이브러리
         .library(name: "KalsaePluginProcess", targets: ["KalsaePluginProcess"]),
-        // 실제 WebView 기반 데스크톱 앱을 시연하는 실행 파일
-        .executable(name: "kalsae-demo", targets: ["KalsaeDemo"]),
         // 프로젝트 생성/빌드/개발 서버 등 개발자 도구 CLI 실행 파일
         .executable(name: "kalsae", targets: ["KalsaeCLI"]),
     ],
@@ -312,28 +308,6 @@ let package = Package(
             // Support/ 디렉토리는 KalsaeCLICore 타겟이 이미 소유하므로 제외
             exclude: ["Support"],
             sources: ["KalsaeCLI.swift", "Commands"],
-            swiftSettings: commonSwiftSettings
-        ),
-
-        // ── KalsaeDemo ───────────────────────────────────────────
-        // 실행 가능한 데모 앱. WASM/HTML 리소스를 번들링하고
-        // 각 플랫폼 PAL을 직접 참조하여 창 생성/메뉴/IPC 등 전체 기능 시연.
-        .executableTarget(
-            name: "KalsaeDemo",
-            dependencies: [
-                "Kalsae",
-                .target(name: "KalsaePlatformWindows",
-                        condition: .when(platforms: [.windows])),
-                .target(name: "KalsaePlatformMac",
-                        condition: .when(platforms: [.macOS])),
-                .target(name: "KalsaePlatformLinux",
-                        condition: .when(platforms: [.linux])),
-            ],
-            path: "Sources/KalsaeDemo",
-            // 벤치마크 데이터 (빌드 시 불필요하므로 제외)
-            exclude: ["dist-bench"],
-            // 웹 프론트엔드 빌드 결과물 (HTML/CSS/JS 등)
-            resources: [.copy("Resources")],
             swiftSettings: commonSwiftSettings
         ),
 

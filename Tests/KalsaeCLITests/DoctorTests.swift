@@ -234,6 +234,35 @@ struct DoctorTests {
         #endif
     }
 
+    @Test("Windows doctor points local path-dependency consumers to the KalSae checkout")
+    func windowsPathDependencyWebView2Hint() throws {
+        #if os(Windows)
+            let root = try makeTempProject()
+            let kalsaeRoot = root.appendingPathComponent("deps").appendingPathComponent("KalSae")
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            try FileManager.default.createDirectory(
+                at: kalsaeRoot.appendingPathComponent("Sources").appendingPathComponent("CKalsaeWV2"),
+                withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(
+                at: kalsaeRoot.appendingPathComponent("Scripts"),
+                withIntermediateDirectories: true)
+            try write("stub", to: kalsaeRoot.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1"))
+            try write(
+                "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"App\", dependencies: [.package(path: \"deps/KalSae\")])\n",
+                to: root.appendingPathComponent("Package.swift"))
+
+            let report = KSDoctor.run(.init(projectRoot: root, skipExternalChecks: true))
+
+            let expectedPath = kalsaeRoot.path.lowercased()
+            #expect(
+                report.warnings.contains { $0.lowercased().contains(expectedPath) },
+                "doctor warnings should include inferred KalSae checkout path; got: \(report.warnings)"
+            )
+            #expect(report.warnings.contains { $0.contains("fetch-webview2.ps1") })
+        #endif
+    }
+
     @Test("windows status is nil on non-Windows hosts")
     func windowsStatusNilOffWindows() throws {
         #if !os(Windows)

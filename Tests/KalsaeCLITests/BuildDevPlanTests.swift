@@ -68,6 +68,32 @@ struct BuildPlanTests {
         #expect(dist.path.replacingOccurrences(of: "\\", with: "/").hasSuffix("/frontend/out"))
     }
 
+    @Test("dist resolution uses project root for bundled SwiftPM resource config")
+    func distResolutionBundledConfigUsesProjectRoot() {
+        let config = makeConfig()
+        let cwd = URL(fileURLWithPath: "C:/repo")
+        let configURL = URL(fileURLWithPath: "C:/repo/Sources/App/Resources/kalsae.json")
+        let dist = KSBuildPlan.resolveDistURL(
+            config: config,
+            configURL: configURL,
+            cwd: cwd,
+            distOverride: nil)
+        #expect(dist.path.replacingOccurrences(of: "\\", with: "/") == "C:/repo/dist")
+    }
+
+    @Test("dist resolution falls back to config directory for non-standard layout")
+    func distResolutionNonStandardLayoutFallsBackToConfigDirectory() {
+        let config = makeConfig()
+        let cwd = URL(fileURLWithPath: "C:/repo")
+        let configURL = URL(fileURLWithPath: "C:/repo/config/dev/kalsae.json")
+        let dist = KSBuildPlan.resolveDistURL(
+            config: config,
+            configURL: configURL,
+            cwd: cwd,
+            distOverride: nil)
+        #expect(dist.path.replacingOccurrences(of: "\\", with: "/") == "C:/repo/config/dev/dist")
+    }
+
     @Test("dist validation fails when missing")
     func distValidationMissing() throws {
         let root = FileManager.default.temporaryDirectory

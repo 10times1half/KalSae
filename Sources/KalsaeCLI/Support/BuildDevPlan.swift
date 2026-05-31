@@ -97,17 +97,19 @@ public enum KSBuildPlan {
         //     → <root>/dist
         //
         // 이 자동 보정 덕분에 새 템플릿은 `frontendDist: "dist"` 를 그대로 쓸 수 있다.
-        let baseDir = configDirForFrontendDist(configURL: configURL)
+        let baseDir = projectRootForBundledConfig(configURL: configURL)
+            ?? configURL.deletingLastPathComponent()
         return
             baseDir
             .appendingPathComponent(config.build.frontendDist)
             .standardizedFileURL
     }
 
-    /// `frontendDist` 가 해석되는 기준 디렉터리. configURL 이
-    /// `.../Sources/<NAME>/Resources/kalsae.json` 형태이면 프로젝트 루트
-    /// (`.../`) 를 반환하고, 그 외에는 configURL 의 상위 디렉터리를 반환한다.
-    private static func configDirForFrontendDist(configURL: URL) -> URL {
+    /// `configURL` 이 SwiftPM 템플릿의 번들 리소스 위치
+    /// `.../Sources/<NAME>/Resources/kalsae.json` 패턴과 정확히 맞으면 프로젝트 루트
+    /// (`.../`) 를 반환한다. 패턴이 아니면 `nil` 을 반환하고 호출부가 명시적으로
+    /// `configURL.deletingLastPathComponent()` 로 fallback 한다.
+    private static func projectRootForBundledConfig(configURL: URL) -> URL? {
         let dir = configURL.deletingLastPathComponent()
         // 패턴: */Sources/*/Resources
         let comps = dir.pathComponents
@@ -121,7 +123,7 @@ public enum KSBuildPlan {
                 .deletingLastPathComponent()  // strip <NAME>
                 .deletingLastPathComponent()  // strip Sources
         }
-        return dir
+        return nil
     }
 
     /// 프론트엔드 `dist` 디렉터리의 유효성을 검사합니다.

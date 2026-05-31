@@ -32,10 +32,23 @@
                 throw ValidationError("--arch on macOS must be: arm64 | x86_64 | universal (got '\(arch)')")
             }
 
-            let buildDir = cwd.appendingPathComponent(".build/\(configuration)")
-            let exeURL = buildDir.appendingPathComponent(info.executableName)
-            guard fm.fileExists(atPath: exeURL.path) else {
-                throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
+            let expectedExePaths = builtExecutableCandidates(
+                cwd: cwd,
+                configuration: configuration,
+                executableName: info.executableName,
+                executableExtension: nil,
+                fm: fm)
+            guard let exeURL = resolveBuiltExecutableURL(
+                cwd: cwd,
+                configuration: configuration,
+                executableName: info.executableName,
+                executableExtension: nil,
+                fm: fm)
+            else {
+                throw ValidationError(
+                    "Built executable not found. Checked: "
+                        + expectedExePaths.map(\.path).joined(separator: "; ")
+                        + ". Did the build succeed?")
             }
 
             // dist 해석은 sync 경로와 동일한 헬퍼를 써 cwd 기준 일관성 보장 (Windows와 동일).

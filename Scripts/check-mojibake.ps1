@@ -1,4 +1,5 @@
 [CmdletBinding()]
+# Repo-internal — paths assume KalSae checkout layout.
 param(
     [string]$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path,
     [switch]$CodeOnly,
@@ -28,8 +29,8 @@ $excludeDirRegex = @(
     '\\Vendor\\WebView2\\',
     # Demo bundle assets are minified JS chunks; their compressed byte
     # sequences trigger false positives on the mojibake patterns below.
-    '\\Sources\\KalsaeDemo\\Resources\\assets\\',
-    '\\Sources\\KalsaeDemo\\dist-bench\\',
+    '\\Samples\\KalsaeDemo\\Sources\\KalsaeDemo\\Resources\\assets\\',
+    '\\bench\\',
     # Build / packaging outputs (mirror .gitignore).
     '\\dist\\',
     '\\out\\',

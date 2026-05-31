@@ -319,27 +319,97 @@ public enum KSDoctor {
         fm: FileManager
     ) {
         #if os(Windows)
-            let headerFile =
-                projectRoot
+            let roots = webView2CandidateRoots(projectRoot: projectRoot, fm: fm)
+            let headerFiles = roots.map(webView2HeaderFile(for:))
+            if let headerFile = headerFiles.first(where: { fm.fileExists(atPath: $0.path) }) {
+                report.infos.append("WebView2 SDK headers found: \(headerFile.path)")
+                mutateWindowsStatus(report: &report) { $0.webview2 = true }
+                return
+            }
+
+            report.warnings.append(
+                "WebView2 SDK headers missing. Checked: \(headerFiles.map(\.path).joined(separator: "; "))")
+
+            if let localRoot = roots.first(where: { $0.standardizedFileURL != projectRoot.standardizedFileURL }) {
+                report.warnings.append(
+                    "This project appears to depend on a KalSae checkout at \(localRoot.path). Run \(localRoot.path)\\Scripts\\fetch-webview2.ps1 there before bare `swift build`, or prefer `kalsae build` / `kalsae dev`.")
+            } else {
+                report.warnings.append(
+                    "Run .\\Scripts\\fetch-webview2.ps1 from the KalSae checkout used by this project before bare `swift build`, or prefer `kalsae build` / `kalsae dev`.")
+            }
+
+            mutateWindowsStatus(report: &report) { $0.webview2 = false }
+        #else
+            report.infos.append("WebView2 check skipped on non-Windows platform.")
+        #endif
+    }
+
+    #if os(Windows)
+        private static func webView2HeaderFile(for root: URL) -> URL {
+            root
                 .appendingPathComponent("Vendor")
                 .appendingPathComponent("WebView2")
                 .appendingPathComponent("build")
                 .appendingPathComponent("native")
                 .appendingPathComponent("include")
                 .appendingPathComponent("WebView2.h")
-            let found = fm.fileExists(atPath: headerFile.path)
-            if found {
-                report.infos.append("WebView2 SDK headers found: \(headerFile.path)")
-            } else {
-                report.warnings.append("WebView2 SDK headers missing: \(headerFile.path)")
-                report.warnings.append(
-                    "Run .\\Scripts\\fetch-webview2.ps1 from project root, or pass -ProjectRoot to script.")
+        }
+
+        private static func webView2CandidateRoots(projectRoot: URL, fm: FileManager) -> [URL] {
+            var roots: [URL] = [projectRoot]
+            roots.append(contentsOf: localKalsaePathDependencyRoots(projectRoot: projectRoot, fm: fm))
+            roots.append(contentsOf: resolvedKalsaeCheckoutRoots(projectRoot: projectRoot, fm: fm))
+
+            var seen = Set<String>()
+            var deduped: [URL] = []
+            for root in roots {
+                let key = root.standardizedFileURL.path.lowercased()
+                if seen.insert(key).inserted {
+                    deduped.append(root.standardizedFileURL)
+                }
             }
-            mutateWindowsStatus(report: &report) { $0.webview2 = found }
-        #else
-            report.infos.append("WebView2 check skipped on non-Windows platform.")
-        #endif
-    }
+            return deduped
+        }
+
+        private static func localKalsaePathDependencyRoots(projectRoot: URL, fm: FileManager) -> [URL] {
+            let manifest = projectRoot.appendingPathComponent("Package.swift")
+            guard
+                fm.fileExists(atPath: manifest.path),
+                let text = try? String(contentsOf: manifest, encoding: .utf8),
+                let regex = try? NSRegularExpression(
+                    pattern: "\\.package\\s*\\(\\s*path\\s*:\\s*\"([^\"]+)\"")
+            else { return [] }
+
+            let nsText = text as NSString
+            return regex.matches(in: text, range: NSRange(location: 0, length: nsText.length)).compactMap {
+                guard $0.numberOfRanges == 2 else { return nil }
+                let raw = nsText.substring(with: $0.range(at: 1))
+                let candidateBase: URL
+                if (raw as NSString).isAbsolutePath {
+                    candidateBase = URL(fileURLWithPath: raw)
+                } else {
+                    candidateBase = projectRoot.appendingPathComponent(raw)
+                }
+                let candidate = candidateBase.standardizedFileURL
+                return isLikelyKalsaeRoot(candidate, fm: fm) ? candidate : nil
+            }
+        }
+
+        private static func resolvedKalsaeCheckoutRoots(projectRoot: URL, fm: FileManager) -> [URL] {
+            let checkouts = projectRoot.appendingPathComponent(".build").appendingPathComponent("checkouts")
+            guard let children = try? fm.contentsOfDirectory(
+                at: checkouts,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles])
+            else { return [] }
+            return children.filter { isLikelyKalsaeRoot($0, fm: fm) }
+        }
+
+        private static func isLikelyKalsaeRoot(_ url: URL, fm: FileManager) -> Bool {
+            fm.fileExists(atPath: url.appendingPathComponent("Sources").appendingPathComponent("CKalsaeWV2").path)
+                && fm.fileExists(atPath: url.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1").path)
+        }
+    #endif
 
     /// Windows 호스트에서 `--msi` / `--store win-store` 등 패키지 빌드에 필요한
     /// 외부 도구 존재 여부를 확인하고 `report.windows.{wix,signtool}` 에 기록한다.

@@ -1,8 +1,9 @@
+# Repo-internal — paths assume KalSae checkout layout.
 param([string]$Accelerator = '^o')
 $out="$env:TEMP\kdemo-stdout.log"
 $err="$env:TEMP\kdemo-stderr.log"
 Remove-Item -ErrorAction SilentlyContinue $out,$err
-$exe = Join-Path $PSScriptRoot '..\.build\release\kalsae-demo.exe'
+$exe = Join-Path $PSScriptRoot '..\Samples\KalsaeDemo\.build\release\kalsae-demo.exe'
 $exe = (Resolve-Path $exe).Path
 $cwd = Split-Path $exe
 $p = Start-Process -FilePath $exe -WorkingDirectory $cwd -RedirectStandardOutput $out -RedirectStandardError $err -PassThru

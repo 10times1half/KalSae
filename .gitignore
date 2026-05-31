@@ -18,7 +18,7 @@ Sources/CKalsaeWV2/Vendor/
 dist/
 out/
 release/
-Sources/KalsaeDemo/dist-bench/
+bench/
 *.zip
 *.exe
 *.dll

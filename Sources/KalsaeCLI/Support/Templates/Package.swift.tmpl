@@ -22,7 +22,8 @@ let package = Package(
         .executableTarget(
             name: "{{NAME}}",
             dependencies: [
-        .product(name: "Kalsae", package: "kalsae"),
+                .product(name: "Kalsae", package: "kalsae"),
+                .product(name: "KalsaeMacros", package: "kalsae"),
             ],
             path: "Sources/{{NAME}}",
             resources: [.copy("Resources")],

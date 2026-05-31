@@ -141,27 +141,27 @@ jobs:
         run: swift package resolve
 
       - name: Build Demo Product
-        run: swift build --product kalsae-demo -Xswiftc -warnings-as-errors
+        run: swift build --package-path Samples/KalsaeDemo --product kalsae-demo -Xswiftc -warnings-as-errors
 
       - name: Build Release Artifact (Windows tags)
         if: runner.os == 'Windows' && startsWith(github.ref, 'refs/tags/')
         shell: pwsh
         run: |
-          swift build -c release --product kalsae-demo -Xswiftc -warnings-as-errors
+          swift build -c release --package-path Samples/KalsaeDemo --product kalsae-demo -Xswiftc -warnings-as-errors
           swift build -c release --product kalsae       -Xswiftc -warnings-as-errors
 
           # Stage WebView2Loader.dll into .build/release/ (bare swift build does not).
-          ./Scripts/stage-webview2-loader.ps1 -Configuration release
+          ./Scripts/stage-webview2-loader.ps1 -Configuration release -ProjectRoot .\Samples\KalsaeDemo
 
           # Stage Swift runtime + MSVC redist DLLs next to kalsae-demo.exe so it
           # runs on a clean Windows machine (no Swift toolchain installed).
           ./Scripts/stage-windows-cli-runtime.ps1 `
-            -Executable .\.build\release\kalsae-demo.exe `
-            -Destination .\.build\release
+            -Executable .\Samples\KalsaeDemo\.build\release\kalsae-demo.exe `
+            -Destination .\Samples\KalsaeDemo\.build\release
 
-          $releaseDir = (Resolve-Path .build\release).Path
+          $releaseDir = (Resolve-Path Samples\KalsaeDemo\.build\release).Path
           $demoExe    = Join-Path $releaseDir 'kalsae-demo.exe'
-          $demoRes    = Join-Path $releaseDir 'Kalsae_KalsaeDemo.resources'
+          $demoRes    = Join-Path $releaseDir 'KalsaeDemo_KalsaeDemo.resources'
           $cliExe     = Join-Path $releaseDir 'kalsae.exe'
           $loader     = Join-Path $releaseDir 'WebView2Loader.dll'
 
@@ -177,7 +177,7 @@ jobs:
           Copy-Item $demoExe dist\kalsae-demo\ -Force
           Copy-Item $demoRes dist\kalsae-demo\ -Recurse -Force
           Copy-Item $loader  dist\kalsae-demo\ -Force
-          # Staged runtime DLLs sit alongside kalsae-demo.exe in .build/release.
+          # Staged runtime DLLs sit alongside kalsae-demo.exe in Samples/KalsaeDemo/.build/release.
           Get-ChildItem $releaseDir -Filter '*.dll' -File `
             | Where-Object { $_.Name -ne 'WebView2Loader.dll' } `
             | Copy-Item -Destination dist\kalsae-demo\ -Force

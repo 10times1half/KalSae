@@ -299,11 +299,12 @@ swift sdk install \
 swift build --swift-sdk aarch64-unknown-linux-android28 \
   --product KalsaePlatformAndroid -c release
 swift build --product kalsae -c release
+DEMO_RESOURCES="Samples/KalsaeDemo/Sources/KalsaeDemo/Resources"
 .build/release/kalsae build --android \
   --android-native-lib "$(find .build -name libKalsaePlatformAndroid.so -path '*release*' | head -n1)" \
   --android-min-sdk 28 --android-target-sdk 35 \
-  --config Sources/KalsaeDemo/Resources/kalsae.json \
-  --dist Sources/KalsaeDemo/Resources \
+  --config "$DEMO_RESOURCES/kalsae.json" \
+  --dist "$DEMO_RESOURCES" \
   --output dist/android-e2e
 cd dist/android-e2e && gradle wrapper --gradle-version 8.10 && ./gradlew assembleDebug
 ```

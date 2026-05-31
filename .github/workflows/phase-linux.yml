@@ -99,12 +99,14 @@ jobs:
         run: swift build --product kalsae -c release
 
       - name: Build KalsaeDemo executable (release)
-        run: swift build --product KalsaeDemo -c release
+        run: swift build --package-path Samples/KalsaeDemo --product kalsae-demo -c release
 
       - name: Emit Linux distribution (tarball + .deb)
         run: |
           set -euo pipefail
-          EXE=".build/release/KalsaeDemo"
+          DEMO_SAMPLE_DIR="Samples/KalsaeDemo"
+          DEMO_RESOURCES="$DEMO_SAMPLE_DIR/Sources/KalsaeDemo/Resources"
+          EXE="$DEMO_SAMPLE_DIR/.build/release/kalsae-demo"
           OUT="${PWD}/dist/linux-e2e"
           .build/release/kalsae build \
             --linux \
@@ -112,8 +114,8 @@ jobs:
             --linux-format tarball,deb \
             --linux-arch x86_64 \
             --linux-maintainer 'Kalsae CI <ci@kalsae.dev>' \
-            --config Sources/KalsaeDemo/Resources/kalsae.json \
-            --dist Sources/KalsaeDemo/Resources \
+            --config "${DEMO_RESOURCES}/kalsae.json" \
+            --dist "${DEMO_RESOURCES}" \
             --output "${OUT}"
           ls -la "${OUT}"
 

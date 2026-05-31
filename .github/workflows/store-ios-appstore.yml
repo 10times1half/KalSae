@@ -108,6 +108,8 @@ jobs:
           ASC_ISSUER: ${{ secrets.APPLE_ASC_API_ISSUER_ID }}
         run: |
           set -euo pipefail
+          pushd Samples/KalsaeDemo >/dev/null
+          DEMO_RESOURCES="Sources/KalsaeDemo/Resources"
           DRY_FLAG=""
           if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
 
@@ -116,18 +118,21 @@ jobs:
             ASC_ARGS="--asc-key $ASC_KEY --asc-issuer $ASC_ISSUER"
           fi
 
-          .build/release/kalsae build \
+          ../../.build/release/kalsae build \
             --store ios-appstore \
+            --config "${DEMO_RESOURCES}/kalsae.json" \
+            --dist "${DEMO_RESOURCES}" \
             --ios-project "${{ inputs.project }}" \
             --ios-scheme  "${{ inputs.scheme }}" \
             --ios-export-method "${{ inputs.export-method }}" \
             $ASC_ARGS \
             $DRY_FLAG
+          popd >/dev/null
 
       - name: Upload .ipa artifact
         if: ${{ !inputs.dry-run }}
         uses: actions/upload-artifact@v4
         with:
           name: kalsae-demo-ios-appstore
-          path: dist/**/*.ipa
+          path: Samples/KalsaeDemo/dist/**/*.ipa
           if-no-files-found: warn

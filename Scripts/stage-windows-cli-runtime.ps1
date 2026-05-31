@@ -1,5 +1,6 @@
 #
 # stage-windows-cli-runtime.ps1
+# Repo-internal — paths assume KalSae checkout layout.
 #
 # kalsae.exe(또는 임의 Swift-on-Windows 실행파일) 옆에 필요한 Swift 런타임
 # DLL + VC++ 재배포 DLL 을 화이트리스트 방식으로 복사한다. dumpbin 이 보고하는

@@ -5,6 +5,8 @@ name: Store · Windows MSIX
 # 필요한 Repo Secrets (Partner Center 등록 후):
 #   WINDOWS_CODESIGN_PFX_BASE64  : .pfx 코드서명 인증서 (base64) — Publisher 일치
 #   WINDOWS_CODESIGN_PFX_PASSWORD: .pfx 비밀번호
+#   WINDOWS_MSIX_PUBLISHER       : (선택) MSIX Publisher 문자열
+#                                 예) CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR
 #
 # Microsoft Store 자동 제출은 MS Store submission API 또는 StoreBroker 를
 # 별도로 구성해야 한다. 본 워크플로는 .msix 생성 + 서명까지만 자동화한다.
@@ -43,6 +45,10 @@ jobs:
         shell: pwsh
         run: swift build -c release --product kalsae
 
+      - name: Build demo executable (release)
+        shell: pwsh
+        run: swift build -c release --package-path Samples/KalsaeDemo --product kalsae-demo
+
       - name: Setup Windows SDK (MakeAppx / signtool)
         shell: pwsh
         run: |
@@ -75,22 +81,41 @@ jobs:
         shell: pwsh
         env:
           PFX_PASSWORD: ${{ secrets.WINDOWS_CODESIGN_PFX_PASSWORD }}
+          MSIX_PUBLISHER: ${{ secrets.WINDOWS_MSIX_PUBLISHER }}
         run: |
+          Push-Location Samples\KalsaeDemo
+          $demoResources = 'Sources\KalsaeDemo\Resources'
           $isDry = "${{ inputs.dry-run }}" -eq "true"
           $extraArgs = @()
+          $kalsaeExe = '..\..\.build\release\kalsae.exe'
+          if (-not (Test-Path $kalsaeExe)) {
+            $kalsaeExe = '..\..\.build\x86_64-unknown-windows-msvc\release\kalsae.exe'
+          }
+
+          if ($isDry) {
+            $publisher = 'CN=Kalsae Dry Run, O=Kalsae'
+          } else {
+            $publisher = $env:MSIX_PUBLISHER
+            if ([string]::IsNullOrWhiteSpace($publisher)) {
+              Write-Error "Non-dry run requires WINDOWS_MSIX_PUBLISHER secret (e.g. 'CN=Acme Inc, O=Acme Inc, L=Seoul, C=KR')."
+              exit 1
+            }
+          }
+
           if (-not $isDry) {
             # signtool template: {file} 는 KSSigntoolHook 가 .msix 산출물 경로로 치환.
-            $template = 'signtool.exe sign /fd SHA256 /f ".build\msix\cert.pfx" /p "' + $env:PFX_PASSWORD + '" {file}'
+            $template = 'signtool.exe sign /fd SHA256 /f "..\..\.build\msix\cert.pfx" /p "' + $env:PFX_PASSWORD + '" {file}'
             $extraArgs += @("--msix-signtool-cmd", $template)
           }
           if ($isDry) { $extraArgs += "--dryrun" }
-          & .build\release\kalsae.exe build --store win-store @extraArgs
+          & $kalsaeExe build --store win-store --publisher $publisher --target kalsae-demo --config "$demoResources\kalsae.json" --dist $demoResources @extraArgs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Pop-Location
 
       - name: Upload .msix artifact
         if: ${{ !inputs.dry-run }}
         uses: actions/upload-artifact@v4
         with:
           name: kalsae-demo-windows-msix
-          path: dist/**/*.msix
+          path: Samples/KalsaeDemo/dist/**/*.msix
           if-no-files-found: warn

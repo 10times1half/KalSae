@@ -26,8 +26,7 @@ on:
       - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
       - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
       - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
-      - 'Sources/KalsaeDemo/Resources/kalsae.json'
-      - 'Sources/KalsaeDemo/Resources/**'
+      - 'Samples/KalsaeDemo/**'
       - 'Samples/KalsaeAndroidSample/**'
       - 'Package.swift'
       - 'Scripts/cross-compile-android.sh'
@@ -38,8 +37,7 @@ on:
       - 'Sources/KalsaeCLI/Support/PackagerAndroid.swift'
       - 'Sources/KalsaeCLI/Support/KSIconResizer.swift'
       - 'Sources/KalsaeCLI/Commands/BuildCommand.swift'
-      - 'Sources/KalsaeDemo/Resources/kalsae.json'
-      - 'Sources/KalsaeDemo/Resources/**'
+      - 'Samples/KalsaeDemo/**'
       - 'Samples/KalsaeAndroidSample/**'
       - 'Package.swift'
       - 'Scripts/cross-compile-android.sh'
@@ -161,14 +159,16 @@ jobs:
       - name: Emit Android Gradle project (`kalsae build --android`)
         run: |
           set -euo pipefail
+          DEMO_SAMPLE_DIR="Samples/KalsaeDemo"
+          DEMO_RESOURCES="$DEMO_SAMPLE_DIR/Sources/KalsaeDemo/Resources"
           OUTPUT_DIR="${PWD}/dist/android-e2e"
           .build/release/kalsae build \
             --android \
             --android-native-lib "${ANDROID_NATIVE_LIB}" \
             --android-min-sdk 28 \
             --android-target-sdk 35 \
-            --config Sources/KalsaeDemo/Resources/kalsae.json \
-            --dist Sources/KalsaeDemo/Resources \
+            --config "${DEMO_RESOURCES}/kalsae.json" \
+            --dist "${DEMO_RESOURCES}" \
             --output "${OUTPUT_DIR}"
           echo "EMIT_DIR=${OUTPUT_DIR}" >> "$GITHUB_ENV"
           ls -la "${OUTPUT_DIR}"

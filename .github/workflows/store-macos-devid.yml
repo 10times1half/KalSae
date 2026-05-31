@@ -81,17 +81,23 @@ jobs:
           PROFILE: ${{ secrets.APPLE_NOTARYTOOL_PROFILE }}
         run: |
           set -euo pipefail
+          pushd Samples/KalsaeDemo >/dev/null
+          DEMO_RESOURCES="Sources/KalsaeDemo/Resources"
           DRY_FLAG=""
           if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
-          .build/release/kalsae build \
+          ../../.build/release/kalsae build \
             --store devid \
+            --target kalsae-demo \
+            --config "${DEMO_RESOURCES}/kalsae.json" \
+            --dist "${DEMO_RESOURCES}" \
             --notarytool-profile "${PROFILE:-kalsae-notarytool}" \
             $DRY_FLAG
+          popd >/dev/null
 
       - name: Upload signed artifact
         if: ${{ !inputs.dry-run }}
         uses: actions/upload-artifact@v4
         with:
           name: kalsae-demo-macos-devid
-          path: dist/**/*.zip
+          path: Samples/KalsaeDemo/dist/**/*.zip
           if-no-files-found: warn

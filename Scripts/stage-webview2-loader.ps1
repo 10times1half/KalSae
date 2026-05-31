@@ -1,5 +1,6 @@
 #
 # stage-webview2-loader.ps1
+# Repo-internal — paths assume KalSae checkout layout.
 # Copies WebView2Loader.dll from Sources/CKalsaeWV2/Vendor/WebView2/runtimes/<arch>/native/
 # into the SwiftPM build output directories so that bare `swift build` followed
 # by direct invocation of `.\.build\<config>\app.exe` works without

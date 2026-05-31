@@ -154,6 +154,10 @@ struct ProjectTemplateTests {
             "kalsaePath should emit a SwiftPM path dependency, got: \(package)"
         )
         #expect(
+            package.contains(".product(name: \"KalsaeMacros\", package: \"kalsae\")"),
+            "generated Package.swift should depend on KalsaeMacros for @KSCommand support"
+        )
+        #expect(
             !package.contains("https://github.com/10times1half/KalSae.git"),
             "kalsaePath should suppress the canonical URL dependency"
         )

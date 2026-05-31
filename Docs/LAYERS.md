@@ -123,7 +123,7 @@
 
 | 영역 | 위치 | 내용 |
 |---|---|---|
-| 데모 앱 | [Sources/KalsaeDemo/](../Sources/KalsaeDemo/) | `kalsae-demo` 실행 파일, 프론트엔드 자산(`Resources/`, `dist-bench/`) |
+| 데모 앱 | [Samples/KalsaeDemo/](../Samples/KalsaeDemo/) | 독립 SwiftPM 샘플 패키지, `kalsae-demo` 실행 파일, 프론트엔드 자산(`Resources/`), 벤치 산출물(`bench/`) |
 | 예제 설정 | [Examples/](../Examples/) | `kalsae.sample.json` |
 | Android 샘플 | [Samples/KalsaeAndroidSample/](../Samples/KalsaeAndroidSample/) | Gradle 프로젝트 (Kotlin 호스트 참조 구현) |
 | 테스트 | [Tests/](../Tests/) | `KalsaeCoreTests`, `KalsaeCLITests`, `KalsaeMacrosTests`, `KalsaePlatform*Tests`, `KalsaePluginProcessTests` (각 L3·L4 모듈과 1:1 대응) |

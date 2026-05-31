@@ -85,7 +85,7 @@ On Windows PowerShell, chain commands with `;` (not `&&`).
 swift build
 
 # Build demo executable only
-swift build --product kalsae-demo
+swift build --package-path Samples/KalsaeDemo --product kalsae-demo
 
 # Run full test suite
 swift test
@@ -104,21 +104,21 @@ Tests in this repository use **swift-testing** (`@Test`, `@Suite`, `#expect`), n
 ```bash
 git clone <this-repo>
 cd Kalsae
-swift build
-swift run kalsae-demo
+swift build --package-path Samples/KalsaeDemo
+swift run --package-path Samples/KalsaeDemo kalsae-demo
 ```
 
 > **Windows users:** bare `swift build` does not stage `WebView2Loader.dll`,
 > the Swift runtime DLLs (`swift_Concurrency.dll`, `swiftCore.dll`,
 > `Foundation.dll`, …) or the MSVC redistributable next to the produced
-> `.exe`, so `swift run kalsae-demo` will exit immediately with
+> `.exe`, so `swift run --package-path Samples/KalsaeDemo kalsae-demo` will exit immediately with
 > `HRESULT 0x8007007E` or `swift_Concurrency.dll not found`. Run these once
 > after the build:
 >
 > ```powershell
 > .\Scripts\fetch-webview2.ps1                          # one-time, populates Vendor/WebView2/
-> .\Scripts\stage-webview2-loader.ps1 -Configuration debug
-> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+> .\Scripts\stage-webview2-loader.ps1 -Configuration debug -ProjectRoot .\Samples\KalsaeDemo
+> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\Samples\KalsaeDemo\.build\debug\kalsae-demo.exe -Destination .\Samples\KalsaeDemo\.build\debug
 > ```
 >
 > For your **own** projects scaffolded with `kalsae new`, `kalsae build` and
@@ -172,7 +172,7 @@ On Windows, `kalsae build` and `kalsae dev` automatically:
   Import Table walker (opt out: `--no-stage-runtime`).
 
 This is what makes `kalsae new` projects runnable out of the box on Windows.
-The bundled demo in this repo is built with bare `swift build` and therefore
+The bundled demo sample in this repo is built with bare `swift build` and therefore
 still needs the manual staging shown earlier under "Try the bundled demo".
 
 ### Add Kalsae as a SwiftPM dependency
@@ -188,6 +188,15 @@ When semver tags are published, prefer a version requirement:
 ```swift
 .package(url: "https://github.com/10times1half/KalSae.git", from: "0.1.0")
 ```
+
+On Windows, if your app uses a **local path dependency** such as
+`.package(path: "../KalSae")` and you run bare `swift build` instead of
+`kalsae build` / `kalsae dev`, run `./Scripts/fetch-webview2.ps1` once in that
+KalSae checkout first so `Vendor/WebView2/` exists for `CKalsaeWV2`.
+
+Migration note: the public SwiftPM product `KalsaeCore` is no longer exported.
+If your manifest still references `.product(name: "KalsaeCore", package: "kalsae")`,
+switch it to `.product(name: "Kalsae", package: "kalsae")`.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
@@ -210,7 +219,7 @@ Windows PowerShell에서는 명령 체이닝 시 `&&` 대신 `;`를 사용하세
 swift build
 
 # 데모 실행 파일만 빌드
-swift build --product kalsae-demo
+swift build --package-path Samples/KalsaeDemo --product kalsae-demo
 
 # 전체 테스트
 swift test
@@ -229,27 +238,31 @@ swift test --no-parallel
 ```bash
 git clone <this-repo>
 cd Kalsae
-swift build
-swift run kalsae-demo
+swift build --package-path Samples/KalsaeDemo
+swift run --package-path Samples/KalsaeDemo kalsae-demo
 ```
 
 > **Windows 사용자:** 순수 `swift build` 는 `WebView2Loader.dll`, Swift
 > 런타임 DLL (`swift_Concurrency.dll`, `swiftCore.dll`, `Foundation.dll`
 > 등), MSVC 재배포를 산출물 옆에 복사하지 않습니다. 따라서
-> `swift run kalsae-demo` 는 `HRESULT 0x8007007E` 또는
+> `swift run --package-path Samples/KalsaeDemo kalsae-demo` 는 `HRESULT 0x8007007E` 또는
 > `swift_Concurrency.dll not found` 로 즉시 종료됩니다. 빌드 후
 > 다음 스크립트를 1회 실행하세요:
 >
 > ```powershell
 > .\Scripts\fetch-webview2.ps1                          # 상시 1회、Vendor/WebView2/ 준비
-> .\Scripts\stage-webview2-loader.ps1 -Configuration debug
-> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+> .\Scripts\stage-webview2-loader.ps1 -Configuration debug -ProjectRoot .\Samples\KalsaeDemo
+> .\Scripts\stage-windows-cli-runtime.ps1 -Executable .\Samples\KalsaeDemo\.build\debug\kalsae-demo.exe -Destination .\Samples\KalsaeDemo\.build\debug
 > ```
 >
 > `kalsae new` 로 생성한 본인 프로젝트에서는 `kalsae build` /
 > `kalsae dev` 가 이 staging 을 자동으로 수행합니다(아래 참고).
 > 데모는 SwiftPM으로 직접 빌드하기 때문에 수동 staging 이
 > 필요합니다.
+
+마이그레이션 안내: 공개 SwiftPM product `KalsaeCore` 는 더 이상 export 되지 않습니다.
+manifest 에 `.product(name: "KalsaeCore", package: "kalsae")` 가 남아 있다면
+`.product(name: "Kalsae", package: "kalsae")` 로 바꿔주세요.
 
 ### 새 프로젝트 만들기
 
@@ -316,7 +329,7 @@ Windows에서는 `kalsae build` / `kalsae dev` 가 다음을 자동으로 수행
 
 ### Windows: `kalsae-demo.exe` exits immediately / `HRESULT 0x8007007E` / `swift_Concurrency.dll not found`
 
-Symptom: after `swift build ; swift run kalsae-demo` the process exits
+Symptom: after `swift build --package-path Samples/KalsaeDemo ; swift run --package-path Samples/KalsaeDemo kalsae-demo` the process exits
 without opening a window. Logs may show
 `CreateCoreWebView2EnvironmentWithOptions failed (HRESULT=0x8007007E)` or a
 DLL-loader error such as `swift_Concurrency.dll not found`.
@@ -331,12 +344,12 @@ Fix — stage them once after the build:
 
 ```powershell
 .\Scripts\fetch-webview2.ps1                          # one-time, populates Vendor/WebView2/
-.\Scripts\stage-webview2-loader.ps1 -Configuration debug
-.\Scripts\stage-windows-cli-runtime.ps1 -Executable .\.build\debug\kalsae-demo.exe -Destination .\.build\debug
+.\Scripts\stage-webview2-loader.ps1 -Configuration debug -ProjectRoot .\Samples\KalsaeDemo
+.\Scripts\stage-windows-cli-runtime.ps1 -Executable .\Samples\KalsaeDemo\.build\debug\kalsae-demo.exe -Destination .\Samples\KalsaeDemo\.build\debug
 ```
 
 For `release` builds substitute `-Configuration release` and the
-`.build\release\` path. For your own `kalsae new` projects this is handled
+`Samples\KalsaeDemo\.build\release\` path. For your own `kalsae new` projects this is handled
 automatically by `kalsae build` / `kalsae dev` (opt out via
 `--no-stage-runtime` or `--no-auto-fetch-web-view2`).
 
@@ -535,14 +548,14 @@ struct MyApp {
 
 Supported signatures: any number of `Codable` parameters, `async`, `throws` (KSError preserved), `Encodable` returns, optional parameters with JSON-key omission.
 
-See [Sources/KalsaeDemo/Demo.swift](Sources/KalsaeDemo/Demo.swift) for a complete, runnable example.
+See the [KalsaeDemo sample entrypoint](Samples/KalsaeDemo/Sources/KalsaeDemo/Demo.swift) for a complete, runnable example.
 
 <details>
 <summary>🇰🇷 한국어로 보기</summary>
 
 Swift 함수에 `@KSCommand`만 붙이면 JavaScript에서 호출할 수 있는 명령이 됩니다. 매개변수는 개수 제한 없이 모두 `Codable`이면 되고, `async`/`throws`(`KSError`는 그대로 전달)/`Encodable` 반환을 지원합니다. Optional 매개변수는 JSON 키가 누락되어도 허용됩니다.
 
-전체 예시는 [Sources/KalsaeDemo/Demo.swift](Sources/KalsaeDemo/Demo.swift)를 참고하세요.
+전체 예시는 [KalsaeDemo 샘플 엔트리포인트](Samples/KalsaeDemo/Sources/KalsaeDemo/Demo.swift)를 참고하세요.
 
 </details>
 

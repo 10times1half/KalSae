@@ -33,11 +33,25 @@
                 throw ValidationError("--arch must be one of: x64 | arm64 | x86")
             }
 
-            // 빌드된 .exe 경로 검증: `swift build` 가 완료된 직후여야 존재한다.
-            let buildDir = cwd.appendingPathComponent(".build/\(configuration)")
-            let exeURL = buildDir.appendingPathComponent("\(info.executableName).exe")
-            guard fm.fileExists(atPath: exeURL.path) else {
-                throw ValidationError("Built executable not found at \(exeURL.path). Did the build succeed?")
+            // 빌드된 .exe 경로 검증: SwiftPM 배치(.build/<config> 또는
+            // .build/<triple>/<config>)를 모두 탐색한다.
+            let expectedExePaths = builtExecutableCandidates(
+                cwd: cwd,
+                configuration: configuration,
+                executableName: info.executableName,
+                executableExtension: "exe",
+                fm: fm)
+            guard let exeURL = resolveBuiltExecutableURL(
+                cwd: cwd,
+                configuration: configuration,
+                executableName: info.executableName,
+                executableExtension: "exe",
+                fm: fm)
+            else {
+                throw ValidationError(
+                    "Built executable not found. Checked: "
+                        + expectedExePaths.map(\.path).joined(separator: "; ")
+                        + ". Did the build succeed?")
             }
 
             // dist 해석은 sync 경로(syncFrontendResourcesIfNeeded)와 동일한 헬퍼를 써

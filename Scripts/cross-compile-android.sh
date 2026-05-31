@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Repo-internal — paths assume KalSae checkout layout.
 # Cross-compile KalsaePlatformAndroid and emit a Gradle APK locally.
 #
 # Mirrors `.github/workflows/phase-android-e2e.yml`. Use this on a Linux or
@@ -24,6 +25,8 @@ SWIFT_ANDROID_SDK_CHECKSUM="ca7e09f09a591b6a661a39134aaf53b1b59d5e3a193b271ab1f2
 SWIFT_ANDROID_SDK_TRIPLE="aarch64-unknown-linux-android28"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+DEMO_SAMPLE_DIR="Samples/KalsaeDemo"
+DEMO_RESOURCES="$DEMO_SAMPLE_DIR/Sources/KalsaeDemo/Resources"
 cd "$REPO_ROOT"
 
 SKIP_APK=0
@@ -72,8 +75,8 @@ rm -rf "$OUTPUT_DIR"
   --android-native-lib "$SO_PATH" \
   --android-min-sdk 28 \
   --android-target-sdk 35 \
-  --config Sources/KalsaeDemo/Resources/kalsae.json \
-  --dist Sources/KalsaeDemo/Resources \
+  --config "$DEMO_RESOURCES/kalsae.json" \
+  --dist "$DEMO_RESOURCES" \
   --output "$OUTPUT_DIR"
 echo "    → $OUTPUT_DIR"
 

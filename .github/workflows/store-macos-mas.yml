@@ -77,19 +77,25 @@ jobs:
           INSTALLER_IDENTITY: ${{ secrets.APPLE_MAS_INSTALLER_IDENTITY }}
         run: |
           set -euo pipefail
+          pushd Samples/KalsaeDemo >/dev/null
+          DEMO_RESOURCES="Sources/KalsaeDemo/Resources"
           DRY_FLAG=""
           if [ "${{ inputs.dry-run }}" = "true" ]; then DRY_FLAG="--dryrun"; fi
-          .build/release/kalsae build \
+          ../../.build/release/kalsae build \
             --store mas \
+            --target kalsae-demo \
+            --config "${DEMO_RESOURCES}/kalsae.json" \
+            --dist "${DEMO_RESOURCES}" \
             --codesign-identity "${APP_IDENTITY:-}" \
             --installer-identity "${INSTALLER_IDENTITY:-}" \
-            --provision-profile .build/mas/embedded.provisionprofile \
+            --provision-profile ../../.build/mas/embedded.provisionprofile \
             $DRY_FLAG
+          popd >/dev/null
 
       - name: Upload .pkg artifact
         if: ${{ !inputs.dry-run }}
         uses: actions/upload-artifact@v4
         with:
           name: kalsae-demo-macos-mas
-          path: dist/**/*.pkg
+          path: Samples/KalsaeDemo/dist/**/*.pkg
           if-no-files-found: warn
