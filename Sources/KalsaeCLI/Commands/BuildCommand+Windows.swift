@@ -41,12 +41,13 @@
                 executableName: info.executableName,
                 executableExtension: "exe",
                 fm: fm)
-            guard let exeURL = resolveBuiltExecutableURL(
-                cwd: cwd,
-                configuration: configuration,
-                executableName: info.executableName,
-                executableExtension: "exe",
-                fm: fm)
+            guard
+                let exeURL = resolveBuiltExecutableURL(
+                    cwd: cwd,
+                    configuration: configuration,
+                    executableName: info.executableName,
+                    executableExtension: "exe",
+                    fm: fm)
             else {
                 throw ValidationError(
                     "Built executable not found. Checked: "

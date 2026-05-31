@@ -97,7 +97,8 @@ public enum KSBuildPlan {
         //     → <root>/dist
         //
         // 이 자동 보정 덕분에 새 템플릿은 `frontendDist: "dist"` 를 그대로 쓸 수 있다.
-        let baseDir = projectRootForBundledConfig(configURL: configURL)
+        let baseDir =
+            projectRootForBundledConfig(configURL: configURL)
             ?? configURL.deletingLastPathComponent()
         return
             baseDir

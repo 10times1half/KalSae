@@ -247,7 +247,8 @@ struct DoctorTests {
             try FileManager.default.createDirectory(
                 at: kalsaeRoot.appendingPathComponent("Scripts"),
                 withIntermediateDirectories: true)
-            try write("stub", to: kalsaeRoot.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1"))
+            try write(
+                "stub", to: kalsaeRoot.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1"))
             try write(
                 "// swift-tools-version: 6.0\nimport PackageDescription\nlet package = Package(name: \"App\", dependencies: [.package(path: \"deps/KalSae\")])\n",
                 to: root.appendingPathComponent("Package.swift"))

@@ -332,10 +332,12 @@ public enum KSDoctor {
 
             if let localRoot = roots.first(where: { $0.standardizedFileURL != projectRoot.standardizedFileURL }) {
                 report.warnings.append(
-                    "This project appears to depend on a KalSae checkout at \(localRoot.path). Run \(localRoot.path)\\Scripts\\fetch-webview2.ps1 there before bare `swift build`, or prefer `kalsae build` / `kalsae dev`.")
+                    "This project appears to depend on a KalSae checkout at \(localRoot.path). Run \(localRoot.path)\\Scripts\\fetch-webview2.ps1 there before bare `swift build`, or prefer `kalsae build` / `kalsae dev`."
+                )
             } else {
                 report.warnings.append(
-                    "Run .\\Scripts\\fetch-webview2.ps1 from the KalSae checkout used by this project before bare `swift build`, or prefer `kalsae build` / `kalsae dev`.")
+                    "Run .\\Scripts\\fetch-webview2.ps1 from the KalSae checkout used by this project before bare `swift build`, or prefer `kalsae build` / `kalsae dev`."
+                )
             }
 
             mutateWindowsStatus(report: &report) { $0.webview2 = false }
@@ -397,17 +399,19 @@ public enum KSDoctor {
 
         private static func resolvedKalsaeCheckoutRoots(projectRoot: URL, fm: FileManager) -> [URL] {
             let checkouts = projectRoot.appendingPathComponent(".build").appendingPathComponent("checkouts")
-            guard let children = try? fm.contentsOfDirectory(
-                at: checkouts,
-                includingPropertiesForKeys: nil,
-                options: [.skipsHiddenFiles])
+            guard
+                let children = try? fm.contentsOfDirectory(
+                    at: checkouts,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles])
             else { return [] }
             return children.filter { isLikelyKalsaeRoot($0, fm: fm) }
         }
 
         private static func isLikelyKalsaeRoot(_ url: URL, fm: FileManager) -> Bool {
             fm.fileExists(atPath: url.appendingPathComponent("Sources").appendingPathComponent("CKalsaeWV2").path)
-                && fm.fileExists(atPath: url.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1").path)
+                && fm.fileExists(
+                    atPath: url.appendingPathComponent("Scripts").appendingPathComponent("fetch-webview2.ps1").path)
         }
     #endif
 
