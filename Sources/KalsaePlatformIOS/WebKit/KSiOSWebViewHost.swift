@@ -531,11 +531,13 @@
                 var headers: [String: String] = [
                     "Content-Type": asset.mimeType,
                     "Content-Length": String(asset.data.count),
-                    "Content-Security-Policy": csp,
                     // RFC-008 §4.2: macOS / Linux 와 동일한 보안 헤더 표면.
                     "X-Content-Type-Options": "nosniff",
                     "Referrer-Policy": "no-referrer",
                 ]
+                if !csp.isEmpty {
+                    headers["Content-Security-Policy"] = csp
+                }
                 if crossOriginIsolation {
                     headers["Cross-Origin-Opener-Policy"] = "same-origin"
                     headers["Cross-Origin-Embedder-Policy"] = "require-corp"

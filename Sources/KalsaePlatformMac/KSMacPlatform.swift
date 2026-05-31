@@ -125,6 +125,7 @@
             // 없으면 주입을 건너뛴다(→ dev 서버 자체 CSP가 적용).
             // 프로덕션 CSP는 인라인 스크립트/HMR 웹소츓과 충돌하기 쉬워 그대로 적용하지 않는다.
             let injectedCSP: String? = {
+                guard config.security.injectCSP else { return nil }
                 if case .devServer = servingMode {
                     return config.security.devCsp
                 }

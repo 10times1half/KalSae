@@ -403,6 +403,8 @@ public final class KSApp {
             devServerURL: config.build.devServerURL,
             resourceRoot: resolvedResourceRoot)
 
+        Self.warnInjectCSPMismatch(config.security)
+
         if case .virtualHost(let servedRoot) = servingMode {
             #if os(Windows)
                 try concrete.prepare(devtools: config.security.devtools)
@@ -417,23 +419,32 @@ public final class KSApp {
                 let resolver = KSEmbeddedAssetResolverFactory.makeResolver(
                     defaultRoot: servedRoot,
                     cache: KSAssetCache())
+                let headerCSP = config.security.injectCSP ? config.security.csp : ""
                 try concrete.setResourceHandler(
                     resolver: resolver,
-                    csp: config.security.csp,
+                    csp: headerCSP,
                     host: Self.virtualHost)
             #elseif os(macOS) || os(Linux) || os(iOS) || os(Android)
                 try concrete.setAssetRoot(servedRoot)
             #endif
             #if os(Linux)
-                try concrete.setResponseCSP(config.security.csp)
+                if config.security.injectCSP {
+                    try concrete.setResponseCSP(config.security.csp)
+                }
             #endif
         }
 
         // CSP 주입 (document-created 스크립트). 헤더 CSP가 활성화되더라도
         // meta 태그는 WebView2/WKWebView/WebKitGTK 모두에서 통하는 공통 동작
         // 기반이므로 모든 부팅에서 항상 포함한다.
-        let cspScript = Self.cspInjectionScript(config.security.csp)
-        try concrete.addDocumentCreatedScript(cspScript)
+        let isDevServing: Bool = {
+            if case .devServer = servingMode { return true }
+            return false
+        }()
+        let cspScript = Self.resolveInjectedCSP(security: config.security, isDev: isDevServing)
+        if let cspScript {
+            try concrete.addDocumentCreatedScript(Self.cspInjectionScript(cspScript))
+        }
 
         // Config에 선언된 사용자 스크립트를 등록한다. CSP 주입 이후에 해야
         // origin 가드를 필수로 통과하고도 사용자 코드가 최초 DOM 파싱 전에
@@ -517,12 +528,22 @@ public final class KSApp {
                     let secAssetResolver = KSEmbeddedAssetResolverFactory.makeResolver(
                         defaultRoot: secRoot,
                         cache: KSAssetCache())
+                    let secHeaderCSP = config.security.injectCSP ? config.security.csp : ""
                     try sec.setResourceHandler(
                         resolver: secAssetResolver,
-                        csp: config.security.csp,
+                        csp: secHeaderCSP,
                         host: Self.virtualHost)
                 }
-                try sec.addDocumentCreatedScript(cspScript)
+                let isSecondaryDevServing: Bool = {
+                    if case .devServer = secMode { return true }
+                    return false
+                }()
+                let secInjectedCSP = Self.resolveInjectedCSP(
+                    security: config.security,
+                    isDev: isSecondaryDevServing)
+                if let secInjectedCSP {
+                    try sec.addDocumentCreatedScript(Self.cspInjectionScript(secInjectedCSP))
+                }
                 let secUserScriptRoot: URL? = {
                     if case .virtualHost(let r) = secMode { return r }
                     return nil
@@ -566,7 +587,16 @@ public final class KSApp {
                 if case .virtualHost(let secRoot) = secMode {
                     try sec.setAssetRoot(secRoot)
                 }
-                try sec.addDocumentCreatedScript(cspScript)
+                let isSecondaryDevServing: Bool = {
+                    if case .devServer = secMode { return true }
+                    return false
+                }()
+                let secInjectedCSP = Self.resolveInjectedCSP(
+                    security: config.security,
+                    isDev: isSecondaryDevServing)
+                if let secInjectedCSP {
+                    try sec.addDocumentCreatedScript(Self.cspInjectionScript(secInjectedCSP))
+                }
                 let secUserScriptRoot: URL? = {
                     if case .virtualHost(let r) = secMode { return r }
                     return nil

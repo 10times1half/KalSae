@@ -765,9 +765,33 @@ See [Docs/CLI.md](Docs/CLI.md) for detailed semantics of each option, and `swift
 - **Download scope** — `security.downloads.enabled` gates WebView downloads.
 - **Navigation scope** — `security.navigation.allow` gates in-window navigation; rejected URLs can be opened externally.
 - **Command rate limit** — `security.commandRateLimit` (token-bucket: `rate`/`burst`) prevents JS from flooding the Swift side.
-- **Content-Security-Policy** — injected as both an HTTP header and a `<meta>` tag on the virtual host.
+- **Content-Security-Policy** — injected as both an HTTP header and a `<meta>` tag on the virtual host by default.
+- **CSP injection toggle** — `security.injectCSP` (default: `true`). Set to `false` to skip KalSae CSP auto-injection (both header + meta) and rely on page-provided CSP only.
 - **DevTools** — opt-in via `security.devtools`; forced `false` in release builds.
 - **Context menu / external drop** — `security.contextMenu` (`default` | `disabled`) and `security.allowExternalDrop` (drops are routed to the `__ks.file.drop` event when disabled).
+
+Examples:
+
+```json
+{
+  "security": {
+    "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+  }
+}
+```
+
+Internal assets (recommended default): omit `injectCSP` or keep it `true` and configure `csp`/`devCsp` as needed.
+
+```json
+{
+  "windows": [{ "url": "https://grok.com/" }],
+  "security": {
+    "injectCSP": false
+  }
+}
+```
+
+External SaaS hosting: set `injectCSP: false` and do not set app-level `csp`; the site's own CSP response policy is used.
 
 See [Sources/KalsaeCore/Config/KSSecurityConfig.swift](Sources/KalsaeCore/Config/KSSecurityConfig.swift).
 
@@ -782,9 +806,33 @@ See [Sources/KalsaeCore/Config/KSSecurityConfig.swift](Sources/KalsaeCore/Config
 - **다운로드 스코프** — `security.downloads.enabled`로 WebView 다운로드 게이트.
 - **탐색 스코프** — `security.navigation.allow`로 윈도우 내 탐색 게이트; 거부된 URL은 외부에서 열 수 있음.
 - **명령 속도 제한** — `security.commandRateLimit` (토큰 버킷: `rate`/`burst`)으로 JS의 Swift 측 홍수 호출 방지.
-- **Content-Security-Policy** — 가상 호스트에 HTTP 헤더와 `<meta>` 태그 양쪽으로 주입됩니다.
+- **Content-Security-Policy** — 기본적으로 가상 호스트에 HTTP 헤더와 `<meta>` 태그 양쪽으로 주입됩니다.
+- **CSP 주입 토글** — `security.injectCSP` (기본값: `true`). `false`이면 KalSae의 CSP 자동 주입(헤더 + 메타)을 모두 건너뛰고 페이지가 제공한 CSP만 적용합니다.
 - **DevTools** — `security.devtools`로 옵트인. 릴리스 빌드에서는 강제 비활성화됩니다.
 - **컨텍스트 메뉴 / 외부 드롭** — `security.contextMenu` (`default` | `disabled`) 와 `security.allowExternalDrop`. 외부 드롭이 비활성화되면 파일 드롭은 `__ks.file.drop` 이벤트로 라우팅됩니다.
+
+예시:
+
+```json
+{
+  "security": {
+    "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+  }
+}
+```
+
+내부 자산 호스팅(권장 기본): `injectCSP`를 생략하거나 `true`로 유지하고 필요 시 `csp`/`devCsp`를 설정합니다.
+
+```json
+{
+  "windows": [{ "url": "https://lgcns.exaone.ai/" }],
+  "security": {
+    "injectCSP": false
+  }
+}
+```
+
+외부 SaaS 호스팅: `injectCSP: false`로 설정하고 앱 레벨 `csp`는 사용하지 않습니다. 사이트가 응답한 자체 CSP 정책이 그대로 적용됩니다.
 
 상세는 [Sources/KalsaeCore/Config/KSSecurityConfig.swift](Sources/KalsaeCore/Config/KSSecurityConfig.swift) 참고.
 

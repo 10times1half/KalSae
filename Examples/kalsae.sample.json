@@ -77,6 +77,7 @@
     }
   ],
   "security": {
+    "injectCSP": true,
     "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ks://localhost",
     "commandAllowlist": ["greet", "app.*", "window.*", "fs.*"],
     "fs": {

@@ -16,6 +16,31 @@ extension KSApp {
         KSBootOrchestrator.cspInjectionScript(csp)
     }
 
+    /// 현재 부팅 모드에서 문서 시작 시 주입할 CSP 문자열을 결정한다.
+    /// `security.injectCSP`가 `false`이면 `nil`을 반환해 주입을 건너뛴다.
+    internal nonisolated static func resolveInjectedCSP(
+        security: KSSecurityConfig,
+        isDev: Bool
+    ) -> String? {
+        guard security.injectCSP else { return nil }
+        if isDev {
+            return security.devCsp ?? security.csp
+        }
+        return security.csp
+    }
+
+    /// `injectCSP=false`인데 `csp/devCsp`가 설정되어 있을 때 경고를 남긴다.
+    internal nonisolated static func warnInjectCSPMismatch(_ security: KSSecurityConfig) {
+        guard !security.injectCSP else { return }
+
+        let hasExplicitCSP = security.csp != KSSecurityConfig.defaultCSP
+        let hasExplicitDevCSP = security.devCsp != nil
+        guard hasExplicitCSP || hasExplicitDevCSP else { return }
+
+        KSLog.logger("kalsae.app").warning(
+            "security.injectCSP is false; ignoring security.csp/devCsp and using page-provided CSP only.")
+    }
+
     internal static func isDirectory(_ url: URL) -> Bool {
         KSBootOrchestrator.isDirectory(url)
     }

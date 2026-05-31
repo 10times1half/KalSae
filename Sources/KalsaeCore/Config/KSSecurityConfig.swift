@@ -24,6 +24,15 @@ import Foundation
 /// 기본값은 **default-deny** 다 — `post`, `cancel`, `requestPermission`
 /// 모두 `false`. 알림을 사용하려면 `Kalsae.json` 에서 명시적으로 활성화한다.
 public struct KSSecurityConfig: Codable, Sendable, Equatable {
+    /// KalSae가 문서 시작 스크립트(`<meta http-equiv="Content-Security-Policy">`)
+    /// 및 가상 호스트 응답 헤더에 CSP를 자동 주입할지 여부.
+    ///
+    /// - `true` (기본값): 기존 동작 유지. `csp`/`devCsp`가 적용된다.
+    /// - `false`: KalSae의 CSP 자동 주입을 모두 건너뛴다.
+    ///   외부 URL(예: SaaS)을 메인 윈도우로 호스팅할 때 사이트가 응답한
+    ///   CSP만 적용하도록 하려면 이 값을 사용한다.
+    public var injectCSP: Bool
+
     /// `ks://` 스킴 핸들러가 제공하는 기본 HTTP 응답 헤더에 주입되는
     /// Content Security Policy.
     public var csp: String
@@ -141,6 +150,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     }
 
     public init(
+        injectCSP: Bool = true,
         csp: String = KSSecurityConfig.defaultCSP,
         devCsp: String? = nil,
         commandAllowlist: [String]? = nil,
@@ -159,6 +169,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
         secret: KSSecretScope = .init(),
         userScripts: KSUserScriptsScope = .init()
     ) {
+        self.injectCSP = injectCSP
         self.csp = csp
         self.devCsp = devCsp
         self.commandAllowlist = commandAllowlist
@@ -179,7 +190,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case csp, devCsp, commandAllowlist
+        case injectCSP, csp, devCsp, commandAllowlist
         case fs, devtools, contextMenu, allowExternalDrop
         case shell, notifications, http, downloads, navigation, commandRateLimit
         case allowPopups, crossOriginIsolation, secret, userScripts
@@ -187,6 +198,7 @@ public struct KSSecurityConfig: Codable, Sendable, Equatable {
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.injectCSP = try c.decodeIfPresent(Bool.self, forKey: .injectCSP) ?? true
         self.csp = try c.decodeIfPresent(String.self, forKey: .csp) ?? Self.defaultCSP
         self.devCsp = try c.decodeIfPresent(String.self, forKey: .devCsp)
         self.commandAllowlist = try c.decodeIfPresent([String].self, forKey: .commandAllowlist)
