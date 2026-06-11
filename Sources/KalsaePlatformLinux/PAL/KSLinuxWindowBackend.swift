@@ -19,7 +19,7 @@
         }
 
         public func create(_ config: KSWindowConfig) async throws(KSError) -> KSWindowHandle {
-            let result: Result<KSWindowHandle, KSError> = await MainActor.run {
+            let result: Result<KSWindowHandle, KSError> = await GtkMainQueue.run {
                 let appId = "app.Kalsae.\(config.label)"
                 let host = GtkWebViewHost(
                     appId: appId,
@@ -64,7 +64,7 @@
 
         public func getPosition(_ handle: KSWindowHandle) async throws(KSError) -> KSPoint {
             let entry = try await resolve(handle)
-            return await MainActor.run {
+            return await GtkMainQueue.run {
                 entry.host.getPosition() ?? KSPoint(x: 0, y: 0)
             }
         }
@@ -83,13 +83,13 @@
         }
 
         public func all() async -> [KSWindowHandle] {
-            await MainActor.run {
+            await GtkMainQueue.run {
                 KSLinuxHandleRegistry.shared.allHandles()
             }
         }
 
         public func find(label: String) async -> KSWindowHandle? {
-            await MainActor.run {
+            await GtkMainQueue.run {
                 KSLinuxHandleRegistry.shared.handle(for: label)
             }
         }
@@ -121,21 +121,21 @@
 
         public func isMaximized(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
             let entry = try await resolve(handle)
-            return await MainActor.run {
+            return await GtkMainQueue.run {
                 entry.host.isMaximized()
             }
         }
 
         public func isMinimized(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
             let entry = try await resolve(handle)
-            return await MainActor.run {
+            return await GtkMainQueue.run {
                 entry.host.isMinimized()
             }
         }
 
         public func isFullscreen(_ handle: KSWindowHandle) async throws(KSError) -> Bool {
             let entry = try await resolve(handle)
-            return await MainActor.run {
+            return await GtkMainQueue.run {
                 entry.host.isFullscreen()
             }
         }
@@ -146,7 +146,7 @@
 
         public func getSize(_ handle: KSWindowHandle) async throws(KSError) -> KSSize {
             let entry = try await resolve(handle)
-            return await MainActor.run {
+            return await GtkMainQueue.run {
                 entry.host.getSize() ?? KSSize(width: 0, height: 0)
             }
         }
@@ -181,7 +181,7 @@
 
         public func getZoomFactor(_ handle: KSWindowHandle) async throws(KSError) -> Double {
             let entry = try await resolve(handle)
-            return await MainActor.run { entry.host.getZoomLevel() }
+            return await GtkMainQueue.run { entry.host.getZoomLevel() }
         }
 
         public func showPrintUI(_ handle: KSWindowHandle, systemDialog: Bool) async throws(KSError) {
@@ -193,13 +193,12 @@
             do {
                 return try await entry.host.capturePreview(format: format)
             } catch {
-                throw (error as? KSError)
-                    ?? KSError(code: .internal, message: "capturePreview: \(error)")
+                throw error
             }
         }
 
         public func listDisplays() async throws(KSError) -> [KSDisplayInfo] {
-            let result: Result<[KSDisplayInfo], KSError> = await MainActor.run {
+            let result: Result<[KSDisplayInfo], KSError> = await GtkMainQueue.run {
                 let count = Int(ks_gtk_host_get_display_count(nil))
                 guard count > 0 else {
                     return .failure(
@@ -227,7 +226,7 @@
 
         public func currentDisplay(_ handle: KSWindowHandle) async throws(KSError) -> KSDisplayInfo {
             let entry = try await resolve(handle)
-            let result: Result<KSDisplayInfo, KSError> = await MainActor.run {
+            let result: Result<KSDisplayInfo, KSError> = await GtkMainQueue.run {
                 let index = entry.host.currentDisplayIndex()
                 guard index >= 0, let info = Self.readDisplayInfo(hostPtr: entry.host.hostPtr, index: index) else {
                     return .failure(
@@ -266,9 +265,9 @@
 
         private func runMain(
             _ handle: KSWindowHandle,
-            _ body: @MainActor @Sendable (KSLinuxHandleRegistry.Entry) throws(KSError) -> Void
+            _ body: @escaping @MainActor @Sendable (KSLinuxHandleRegistry.Entry) throws(KSError) -> Void
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = await GtkMainQueue.run {
                 do {
                     guard let entry = KSLinuxHandleRegistry.shared.entry(for: handle) else {
                         throw KSError(
@@ -287,7 +286,7 @@
         }
 
         private func resolve(_ handle: KSWindowHandle) async throws(KSError) -> KSLinuxHandleRegistry.Entry {
-            let result: Result<KSLinuxHandleRegistry.Entry, KSError> = await MainActor.run {
+            let result: Result<KSLinuxHandleRegistry.Entry, KSError> = await GtkMainQueue.run {
                 guard let entry = KSLinuxHandleRegistry.shared.entry(for: handle) else {
                     return .failure(
                         KSError(
@@ -303,6 +302,8 @@
         private static func readDisplayInfo(hostPtr: OpaquePointer?, index: Int) -> KSDisplayInfo? {
             var idBuf = [CChar](repeating: 0, count: 128)
             var nameBuf = [CChar](repeating: 0, count: 256)
+            let idBufCount = idBuf.count
+            let nameBufCount = nameBuf.count
             var x: Int32 = 0
             var y: Int32 = 0
             var width: Int32 = 0
@@ -321,9 +322,9 @@
                         hostPtr,
                         Int32(index),
                         idPtr.baseAddress,
-                        idBuf.count,
+                        idBufCount,
                         namePtr.baseAddress,
-                        nameBuf.count,
+                        nameBufCount,
                         &x,
                         &y,
                         &width,
@@ -339,8 +340,8 @@
             }
             guard ok != 0 else { return nil }
             return KSDisplayInfo(
-                id: String(cString: idBuf),
-                name: String(cString: nameBuf),
+                id: _ksStringFromCCharBuffer(idBuf),
+                name: _ksStringFromCCharBuffer(nameBuf),
                 bounds: KSRect(x: Int(x), y: Int(y), width: Int(width), height: Int(height)),
                 workArea: KSRect(
                     x: Int(workX), y: Int(workY), width: Int(workWidth), height: Int(workHeight)),
@@ -351,7 +352,7 @@
 
         nonisolated(unsafe) private static var didWarnTaskbarProgress = false
         nonisolated(unsafe) private static var didWarnOverlay = false
-        nonisolated(unsafe) private static let warnLock = NSLock()
+        private static let warnLock = NSLock()
 
         private static func warnTaskbarProgressUnsupportedOnce() {
             warnLock.lock()
@@ -369,6 +370,11 @@
             didWarnOverlay = true
             KSLog.logger("platform.linux.window").warning(
                 "setOverlayIcon is unsupported on Linux and remains a no-op (Wails/Tauri parity policy).")
+        }
+
+        private static func _ksStringFromCCharBuffer(_ buffer: [CChar]) -> String {
+            let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+            return String(decoding: bytes, as: UTF8.self)
         }
     }
 #endif

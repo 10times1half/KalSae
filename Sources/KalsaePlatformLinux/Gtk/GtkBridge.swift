@@ -69,6 +69,19 @@
             let raw = Unmanaged.passRetained(box).toOpaque()
             ks_gtk_post_main_thread(gtkMainQueueTrampoline, raw)
         }
+
+        /// `body`를 GTK 메인 스레드에서 실행하고 그 반환값을 호출자에게 돌려준다.
+        ///
+        /// `await MainActor.run { … }`과 달리 GLib idle 큐(`g_idle_add`)를
+        /// 경유한다. `KSApp.run()`이 `g_application_run`으로 메인 스레드를
+        /// 점유하면 Swift `MainActor` 실행기(libdispatch 메인 큐)는 더 이상
+        /// 펌프되지 않으므로 `MainActor.run`은 영원히 resume되지 않는다.
+        /// PAL 백엔드는 GTK를 만지는 모든 홉에 이 헬퍼를 사용해야 한다.
+        static func run<T: Sendable>(_ body: @escaping @MainActor () -> T) async -> T {
+            await withCheckedContinuation { (cont: CheckedContinuation<T, Never>) in
+                post { cont.resume(returning: body()) }
+            }
+        }
     }
 
     private final class JobBox: @unchecked Sendable {

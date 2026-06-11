@@ -330,8 +330,6 @@ let package = Package(
                         condition: .when(platforms: [.linux])),
             ],
             path: "Sources/KalsaeDemo",
-            // 벤치마크 데이터 (빌드 시 불필요하므로 제외)
-            exclude: ["dist-bench"],
             // 웹 프론트엔드 빌드 결과물 (HTML/CSS/JS 등)
             resources: [.copy("Resources")],
             swiftSettings: commonSwiftSettings

@@ -453,16 +453,15 @@ public final class KSApp {
             resourceRoot: userScriptResourceRoot)
 
         // 보안 설정의 context-menu / external-drop 정책 적용.
-        #if os(Windows)
+        #if os(Windows) || os(macOS) || os(Linux)
             if config.security.contextMenu == .disabled {
                 concrete.setDefaultContextMenusEnabled(false)
             }
             if !config.security.allowExternalDrop {
                 concrete.setAllowExternalDrop(false)
-                // Phase 5-3: webview 기본 드롭을 호스트의 IDropTarget으로 교체해
-                // OS 파일 드롭이 JS에서 `__ks.file.drop` 이벤트로 올라오도록 한다.
-                // 시도·실패 동작: OLE 등록이 실패해도(예: STA에 진입 불가능한
-                // 스레드) 로그만 남기고 부팅을 계속한다.
+                // webview 기본 드롭을 호스트 드롭 이미터로 교체해 OS 파일 드롭이
+                // JS `__ks.file.drop` 이벤트로 올라오도록 한다.
+                // 시도·실패 동작: 설치 실패 시 로그만 남기고 부팅을 계속한다.
                 do {
                     try concrete.installFileDropEmitter()
                     KSLog.logger("kalsae.app").info(
@@ -495,10 +494,27 @@ public final class KSApp {
             "boot serving=\(servingDescription) startURL=\(url) devServerURL=\(config.build.devServerURL)"
         )
 
-        #if os(Windows)
-            try concrete.startPrepared(url: url, devtools: config.security.devtools)
+        #if os(Linux)
+            #if DEBUG
+                let linuxInspectorOptIn = ProcessInfo.processInfo.environment[
+                    "KALSAE_LINUX_ENABLE_INSPECTOR"] == "1"
+                let effectiveDevtools = config.security.devtools && linuxInspectorOptIn
+                if config.security.devtools && !linuxInspectorOptIn {
+                    KSLog.logger("kalsae.app").warning(
+                        "Linux Web Inspector disabled by default. Set KALSAE_LINUX_ENABLE_INSPECTOR=1 to opt in (known risk: opening inspector can freeze some sessions)."
+                    )
+                }
+            #else
+                let effectiveDevtools = false
+            #endif
         #else
-            try concrete.start(url: url, devtools: config.security.devtools)
+            let effectiveDevtools = config.security.devtools
+        #endif
+
+        #if os(Windows)
+            try concrete.startPrepared(url: url, devtools: effectiveDevtools)
+        #else
+            try concrete.start(url: url, devtools: effectiveDevtools)
         #endif
 
         // 7. 두 번째 이후 윈도우 부팅 — Windows/macOS 전용 (v0.3).
@@ -597,8 +613,7 @@ public final class KSApp {
             if config.windows.count > 1 {
                 let ignored = config.windows.count - 1
                 KSLog.logger("kalsae.app").warning(
-                    "Multiple windows declared (\(config.windows.count)) but this platform "
-                        + "supports single-window only; ignoring \(ignored) entries.")
+                    "Multiple windows declared (\(config.windows.count)) but this platform supports single-window only; ignoring \(ignored) entries.")
             }
         #endif
 

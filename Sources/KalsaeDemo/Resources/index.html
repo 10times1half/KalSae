@@ -232,6 +232,10 @@
     if (lines.length > max) lines.length = max;
     el.textContent = lines.join("\n");
   };
+  const logAction = (label, result, isError = false) => {
+    const prefix = isError ? "ERR" : "OK";
+    prepend($("eventLog"), new Date().toLocaleTimeString() + "  " + prefix + "  " + label + (result !== undefined ? "  " + fmt(result) : ""));
+  };
 
   const KS = window.__KS_ || window.Kalsae;
   if (!KS) {
@@ -247,8 +251,14 @@
     // generic invoke buttons (data-cmd)
     document.querySelectorAll("button[data-cmd]").forEach(b => {
       b.addEventListener("click", async () => {
-        try { await KS.invoke(b.dataset.cmd, {}); }
-        catch (e) { console.error(b.dataset.cmd, e); }
+        try {
+          const r = await KS.invoke(b.dataset.cmd, {});
+          logAction(b.dataset.cmd, r);
+        }
+        catch (e) {
+          logAction(b.dataset.cmd, e, true);
+          console.error(b.dataset.cmd, e);
+        }
       });
     });
 
@@ -258,7 +268,13 @@
         ev.stopPropagation();
         const fn = KS.window && KS.window[b.dataset.win];
         if (typeof fn === "function") {
-          try { await fn(); } catch (e) { console.error(b.dataset.win, e); }
+          try {
+            const r = await fn();
+            logAction("window." + b.dataset.win, r);
+          } catch (e) {
+            logAction("window." + b.dataset.win, e, true);
+            console.error(b.dataset.win, e);
+          }
         }
       });
     });
@@ -266,23 +282,42 @@
     // fullscreen toggle
     document.querySelectorAll("[data-fs]").forEach(b => {
       b.addEventListener("click", async () => {
-        try { await KS.window.setFullscreen(b.dataset.fs === "true"); }
-        catch (e) { console.error("setFullscreen", e); }
+        try {
+          const enabled = b.dataset.fs === "true";
+          await KS.window.setFullscreen(enabled);
+          logAction("window.setFullscreen", { enabled });
+        }
+        catch (e) {
+          logAction("window.setFullscreen", e, true);
+          console.error("setFullscreen", e);
+        }
       });
     });
 
     // theme change
     document.querySelectorAll("[data-theme]").forEach(b => {
       b.addEventListener("click", async () => {
-        try { await KS.window.setTheme(b.dataset.theme); }
-        catch (e) { console.error("setTheme", e); }
+        try {
+          await KS.window.setTheme(b.dataset.theme);
+          logAction("window.setTheme", { theme: b.dataset.theme });
+        }
+        catch (e) {
+          logAction("window.setTheme", e, true);
+          console.error("setTheme", e);
+        }
       });
     });
 
     // shell / clipboard
     $("openExt").addEventListener("click", async () => {
-      try { await KS.shell.openExternal("https://example.com"); }
-      catch (e) { console.error(e); }
+      try {
+        await KS.shell.openExternal("https://example.com");
+        logAction("shell.openExternal", "https://example.com");
+      }
+      catch (e) {
+        logAction("shell.openExternal", e, true);
+        console.error(e);
+      }
     });
     $("clipWrite").addEventListener("click", async () => {
       try { await KS.clipboard.writeText($("clip").value); set($("clipOut"), "wrote"); }
@@ -361,7 +396,7 @@
       try {
         const r = await KS.dialog.saveFile({
           title: "Save as\u2026",
-          defaultName: "hello.txt",
+          defaultFileName: "hello.txt",
           filters: [{ name: "Text", extensions: ["txt"] }],
         });
         set($("dlgOut"), r);

@@ -1,7 +1,7 @@
 #if os(Linux)
     public import KalsaeCore
     internal import CLibSecret
-    internal import Foundation
+    public import Foundation
     internal import Glibc
 
     /// libsecret-1 (Secret Service) 기반 `KSCredentialBackend` 구현.

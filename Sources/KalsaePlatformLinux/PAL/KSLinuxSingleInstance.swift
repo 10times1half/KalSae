@@ -1,7 +1,6 @@
 #if os(Linux)
     internal import Glibc
-    public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Single-instance helper for Linux applications.
     ///
@@ -169,7 +168,7 @@
                     let args = readArgs(from: clientFd)
                     close(clientFd)
                     if !args.isEmpty {
-                        await MainActor.run { onSecondInstance(args) }
+                        await GtkMainQueue.run { onSecondInstance(args) }
                     }
                 }
             }

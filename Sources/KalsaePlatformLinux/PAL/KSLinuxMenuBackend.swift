@@ -14,7 +14,7 @@
         /// On Linux there is no system-wide app menu bar. Delegate to the
         /// primary window's menu bar, if one exists.
         public func installAppMenu(_ items: [KSMenuItem]) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = await GtkMainQueue.run {
                 guard let handle = KSLinuxHandleRegistry.shared.allHandles().first,
                     let entry = KSLinuxHandleRegistry.shared.entry(for: handle)
                 else {
@@ -39,7 +39,7 @@
             _ handle: KSWindowHandle,
             items: [KSMenuItem]
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = await GtkMainQueue.run {
                 guard let entry = KSLinuxHandleRegistry.shared.entry(for: handle) else {
                     return .failure(
                         KSError(
@@ -66,7 +66,7 @@
             at point: KSPoint,
             in handle: KSWindowHandle?
         ) async throws(KSError) {
-            let result: Result<Void, KSError> = await MainActor.run {
+            let result: Result<Void, KSError> = await GtkMainQueue.run {
                 let hostPtr: OpaquePointer?
                 if let h = handle {
                     guard let entry = KSLinuxHandleRegistry.shared.entry(for: h) else {

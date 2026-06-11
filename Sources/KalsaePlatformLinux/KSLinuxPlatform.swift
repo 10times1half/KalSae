@@ -72,7 +72,6 @@
         ) async throws(KSError) -> Never {
             let code = try await runOnMain(config: config, configure: configure)
             Glibc.exit(Int32(code))
-            fatalError("unreachable")
         }
 
         @MainActor
@@ -144,7 +143,14 @@
             // 보안: 릴리스 빌드에서는 설정값에 무관하게 개발자 도구가 강제 비활성화된다.
             // AGENTS §5 + 감사 결과 #8 참조.
             #if DEBUG
-                let effectiveDevtools = config.security.devtools
+                let inspectorOptIn = ProcessInfo.processInfo.environment[
+                    "KALSAE_LINUX_ENABLE_INSPECTOR"] == "1"
+                let effectiveDevtools = config.security.devtools && inspectorOptIn
+                if config.security.devtools && !inspectorOptIn {
+                    KSLog.logger("kalsae.app").warning(
+                        "Linux Web Inspector disabled by default. Set KALSAE_LINUX_ENABLE_INSPECTOR=1 to opt in (known risk: opening inspector can freeze some sessions)."
+                    )
+                }
             #else
                 let effectiveDevtools = false
             #endif
@@ -322,7 +328,19 @@
             webview.setAllowExternalDrop(allow)
         }
         public func installFileDropEmitter() throws(KSError) {
-            try webview.installFileDropEmitter()
+            let bridge = self.bridge
+            try webview.installFileDropEmitter { kind, x, y, paths in
+                struct Payload: Encodable {
+                    let kind: String
+                    let x: Int32
+                    let y: Int32
+                    let paths: [String]
+                }
+                try? bridge.emit(
+                    event: "__ks.file.drop",
+                    payload: Payload(kind: kind, x: x, y: y, paths: paths))
+                return kind != "drop" || !paths.isEmpty
+            }
         }
         public func installSecurityHandlers(
             allowPopups: Bool,
@@ -373,13 +391,22 @@
             webview.reload()
         }
 
+        public var mainHandle: KSWindowHandle? {
+            KSLinuxHandleRegistry.shared.handle(for: windowConfig.label)
+        }
+
         nonisolated public func postJob(_ block: @escaping @MainActor () -> Void) {
             webview.postJob(block)
         }
 
         /// 데모 앱의 정상 종료를 요청한다.
         nonisolated public func requestQuit() {
-            webview.quit()
+            // GTK 메인 루프(`g_application_run`)가 메인 스레드를 점유하면
+            // Swift `MainActor` 실행기는 펌프되지 않으므로 `Task { @MainActor }`
+            // 대신 GLib idle 큐(`postJob` → `g_idle_add`)로 홉한다.
+            webview.postJob { [webview] in
+                webview.quit()
+            }
         }
 
         // MARK: - Phase 3 라이프사이클 훅
@@ -499,7 +526,7 @@
         // MARK: - 미구현 옵션 1회 경고
 
         nonisolated(unsafe) private static var didWarnTransparent = false
-        nonisolated(unsafe) private static let warnLock = NSLock()
+        private static let warnLock = NSLock()
 
         fileprivate static func warnTransparentOnce() {
             warnLock.lock()

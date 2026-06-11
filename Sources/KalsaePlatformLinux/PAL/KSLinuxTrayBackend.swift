@@ -2,7 +2,7 @@
     internal import CKalsaeGtk
     internal import Logging
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// `KSTrayBackend`의 Linux 구현 — D-Bus StatusNotifierItem + DBusMenu 직접 노출.
     ///
@@ -150,7 +150,7 @@
                                 commandID: "",
                                 enabled: item.enabled,
                                 isSeparator: false))
-                        visit(item.children ?? [], parentID: id)
+                        visit(item.submenu ?? [], parentID: id)
                     }
                 }
             }

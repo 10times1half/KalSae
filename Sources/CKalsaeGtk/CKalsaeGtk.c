@@ -119,6 +119,15 @@ struct KSGtkHost {
     int  popup_blocking_enabled;      /* 0 (default) = 허용, 1 = 차단+라우팅 */
     void (*external_url_handler)(const char *url, void *ctx);
     void  *external_url_handler_ctx;
+
+    /* 파일 드롭 emitter 콜백 (`__ks.file.drop` 브리지). */
+    KSGtkFileDropFn file_drop_cb;
+    void           *file_drop_ctx;
+    GtkDropTarget  *file_drop_target;  /* controller owned by widget tree */
+
+    /* WebKitGTK 런타임 호환 경고(1회). */
+    int  compat_scheme_warned;
+    int  compat_coi_warned;
 };
 
 /* 단축키 엔트리 — 등록 해제를 위해 GtkShortcut과 트램폴린 컨텍스트를 보관. */
@@ -157,6 +166,48 @@ static GdkDisplay *ks_get_display_from_host(KSGtkHost *host)
 static void clear_string(char **slot)
 {
     if (*slot) { g_free(*slot); *slot = NULL; }
+}
+
+/* WebKitGTK 2.52.x + libsoup 3.6.x 계열에서
+ * `finish_with_response + set_http_headers` 경로가 SIGSEGV를 유발하는
+ * 환경이 보고되어, 해당 버전 이상에서는 단순 finish 경로를 사용한다. */
+#define KS_WEBKIT_COMPAT_MIN_MAJOR 2U
+#define KS_WEBKIT_COMPAT_MIN_MINOR 52U
+#define KS_WEBKIT_COMPAT_MIN_MICRO 0U
+
+static int ks_webkit_version_at_least(guint major,
+                                      guint minor,
+                                      guint micro)
+{
+    guint cur_major = webkit_get_major_version();
+    guint cur_minor = webkit_get_minor_version();
+    guint cur_micro = webkit_get_micro_version();
+    if (cur_major != major) return cur_major > major;
+    if (cur_minor != minor) return cur_minor > minor;
+    return cur_micro >= micro;
+}
+
+static int ks_use_scheme_response_compat_path(void)
+{
+    return ks_webkit_version_at_least(
+        KS_WEBKIT_COMPAT_MIN_MAJOR,
+        KS_WEBKIT_COMPAT_MIN_MINOR,
+        KS_WEBKIT_COMPAT_MIN_MICRO);
+}
+
+static void ks_log_webkit_runtime_version_once(void)
+{
+    static int logged = 0;
+    if (logged) return;
+    logged = 1;
+    fprintf(stderr,
+            "[kb] runtime webkit version: %u.%u.%u (compat threshold >= %u.%u.%u)\n",
+            webkit_get_major_version(),
+            webkit_get_minor_version(),
+            webkit_get_micro_version(),
+            KS_WEBKIT_COMPAT_MIN_MAJOR,
+            KS_WEBKIT_COMPAT_MIN_MINOR,
+            KS_WEBKIT_COMPAT_MIN_MICRO);
 }
 
 /* -- 시그널 핸들러 ------------------------------------------------- */
@@ -283,9 +334,128 @@ static gboolean on_security_decide_policy(WebKitWebView *view,
     return TRUE;
 }
 
+static int32_t ks_drop_coord_to_i32(double v)
+{
+    if (v > 2147483647.0) return 2147483647;
+    if (v < -2147483648.0) return -2147483648;
+    return (int32_t) v;
+}
+
+static char **ks_copy_drop_paths(const GValue *value)
+{
+    if (!value) return NULL;
+    if (!G_VALUE_HOLDS(value, GDK_TYPE_FILE_LIST)) return NULL;
+
+    GdkFileList *file_list = g_value_get_boxed(value);
+    if (!file_list) return NULL;
+
+    GSList *files = gdk_file_list_get_files(file_list);
+    if (!files) return NULL;
+
+    int total = 0;
+    for (GSList *it = files; it; it = it->next) {
+        if (it->data && G_IS_FILE(it->data)) total++;
+    }
+    if (total == 0) return NULL;
+
+    char **paths = g_new0(char *, (gsize) total + 1);
+    int i = 0;
+    for (GSList *it = files; it; it = it->next) {
+        if (!it->data || !G_IS_FILE(it->data)) continue;
+        char *path = g_file_get_path(G_FILE(it->data));
+        if (path) paths[i++] = path;
+    }
+    if (i == 0) {
+        g_free(paths);
+        return NULL;
+    }
+    paths[i] = NULL;
+    return paths;
+}
+
+static void ks_free_drop_paths(char **paths)
+{
+    if (!paths) return;
+    for (int i = 0; paths[i] != NULL; ++i) {
+        g_free(paths[i]);
+    }
+    g_free(paths);
+}
+
+static GdkDragAction on_file_drop_enter(GtkDropTarget *target,
+                                        double x,
+                                        double y,
+                                        gpointer user_data)
+{
+    (void) target;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host || !host->file_drop_cb || host->external_drop_allowed) {
+        return 0;
+    }
+    int ok = host->file_drop_cb(
+        "enter",
+        ks_drop_coord_to_i32(x),
+        ks_drop_coord_to_i32(y),
+        NULL,
+        host->file_drop_ctx);
+    return ok ? GDK_ACTION_COPY : 0;
+}
+
+static void on_file_drop_leave(GtkDropTarget *target,
+                               gpointer user_data)
+{
+    (void) target;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host || !host->file_drop_cb || host->external_drop_allowed) return;
+    (void) host->file_drop_cb("leave", 0, 0, NULL, host->file_drop_ctx);
+}
+
+static gboolean on_file_drop_drop(GtkDropTarget *target,
+                                  const GValue *value,
+                                  double x,
+                                  double y,
+                                  gpointer user_data)
+{
+    (void) target;
+    KSGtkHost *host = (KSGtkHost *) user_data;
+    if (!host || !host->file_drop_cb || host->external_drop_allowed) {
+        return FALSE;
+    }
+
+    char **paths = ks_copy_drop_paths(value);
+    int ok = host->file_drop_cb(
+        "drop",
+        ks_drop_coord_to_i32(x),
+        ks_drop_coord_to_i32(y),
+        (const char *const *) paths,
+        host->file_drop_ctx);
+    ks_free_drop_paths(paths);
+    return ok ? TRUE : FALSE;
+}
+
+static void ks_gtk_host_attach_file_drop_target(KSGtkHost *host)
+{
+    if (!host || !host->web_view || !host->file_drop_cb) return;
+    if (host->file_drop_target) return;
+
+    GtkDropTarget *target = gtk_drop_target_new(
+        GDK_TYPE_FILE_LIST,
+        GDK_ACTION_COPY);
+    gtk_drop_target_set_preload(target, TRUE);
+    g_signal_connect(target, "enter", G_CALLBACK(on_file_drop_enter), host);
+    g_signal_connect(target, "leave", G_CALLBACK(on_file_drop_leave), host);
+    g_signal_connect(target, "drop", G_CALLBACK(on_file_drop_drop), host);
+    gtk_widget_add_controller(
+        GTK_WIDGET(host->web_view),
+        GTK_EVENT_CONTROLLER(target));
+    host->file_drop_target = target;
+}
+
 static void on_app_activate(GtkApplication *app, gpointer user_data)
 {
     KSGtkHost *host = (KSGtkHost *) user_data;
+
+    ks_log_webkit_runtime_version_once();
 
     /* 1. 최상위 윈도우 생성. */
     GtkWindow *win = GTK_WINDOW(gtk_application_window_new(app));
@@ -314,7 +484,7 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
     webkit_user_content_manager_register_script_message_handler(
         ucm, "ks", NULL);
     g_signal_connect(ucm,
-                     "script-message-received::kb",
+                     "script-message-received::ks",
                      G_CALLBACK(on_script_message),
                      host);
 
@@ -381,6 +551,9 @@ static void on_app_activate(GtkApplication *app, gpointer user_data)
                      G_CALLBACK(on_security_context_menu), host);
     g_signal_connect(view, "decide-policy",
                      G_CALLBACK(on_security_decide_policy), host);
+
+    /* 외부 파일 드롭 emitter가 요청된 경우 activate 시점에 연결한다. */
+    ks_gtk_host_attach_file_drop_target(host);
 
     if (host->on_activate) {
         host->on_activate(host->on_activate_ctx);
@@ -755,41 +928,50 @@ static void on_kb_scheme_request(WebKitURISchemeRequest *req,
     GInputStream *stream = g_memory_input_stream_new_from_data(
         data, (gssize) len, g_free);
 
-    /* CSP가 있을 때는 응답 헤더를 붙일 수 있도록 완전한
-     * WebKitURISchemeResponse를 구성한다. 해당 API가 없는 구버전은
-     * `webkit_uri_scheme_request_finish`로 폴백하지만, 이 파일은
-     * WebKitGTK 6.0 (2.40+)을 대상으로 하므로 항상 응답 API가
-     * 노출되어 있다. */
-    WebKitURISchemeResponse *resp =
-        webkit_uri_scheme_response_new(stream, (gint64) len);
-    webkit_uri_scheme_response_set_content_type(
-        resp, mime ? mime : "application/octet-stream");
-    webkit_uri_scheme_response_set_status(resp, 200, NULL);
-    {
-        SoupMessageHeaders *hdrs = soup_message_headers_new(
-            SOUP_MESSAGE_HEADERS_RESPONSE);
-        if (host->response_csp && host->response_csp[0] != '\0') {
-            soup_message_headers_append(
-                hdrs, "Content-Security-Policy", host->response_csp);
+    const char *full_mime = mime ? mime : "application/octet-stream";
+    if (ks_use_scheme_response_compat_path()) {
+        if (!host->compat_scheme_warned) {
+            host->compat_scheme_warned = 1;
+            fprintf(stderr,
+                    "[kb] compat scheme path enabled: using simple finish() due to WebKitGTK/libsoup crash risk; HTTP response headers(CSP/nosniff/referrer) are skipped\n");
         }
-        soup_message_headers_append(
-            hdrs, "X-Content-Type-Options", "nosniff");
-        soup_message_headers_append(
-            hdrs, "Referrer-Policy", "no-referrer");
-        if (host->coi_enabled) {
-            soup_message_headers_append(
-                hdrs, "Cross-Origin-Opener-Policy", "same-origin");
-            soup_message_headers_append(
-                hdrs, "Cross-Origin-Embedder-Policy", "require-corp");
-            soup_message_headers_append(
-                hdrs, "Cross-Origin-Resource-Policy", "same-origin");
+        if (host->coi_enabled && !host->compat_coi_warned) {
+            host->compat_coi_warned = 1;
+            fprintf(stderr,
+                    "[kb] cross-origin isolation headers disabled on compat path for this WebKitGTK runtime\n");
         }
-        webkit_uri_scheme_response_set_http_headers(resp, hdrs);
-        /* WebKit이 참조를 취하므로 우리 참조는 해제한다. */
-        soup_message_headers_unref(hdrs);
+        webkit_uri_scheme_request_finish(
+            req, stream, (gint64) len, full_mime);
+    } else {
+        WebKitURISchemeResponse *resp =
+            webkit_uri_scheme_response_new(stream, (gint64) len);
+        webkit_uri_scheme_response_set_content_type(resp, full_mime);
+        webkit_uri_scheme_response_set_status(resp, 200, NULL);
+        {
+            SoupMessageHeaders *hdrs = soup_message_headers_new(
+                SOUP_MESSAGE_HEADERS_RESPONSE);
+            if (host->response_csp && host->response_csp[0] != '\0') {
+                soup_message_headers_append(
+                    hdrs, "Content-Security-Policy", host->response_csp);
+            }
+            soup_message_headers_append(
+                hdrs, "X-Content-Type-Options", "nosniff");
+            soup_message_headers_append(
+                hdrs, "Referrer-Policy", "no-referrer");
+            if (host->coi_enabled) {
+                soup_message_headers_append(
+                    hdrs, "Cross-Origin-Opener-Policy", "same-origin");
+                soup_message_headers_append(
+                    hdrs, "Cross-Origin-Embedder-Policy", "require-corp");
+                soup_message_headers_append(
+                    hdrs, "Cross-Origin-Resource-Policy", "same-origin");
+            }
+            webkit_uri_scheme_response_set_http_headers(resp, hdrs);
+            soup_message_headers_unref(hdrs);
+        }
+        webkit_uri_scheme_request_finish_with_response(req, resp);
+        g_object_unref(resp);
     }
-    webkit_uri_scheme_request_finish_with_response(req, resp);
-    g_object_unref(resp);
     g_object_unref(stream);
     if (mime) g_free(mime);
 }
@@ -1575,9 +1757,20 @@ void ks_gtk_host_set_allow_external_drop(KSGtkHost *host, int allow)
 {
     if (!host) return;
     host->external_drop_allowed = allow ? 1 : 0;
-    /* GTK4 GtkDropTarget은 WebView 위젯이 자체 등록한다. WebKit이 외부에서
-     * 가로챌 깔끔한 API가 없어, 본 토글은 JS 쪽 preventDefault 스크립을
-     * 추가 주입하는 것으로 보강한다(KSLinuxPlatform 측에서 user script로). */
+}
+
+void ks_gtk_host_install_file_drop(KSGtkHost *host,
+                                   KSGtkFileDropFn cb,
+                                   void *ctx)
+{
+    if (!host) return;
+    host->file_drop_cb = cb;
+    host->file_drop_ctx = ctx;
+    if (!cb) {
+        host->file_drop_target = NULL;
+        return;
+    }
+    ks_gtk_host_attach_file_drop_target(host);
 }
 
 void ks_gtk_host_set_popup_blocking(

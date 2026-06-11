@@ -1,7 +1,7 @@
 #if os(Linux)
     internal import Glibc
     public import KalsaeCore
-    public import Foundation
+    internal import Foundation
 
     /// Linux implementation of `KSDeepLinkBackend` using the XDG MIME
     /// specification and `xdg-mime`.

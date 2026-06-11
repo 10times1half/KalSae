@@ -374,9 +374,26 @@ void ks_gtk_host_set_close_handler(KSGtkHost *host,
 void ks_gtk_host_set_context_menu_enabled(KSGtkHost *host, int enabled);
 
 /** 외부 파일 드롭 허용 토글. 본 함수는 플래그만 보관하며, 실제 차단은
- *  JS 사용자 스크립으로 보강한다(WebKitGTK는 외부에서 GtkDropTarget을
- *  가로챌 공식 API가 없음). */
+ *  JS 사용자 스크립으로 보강한다. */
 void ks_gtk_host_set_allow_external_drop(KSGtkHost *host, int allow);
+
+/** 네이티브 파일 드롭 이벤트 콜백.
+ *  kind: "enter" | "leave" | "drop"
+ *  x/y: 현재 웹뷰 기준 드롭 좌표(픽셀)
+ *  paths: "drop"에서만 채워질 수 있는 NULL-종료 UTF-8 경로 배열
+ *  반환값: 1=수락, 0=거부
+ */
+typedef int (*KSGtkFileDropFn)(const char *kind,
+                                int32_t x,
+                                int32_t y,
+                                const char *const *paths,
+                                void *ctx);
+
+/** WebView 위젯에 파일 드롭 타겟을 설치하고 드롭 이벤트를 콜백으로 전달한다.
+ *  cb=NULL이면 기존 콜백을 해제한다. */
+void ks_gtk_host_install_file_drop(KSGtkHost *host,
+                                    KSGtkFileDropFn cb,
+                                    void *ctx);
 
 /** 팝업 차단(`window.open` / `target=_blank`) 토글 + 외부 URL 라우팅 콜백.
  *  enabled=1이면 새 윈도우 요청을 차단하고 `on_external_url`을 호출한다.

@@ -1,6 +1,5 @@
 #if os(Linux)
     public import KalsaeCore
-    public import Foundation
 
     extension KSLinuxDemoHost: KSDemoHostWithUserScripts {
         /// 래핑이 끝난 IIFE를 WebKitGTK `webkit_user_content_manager_add_script`로

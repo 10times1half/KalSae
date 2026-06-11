@@ -1,7 +1,6 @@
 #if os(Linux)
     internal import CKalsaeGtk
     public import KalsaeCore
-    public import Foundation
 
     /// `KSAcceleratorBackend`의 Linux 구현 — 윈도우-스코프 단축키 전용.
     ///

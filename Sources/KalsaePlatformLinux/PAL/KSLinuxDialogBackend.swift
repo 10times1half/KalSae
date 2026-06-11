@@ -15,7 +15,7 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> [URL] {
             await withCheckedContinuation { (cont: CheckedContinuation<[URL], Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     let host = resolveHost(parent)
                     let (names, globs) = buildFilters(options.filters)
                     let title = options.title ?? "Open"
@@ -60,7 +60,7 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
             await withCheckedContinuation { (cont: CheckedContinuation<URL?, Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     let host = resolveHost(parent)
                     let (names, globs) = buildFilters(options.filters)
                     let title = options.title ?? "Save"
@@ -99,7 +99,7 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> URL? {
             await withCheckedContinuation { (cont: CheckedContinuation<URL?, Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     let host = resolveHost(parent)
                     let title = options.title ?? "Select Folder"
                     let dir = options.defaultDirectory?.path
@@ -128,7 +128,7 @@
             parent: KSWindowHandle?
         ) async throws(KSError) -> KSMessageResult {
             await withCheckedContinuation { (cont: CheckedContinuation<KSMessageResult, Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     let host = resolveHost(parent)
                     let kind = kindCode(options.kind)
                     let buttons = buttonsCode(options.buttons)

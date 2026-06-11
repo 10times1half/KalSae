@@ -1,0 +1,32 @@
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+/home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/swift-run: /lib/x86_64-linux-gnu/libxml2.so.2: no version information available (required by /home/spark/.local/share/swiftly/toolchains/6.3.2/usr/bin/../lib/swift/linux/libFoundationXML.so)
+Building for debugging...
+[0/2] Write swift-version-6391EC4ACDE1ED18.txt
+Build of product 'kalsae-demo' complete! (0.13s)
+2026-06-10T18:26:48+0900 info dev.Kalsae.platform.linux.webview: [KalsaePlatformLinux] GtkWebViewHost initialized (Kalsae Demo)
+2026-06-10T18:26:48+0900 info dev.Kalsae.kalsae.app: [Kalsae] installFileDropEmitter: success
+2026-06-10T18:26:48+0900 info dev.Kalsae.kalsae.app: [Kalsae] boot serving=virtualHost(/mnt/nvme1n1/Projects/KalSae/.build/x86_64-unknown-linux-gnu/debug/Kalsae_KalsaeDemo.resources/Resources) startURL=ks://app/index.html devServerURL=about:blank
+2026-06-10T18:26:48+0900 warning dev.Kalsae.kalsae.app: [Kalsae] Linux Web Inspector disabled by default. Set KALSAE_LINUX_ENABLE_INSPECTOR=1 to opt in (known risk: opening inspector can freeze some sessions).
+[kb] runtime webkit version: 2.52.3 (compat threshold >= 2.52.0)
+
+** (process:2): WARNING **: 18:26:48.429: Locale not supported by C library.
+	Using the fallback 'C' locale.
+[kb] compat scheme path enabled: using simple finish() due to WebKitGTK/libsoup crash risk; HTTP response headers(CSP/nosniff/referrer) are skipped
+Kalsae 0.4.3 — demo
+Config:       /mnt/nvme1n1/Projects/KalSae/.build/x86_64-unknown-linux-gnu/debug/Kalsae_KalsaeDemo.resources/Resources/kalsae.json
+ResourceRoot: /mnt/nvme1n1/Projects/KalSae/.build/x86_64-unknown-linux-gnu/debug/Kalsae_KalsaeDemo.resources/Resources
+Booted kalsae Demo v0.1.0
+Platform: Linux (GTK4 + WebKitGTK 6.0)
+PAL capabilities:
+  tray:         true
+  accelerators: true
+  autostart:    true
+  deepLink:     true

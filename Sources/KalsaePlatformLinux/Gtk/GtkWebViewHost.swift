@@ -370,6 +370,11 @@
 
         deinit {
             if let p = hostPtr {
+                ks_gtk_host_install_file_drop(p, nil, nil)
+            }
+            fileDropBox?.release()
+            fileDropBox = nil
+            if let p = hostPtr {
                 ks_gtk_host_free(p)
             }
         }
@@ -521,6 +526,8 @@
         public func displayInfo(at index: Int) -> KSDisplayInfo? {
             var idBuf = [CChar](repeating: 0, count: 128)
             var nameBuf = [CChar](repeating: 0, count: 256)
+            let idBufCount = idBuf.count
+            let nameBufCount = nameBuf.count
 
             var x: Int32 = 0
             var y: Int32 = 0
@@ -540,9 +547,9 @@
                         hostPtr,
                         Int32(index),
                         idPtr.baseAddress,
-                        idBuf.count,
+                        idBufCount,
                         namePtr.baseAddress,
-                        nameBuf.count,
+                        nameBufCount,
                         &x,
                         &y,
                         &width,
@@ -559,8 +566,8 @@
 
             guard ok != 0 else { return nil }
 
-            let id = String(cString: idBuf)
-            let name = String(cString: nameBuf)
+            let id = _ksStringFromCCharBuffer(idBuf)
+            let name = _ksStringFromCCharBuffer(nameBuf)
             return KSDisplayInfo(
                 id: id,
                 name: name,
@@ -780,13 +787,22 @@
             }
         }
 
-        /// 파일 드롭 emitter — Linux에서는 WebKitGTK가 외부 GtkDropTarget 가로채기를
-        /// 지원하지 않아 best-effort 경고로 등록만 한다.
-        public func installFileDropEmitter() throws(KSError) {
-            log.warning(
-                "Linux installFileDropEmitter() is a stub — WebKitGTK does not expose "
-                    + "an external drop interception API; tracked as Phase 4 follow-up.")
+        /// 파일 드롭 emitter를 설치한다.
+        /// 일반적으로 `setAllowExternalDrop(false)` 이후 호출한다.
+        public func installFileDropEmitter(
+            _ handler: @escaping @MainActor (String, Int32, Int32, [String]) -> Bool
+        ) throws(KSError) {
+            fileDropBox?.release()
+            let box = FileDropBox(handler: handler)
+            let um = Unmanaged.passRetained(box)
+            fileDropBox = um
+            ks_gtk_host_install_file_drop(
+                hostPtr,
+                linuxFileDropTrampoline,
+                um.toOpaque())
         }
+
+        private var fileDropBox: Unmanaged<FileDropBox>?
     }
 
     /// Owns a `KSAssetResolver` for the duration of the scheme handler's
@@ -902,7 +918,13 @@
             }
         }
 
-    nonisolated(unsafe) private let _gtkKSPostEncoder = JSONEncoder()
+    private let _gtkKSPostEncoder = JSONEncoder()
+
+    private func _ksStringFromCCharBuffer(_ buffer: [CChar]) -> String {
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
+    }
+
     @MainActor
     extension GtkWebViewHost: KSWebViewBackend {
         public func load(url: URL) async throws(KSError) {
@@ -917,7 +939,12 @@
         }
 
         public func postMessage(_ message: KSIPCMessage) async throws(KSError) {
-            let data = try _gtkKSPostEncoder.encode(message)
+            let data: Data
+            do {
+                data = try _gtkKSPostEncoder.encode(message)
+            } catch {
+                throw KSError(code: .internal, message: "postMessage: \(error)")
+            }
             guard let json = String(data: data, encoding: .utf8) else {
                 throw KSError(code: .internal, message: "postMessage: JSON encoding failed")
             }
@@ -959,6 +986,14 @@
         init(handler: (@MainActor (String) -> Void)?) { self.handler = handler }
     }
 
+    // @unchecked: GTK callback box (read-only post-init) — handler invoked on main thread
+    private final class FileDropBox: @unchecked Sendable {
+        let handler: @MainActor (String, Int32, Int32, [String]) -> Bool
+        init(handler: @escaping @MainActor (String, Int32, Int32, [String]) -> Bool) {
+            self.handler = handler
+        }
+    }
+
     /// 외부 URL 핸들러 트램폴린 — GTK 메인 스레드에서 호출됨.
     private let linuxExternalURLTrampoline:
         @convention(c) (
@@ -969,6 +1004,31 @@
             let box = Unmanaged<ExternalURLBox>.fromOpaque(ctxPtr).takeUnretainedValue()
             MainActor.assumeIsolated {
                 box.handler?(url)
+            }
+        }
+
+    /// 파일 드롭 트램폴린 — GTK 메인 스레드에서 호출됨.
+    private let linuxFileDropTrampoline:
+        @convention(c) (
+            UnsafePointer<CChar>?,
+            Int32,
+            Int32,
+            UnsafePointer<UnsafePointer<CChar>?>?,
+            UnsafeMutableRawPointer?
+        ) -> Int32 = { kindPtr, x, y, pathsPtr, ctxPtr in
+            guard let kindPtr, let ctxPtr else { return 0 }
+            let kind = String(cString: kindPtr)
+            let box = Unmanaged<FileDropBox>.fromOpaque(ctxPtr).takeUnretainedValue()
+            var paths: [String] = []
+            if let pathsPtr {
+                var i = 0
+                while let p = pathsPtr[i] {
+                    paths.append(String(cString: p))
+                    i += 1
+                }
+            }
+            return MainActor.assumeIsolated {
+                box.handler(kind, x, y, paths) ? 1 : 0
             }
         }
 

@@ -1,0 +1,96 @@
+Building for debugging...
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:1040:9: warning: 'gtk_file_chooser_add_filter' is deprecated [-Wdeprecated-declarations]
+ 1040 |         gtk_file_chooser_add_filter(chooser, f);
+      |         ^
+/usr/include/gtk-4.0/gtk/deprecated/gtkfilechooser.h:139:1: note: 'gtk_file_chooser_add_filter' has been explicitly marked deprecated here
+  139 | GDK_DEPRECATED_IN_4_10
+      | ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:207:32: note: expanded from macro 'GDK_DEPRECATED_IN_4_10'
+  207 | #define GDK_DEPRECATED_IN_4_10 GDK_DEPRECATED
+      |                                ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:30:24: note: expanded from macro 'GDK_DEPRECATED'
+   30 | #define GDK_DEPRECATED G_DEPRECATED _GDK_EXTERN
+      |                        ^
+/usr/include/glib-2.0/glib/gmacros.h:1303:37: note: expanded from macro 'G_DEPRECATED'
+ 1303 | #define G_DEPRECATED __attribute__((__deprecated__))
+      |                                     ^
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:1396:24: warning: 'gdk_x11_surface_get_xid' is deprecated [-Wdeprecated-declarations]
+ 1396 |         *out_x = (int) gdk_x11_surface_get_xid(surface);
+      |                        ^
+/usr/include/gtk-4.0/gdk/x11/gdkx11surface.h:55:1: note: 'gdk_x11_surface_get_xid' has been explicitly marked deprecated here
+   55 | GDK_DEPRECATED_IN_4_18
+      | ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:343:32: note: expanded from macro 'GDK_DEPRECATED_IN_4_18'
+  343 | #define GDK_DEPRECATED_IN_4_18 GDK_DEPRECATED
+      |                                ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:30:24: note: expanded from macro 'GDK_DEPRECATED'
+   30 | #define GDK_DEPRECATED G_DEPRECATED _GDK_EXTERN
+      |                        ^
+/usr/include/glib-2.0/glib/gmacros.h:1303:37: note: expanded from macro 'G_DEPRECATED'
+ 1303 | #define G_DEPRECATED __attribute__((__deprecated__))
+      |                                     ^
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:1456:31: warning: 'gdk_x11_display_get_primary_monitor' is deprecated [-Wdeprecated-declarations]
+ 1456 |         GdkMonitor *primary = gdk_x11_display_get_primary_monitor(display);
+      |                               ^
+/usr/include/gtk-4.0/gdk/x11/gdkx11display.h:107:1: note: 'gdk_x11_display_get_primary_monitor' has been explicitly marked deprecated here
+  107 | GDK_DEPRECATED_IN_4_18
+      | ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:343:32: note: expanded from macro 'GDK_DEPRECATED_IN_4_18'
+  343 | #define GDK_DEPRECATED_IN_4_18 GDK_DEPRECATED
+      |                                ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:30:24: note: expanded from macro 'GDK_DEPRECATED'
+   30 | #define GDK_DEPRECATED G_DEPRECATED _GDK_EXTERN
+      |                        ^
+/usr/include/glib-2.0/glib/gmacros.h:1303:37: note: expanded from macro 'G_DEPRECATED'
+ 1303 | #define G_DEPRECATED __attribute__((__deprecated__))
+      |                                     ^
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:1584:19: warning: 'gdk_x11_display_get_primary_monitor' is deprecated [-Wdeprecated-declarations]
+ 1584 |         monitor = gdk_x11_display_get_primary_monitor(display);
+      |                   ^
+/usr/include/gtk-4.0/gdk/x11/gdkx11display.h:107:1: note: 'gdk_x11_display_get_primary_monitor' has been explicitly marked deprecated here
+  107 | GDK_DEPRECATED_IN_4_18
+      | ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:343:32: note: expanded from macro 'GDK_DEPRECATED_IN_4_18'
+  343 | #define GDK_DEPRECATED_IN_4_18 GDK_DEPRECATED
+      |                                ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:30:24: note: expanded from macro 'GDK_DEPRECATED'
+   30 | #define GDK_DEPRECATED G_DEPRECATED _GDK_EXTERN
+      |                        ^
+/usr/include/glib-2.0/glib/gmacros.h:1303:37: note: expanded from macro 'G_DEPRECATED'
+ 1303 | #define G_DEPRECATED __attribute__((__deprecated__))
+      |                                     ^
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:1713:19: warning: 'gdk_x11_surface_get_xid' is deprecated [-Wdeprecated-declarations]
+ 1713 |         x = (int) gdk_x11_surface_get_xid(surf);
+      |                   ^
+/usr/include/gtk-4.0/gdk/x11/gdkx11surface.h:55:1: note: 'gdk_x11_surface_get_xid' has been explicitly marked deprecated here
+   55 | GDK_DEPRECATED_IN_4_18
+      | ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:343:32: note: expanded from macro 'GDK_DEPRECATED_IN_4_18'
+  343 | #define GDK_DEPRECATED_IN_4_18 GDK_DEPRECATED
+      |                                ^
+/usr/include/gtk-4.0/gdk/version/gdk-visibility.h:30:24: note: expanded from macro 'GDK_DEPRECATED'
+   30 | #define GDK_DEPRECATED G_DEPRECATED _GDK_EXTERN
+      |                        ^
+/usr/include/glib-2.0/glib/gmacros.h:1303:37: note: expanded from macro 'G_DEPRECATED'
+ 1303 | #define G_DEPRECATED __attribute__((__deprecated__))
+      |                                     ^
+/mnt/nvme1n1/Projects/KalSae/Sources/CKalsaeGtk/CKalsaeGtk.c:2219:37: warning: pointer type mismatch ('WebKitWebView *' (aka 'struct _WebKitWebView *') and 'GtkWindow *' (aka 'struct _GtkWindow *')) [-Wpointer-type-mismatch]
+ 2219 |                                     ? host->web_view
+      |                                     ^ ~~~~~~~~~~~~~~
+ 2220 |                                     : host->window);
+      |                                       ~~~~~~~~~~~~
+/usr/include/gtk-4.0/gtk/gtkwidget.h:44:73: note: expanded from macro 'GTK_WIDGET'
+   44 | #define GTK_WIDGET(widget)                (G_TYPE_CHECK_INSTANCE_CAST ((widget), GTK_TYPE_WIDGET, GtkWidget))
+      |                                                                         ^~~~~~
+/usr/include/glib-2.0/gobject/gtype.h:528:80: note: expanded from macro 'G_TYPE_CHECK_INSTANCE_CAST'
+  528 | #define G_TYPE_CHECK_INSTANCE_CAST(instance, g_type, c_type)    (_G_TYPE_CIC ((instance), (g_type), c_type))
+      |                                                                                ^~~~~~~~
+/usr/include/glib-2.0/gobject/gtype.h:2666:66: note: expanded from macro '_G_TYPE_CIC'
+ 2666 |     ((ct*) (void *) g_type_check_instance_cast ((GTypeInstance*) ip, gt))
+      |                                                                  ^~
+6 warnings generated.
+[0/2] Compiling CKalsaeGtk CKalsaeGtk.c
+[1/10] Write swift-version-6391EC4ACDE1ED18.txt
+[2/4] Write Objects.LinkFileList
+[3/4] Linking kalsae-demo
+Build of product 'kalsae-demo' complete! (1.46s)

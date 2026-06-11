@@ -256,8 +256,15 @@ _새 데스크톱 플랫폼은 `KSPlatformLifecycleAttach` conform 필수._
   GNOME falls back to no-op with a warning), credentials (libsecret / Secret
   Service).
 - Virtual host serves `ks://app/` only (`https://app.kalsae/` is Windows-only —
-  WebKitGTK cannot intercept `http(s)`); responses include CSP +
-  `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer`.
+  WebKitGTK cannot intercept `http(s)`). Scheme responses are **version-gated**:
+  - WebKitGTK < 2.52: full `WebKitURISchemeResponse` path (CSP +
+    `X-Content-Type-Options: nosniff` + `Referrer-Policy: no-referrer` +
+    COOP/COEP/CORP when enabled).
+  - WebKitGTK >= 2.52: compatibility `webkit_uri_scheme_request_finish(...)`
+    path to avoid libsoup crash; HTTP response headers are skipped, CSP falls
+    back to a document-start `<meta http-equiv="Content-Security-Policy">`.
+    (`nosniff` / `Referrer-Policy` / COOP / COEP / CORP are unavailable on this
+    compatibility path.)
 - Security: WebKit signal handlers in CKalsaeGtk enforce `contextMenu`,
   `allowExternalDrop`, and `allowPopups` (via `decide-policy` for new-window
   actions, with external URL routing) — wired in `runOnMain()` (see [Docs/SECURITY.md](Docs/SECURITY.md)).

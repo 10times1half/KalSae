@@ -17,9 +17,9 @@
         public func requestPermission() async -> Bool { true }
 
         public func post(_ notification: KSNotification) async throws(KSError) {
-            let nativePosted: Bool = await MainActor.run {
+            let nativePosted: Bool = await GtkMainQueue.run {
                 guard let hostPtr = primaryHostPtr() else { return false }
-                let urgent = (notification.sound?.lowercased() == "critical") ? 1 : 0
+                let urgent: Int32 = (notification.sound?.lowercased() == "critical") ? 1 : 0
                 return ks_gtk_host_send_notification(
                     hostPtr,
                     notification.id,
@@ -65,7 +65,7 @@
         }
 
         public func cancel(id: String) async {
-            await MainActor.run {
+            await GtkMainQueue.run {
                 guard !id.isEmpty, let hostPtr = primaryHostPtr() else { return }
                 ks_gtk_host_withdraw_notification(hostPtr, id)
             }

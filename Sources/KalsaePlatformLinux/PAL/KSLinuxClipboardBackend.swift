@@ -12,7 +12,7 @@
 
         public func readText() async throws(KSError) -> String? {
             await withCheckedContinuation { (cont: CheckedContinuation<String?, Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     guard let host = self.primaryHost() else {
                         cont.resume(returning: nil)
                         return
@@ -30,7 +30,7 @@
         }
 
         public func writeText(_ text: String) async throws(KSError) {
-            let ok: Bool = await MainActor.run {
+            let ok: Bool = await GtkMainQueue.run {
                 guard let host = primaryHost() else { return false }
                 ks_gtk_clipboard_write_text(host.hostPtr, text)
                 return true
@@ -44,7 +44,7 @@
 
         public func readImage() async throws(KSError) -> Data? {
             await withCheckedContinuation { (cont: CheckedContinuation<Data?, Never>) in
-                Task { @MainActor in
+                GtkMainQueue.post {
                     guard let host = self.primaryHost() else {
                         cont.resume(returning: nil)
                         return
@@ -67,7 +67,7 @@
         }
 
         public func writeImage(_ image: Data) async throws(KSError) {
-            let ok: Bool = await MainActor.run {
+            let ok: Bool = await GtkMainQueue.run {
                 guard let host = primaryHost() else { return false }
                 return image.withUnsafeBytes { buf in
                     guard let ptr = buf.baseAddress else { return false }
@@ -85,7 +85,7 @@
         }
 
         public func clear() async throws(KSError) {
-            let ok: Bool = await MainActor.run {
+            let ok: Bool = await GtkMainQueue.run {
                 guard let host = primaryHost() else { return false }
                 ks_gtk_clipboard_clear(host.hostPtr)
                 return true
@@ -98,7 +98,7 @@
         }
 
         public func hasFormat(_ format: String) async -> Bool {
-            await MainActor.run {
+            await GtkMainQueue.run {
                 guard let host = primaryHost() else { return false }
                 switch format.lowercased() {
                 case "text":
