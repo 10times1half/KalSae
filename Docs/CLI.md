@@ -326,7 +326,7 @@ officially supported on native Windows toolchains.
   `dist/<name>-<ver>-<arch>-standalone/` (so a regular build and a
   standalone build can coexist on disk without wiping each other).
 - Embeds the following into the EXE as PE resources via
-  [ResourceHacker](https://www.angusj.com/resourcehacker/) and
+  [ResourceHacker](https://www.angusj.com/resourcehacker/ or [Resource Cracker](https://www.pelock.com/products/resource-cracker)) and
   [rcedit](https://github.com/electron/rcedit):
   - `WebView2Loader.dll` (RCDATA `KWV2_LOADER_DLL`)
   - Application manifest (`RT_MANIFEST` / `1`)

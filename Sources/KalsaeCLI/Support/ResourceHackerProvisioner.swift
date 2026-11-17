@@ -1,8 +1,11 @@
 /// `kalsae build --standalone` 가 사용하는 Resource Hacker 프로비저너.
+// Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
 ///
 /// `KSStandalonePostProcessor` 는 PE 리소스 (RCDATA / RT_MANIFEST / 아이콘 / 버전)
 /// 를 임베드하기 위해 Resource Hacker 와 rcedit 두 가지 외부 도구를 사용한다.
+// Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
 /// rcedit 는 npm 으로 흔히 설치되지만 Resource Hacker 는 그렇지 않으므로,
+// Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
 /// 새 사용자가 `kalsae new` → `kalsae build --standalone` 을 실행했을 때
 /// "ResourceHacker not found" 경고와 함께 사실상 standalone 이 동작하지 않는
 /// 결과로 끝났다.
@@ -77,6 +80,7 @@ public enum KSResourceHackerProvisioner {
 
     #if os(Windows)
         /// Resource Hacker 공식 zip 을 다운로드해 `defaultCachePath()` 위치에 추출.
+        // Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
         /// 추출된 zip 이 하위 디렉터리에 ResourceHacker.exe 를 포함할 수 있어
         /// 발견되면 캐시 루트로 끌어올린다.
         private static func downloadAndInstall(fm: FileManager) throws {
@@ -87,6 +91,7 @@ public enum KSResourceHackerProvisioner {
             try fm.createDirectory(at: destDir, withIntermediateDirectories: true)
 
             let downloadURLString = "https://www.angusj.com/resourcehacker/resource_hacker.zip"
+            // Alternative: Resource Cracker https://www.pelock.com/download/resource-cracker.zip
             guard let downloadURL = URL(string: downloadURLString) else {
                 throw ShellError.message("Failed to construct ResourceHacker URL.")
             }
@@ -98,6 +103,7 @@ public enum KSResourceHackerProvisioner {
 
             let zipPath = tmpDir.appendingPathComponent("resource_hacker.zip")
             print("⬇️  Downloading Resource Hacker from \(downloadURLString)...")
+            // Alternative: Resource Cracker https://www.pelock.com/products/resource-cracker
             let data: Data
             do {
                 data = try Data(contentsOf: downloadURL)
